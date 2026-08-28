@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="SistemaEnvios.Api/SistemaEnvios.Api.csproj" />
+  <Project Path="SistemaEnvios.Application/SistemaEnvios.Application.csproj" />
+  <Project Path="SistemaEnvios.Domain/SistemaEnvios.Domain.csproj" />
+  <Project Path="SistemaEnvios.Infrastructure/SistemaEnvios.Infrastructure.csproj" />
+</Solution>

@@ -1,0 +1,26 @@
+using Microsoft.EntityFrameworkCore;
+using SistemaEnvios.Domain.Entities;
+
+namespace SistemaEnvios.Infrastructure.Persistence;
+
+public class SistemaEnviosDbContext(DbContextOptions<SistemaEnviosDbContext> options) : DbContext(options)
+{
+    public DbSet<Envio> Envios => Set<Envio>();
+    public DbSet<EnvioEquipo> EnvioEquipos => Set<EnvioEquipo>();
+    public DbSet<Equipo> Equipos => Set<Equipo>();
+    public DbSet<EstadoEnvio> EstadosEnvio => Set<EstadoEnvio>();
+    public DbSet<TransicionEstadoEnvio> TransicionesEstadoEnvio => Set<TransicionEstadoEnvio>();
+    public DbSet<HistorialEstadoEnvio> HistorialEstadosEnvio => Set<HistorialEstadoEnvio>();
+    public DbSet<Incidencia> Incidencias => Set<Incidencia>();
+    public DbSet<Recepcion> Recepciones => Set<Recepcion>();
+    public DbSet<RecepcionEquipo> RecepcionEquipos => Set<RecepcionEquipo>();
+    public DbSet<TipoEquipo> TiposEquipo => Set<TipoEquipo>();
+    public DbSet<Transporte> Transportes => Set<Transporte>();
+    public DbSet<Ubicacion> Ubicaciones => Set<Ubicacion>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(SistemaEnviosDbContext).Assembly);
+        base.OnModelCreating(modelBuilder);
+    }
+}
