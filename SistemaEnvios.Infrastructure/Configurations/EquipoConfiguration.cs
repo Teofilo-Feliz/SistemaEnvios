@@ -15,6 +15,7 @@ public class EquipoConfiguration : IEntityTypeConfiguration<Equipo>
         b.Property(x => x.Marca).HasMaxLength(100).IsRequired();
         b.Property(x => x.Modelo).HasMaxLength(100).IsRequired();
         b.Property(x => x.Observaciones).HasMaxLength(2000);
+        b.Property(x => x.RowVersion).IsRowVersion();
         b.HasIndex(x => x.CodigoActivo).IsUnique().HasFilter("[CodigoActivo] IS NOT NULL");
         b.HasIndex(x => x.NumeroSerie).IsUnique().HasFilter("[NumeroSerie] IS NOT NULL");
         b.HasOne(x => x.TipoEquipo).WithMany(x => x.Equipos).HasForeignKey(x => x.TipoEquipoId).OnDelete(DeleteBehavior.Restrict);

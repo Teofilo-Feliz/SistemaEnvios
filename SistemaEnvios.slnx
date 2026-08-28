@@ -1,6 +1,13 @@
 <Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="README.md" />
+  </Folder>
+  <Folder Name="/Database/">
+    <File Path="Database/SistemaEnviosDB.sql" />
+  </Folder>
   <Project Path="SistemaEnvios.Api/SistemaEnvios.Api.csproj" />
   <Project Path="SistemaEnvios.Application/SistemaEnvios.Application.csproj" />
   <Project Path="SistemaEnvios.Domain/SistemaEnvios.Domain.csproj" />
   <Project Path="SistemaEnvios.Infrastructure/SistemaEnvios.Infrastructure.csproj" />
+  <Project Path="SistemaEnvios.Tests/SistemaEnvios.Tests.csproj" />
 </Solution>

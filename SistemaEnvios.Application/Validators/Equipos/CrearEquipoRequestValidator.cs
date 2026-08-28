@@ -1,11 +1,11 @@
 using FluentValidation;
-using SistemaEnvios.Domain.Entities;
+using SistemaEnvios.Application.DTOs.Equipos;
 
-namespace SistemaEnvios.Application.Validators.Entities;
+namespace SistemaEnvios.Application.Validators.Equipos;
 
-public sealed class EquipoValidator : AbstractValidator<Equipo>
+public sealed class CrearEquipoRequestValidator : AbstractValidator<CrearEquipoRequest>
 {
-    public EquipoValidator()
+    public CrearEquipoRequestValidator()
     {
         RuleFor(x => x.TipoEquipoId).GreaterThan(0);
         RuleFor(x => x.UbicacionActualId).GreaterThan(0);

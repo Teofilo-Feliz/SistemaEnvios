@@ -17,6 +17,7 @@ public class SistemaEnviosDbContext(DbContextOptions<SistemaEnviosDbContext> opt
     public DbSet<TipoEquipo> TiposEquipo => Set<TipoEquipo>();
     public DbSet<Transporte> Transportes => Set<Transporte>();
     public DbSet<Ubicacion> Ubicaciones => Set<Ubicacion>();
+    public DbSet<ReservaEquipoEnvio> ReservasEquipoEnvio => Set<ReservaEquipoEnvio>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

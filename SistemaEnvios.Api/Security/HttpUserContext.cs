@@ -8,6 +8,7 @@ public sealed class HttpUserContext(IHttpContextAccessor accessor) : IUserContex
     private ClaimsPrincipal User => accessor.HttpContext?.User ?? new ClaimsPrincipal();
     public bool IsAuthenticated => User.Identity?.IsAuthenticated == true;
     public string? Subject => User.FindFirstValue("sub");
+    public Guid? UserId => Guid.TryParse(Subject, out var userId) ? userId : null;
     public string? Email => User.FindFirstValue("email");
     public string? Name => User.FindFirstValue("name");
     public string? Position => User.FindFirstValue("position");

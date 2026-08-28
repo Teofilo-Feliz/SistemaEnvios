@@ -6,6 +6,7 @@ using SistemaEnvios.Application.Interfaces.Repositories;
 using SistemaEnvios.Application.Interfaces.Services;
 using SistemaEnvios.Domain.Entities;
 using SistemaEnvios.Infrastructure.Persistence;
+using SistemaEnvios.Application.Interfaces.Security;
 
 namespace SistemaEnvios.Infrastructure.Services.Incidencias;
 
@@ -14,12 +15,18 @@ public sealed class IncidenciaService : IIncidenciaService
     private readonly SistemaEnviosDbContext _db;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IValidator<CrearIncidenciaRequest> _validator;
+    private readonly IUserContext _userContext;
 
-    public IncidenciaService(SistemaEnviosDbContext db, IUnitOfWork unitOfWork, IValidator<CrearIncidenciaRequest> validator)
+    public IncidenciaService(
+        SistemaEnviosDbContext db,
+        IUnitOfWork unitOfWork,
+        IValidator<CrearIncidenciaRequest> validator,
+        IUserContext userContext)
     {
         _db = db;
         _unitOfWork = unitOfWork;
         _validator = validator;
+        _userContext = userContext;
     }
 
     public async Task<Result<int>> RegistrarAsync(CrearIncidenciaRequest request, CancellationToken cancellationToken = default)
@@ -27,15 +34,23 @@ public sealed class IncidenciaService : IIncidenciaService
         var validation = await _validator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
         {
-            return Result<int>.Failure(validation.ToErrorMessage());
+            return Result<int>.Failure(validation.ToErrorMessage(), ErrorType.Validation);
         }
 
-        var envioExiste = await _db.Envios.AnyAsync(x => x.EnvioId == request.EnvioId, cancellationToken);
+        if (_userContext.UserId is not Guid usuarioId)
+            return Result<int>.Failure("No fue posible identificar al usuario autenticado.", ErrorType.Unauthorized);
 
-        if (!envioExiste)
+        var envio = await _db.Envios
+            .Include(x => x.EstadoEnvio)
+            .FirstOrDefaultAsync(x => x.EnvioId == request.EnvioId, cancellationToken);
+
+        if (envio is null)
         {
-            return Result<int>.Failure("El envío no existe.");
+            return Result<int>.Failure("El envío no existe.", ErrorType.NotFound);
         }
+
+        if (envio.EstadoEnvio.EsFinal)
+            return Result<int>.Failure("El envío está finalizado y no admite nuevas incidencias.", ErrorType.Conflict);
 
         if (request.EnvioEquipoId.HasValue)
         {
@@ -45,7 +60,7 @@ public sealed class IncidenciaService : IIncidenciaService
 
             if (!equipoPerteneceAlEnvio)
             {
-                return Result<int>.Failure("El equipo no pertenece al envío.");
+                return Result<int>.Failure("El equipo no pertenece al envío.", ErrorType.Validation);
             }
         }
 
@@ -57,7 +72,7 @@ public sealed class IncidenciaService : IIncidenciaService
 
             if (!transportePerteneceAlEnvio)
             {
-                return Result<int>.Failure("El transporte no pertenece al envío.");
+                return Result<int>.Failure("El transporte no pertenece al envío.", ErrorType.Validation);
             }
         }
 
@@ -66,8 +81,8 @@ public sealed class IncidenciaService : IIncidenciaService
             EnvioId = request.EnvioId,
             EnvioEquipoId = request.EnvioEquipoId,
             TransporteId = request.TransporteId,
-            Descripcion = request.Descripcion,
-            UsuarioCreacionId = request.UsuarioId,
+            Descripcion = request.Descripcion.Trim(),
+            UsuarioCreacionId = usuarioId,
             FechaCreacion = DateTime.UtcNow
         };
 
@@ -77,17 +92,22 @@ public sealed class IncidenciaService : IIncidenciaService
         return Result<int>.Success(incidencia.IncidenciaId);
     }
 
-    public async Task<Result<Incidencia>> ObtenerAsync(int incidenciaId, CancellationToken cancellationToken = default)
+    public async Task<Result<IncidenciaResponse>> ObtenerAsync(int incidenciaId, CancellationToken cancellationToken = default)
     {
-        var incidencia = await _db.Incidencias.AsNoTracking().FirstOrDefaultAsync(x => x.IncidenciaId == incidenciaId, cancellationToken);
-        return incidencia is null ? Result<Incidencia>.Failure("La incidencia no existe.") : Result<Incidencia>.Success(incidencia);
+        var incidencia = await _db.Incidencias.AsNoTracking().Where(x => x.IncidenciaId == incidenciaId)
+            .Select(x => new IncidenciaResponse(x.IncidenciaId, x.EnvioId, x.EnvioEquipoId, x.TransporteId,
+                x.Descripcion, x.FechaCreacion, x.UsuarioCreacionId)).FirstOrDefaultAsync(cancellationToken);
+        return incidencia is null ? Result<IncidenciaResponse>.Failure("La incidencia no existe.", ErrorType.NotFound) : Result<IncidenciaResponse>.Success(incidencia);
     }
 
-    public async Task<Result<IReadOnlyCollection<Incidencia>>> ListarPorEnvioAsync(int envioId, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyCollection<IncidenciaResponse>>> ListarPorEnvioAsync(int envioId, CancellationToken cancellationToken = default)
     {
         if (!await _db.Envios.AnyAsync(x => x.EnvioId == envioId, cancellationToken))
-            return Result<IReadOnlyCollection<Incidencia>>.Failure("El envío no existe.");
-        var incidencias = await _db.Incidencias.AsNoTracking().Where(x => x.EnvioId == envioId).OrderByDescending(x => x.FechaCreacion).ToListAsync(cancellationToken);
-        return Result<IReadOnlyCollection<Incidencia>>.Success(incidencias);
+            return Result<IReadOnlyCollection<IncidenciaResponse>>.Failure("El envío no existe.", ErrorType.NotFound);
+        var incidencias = await _db.Incidencias.AsNoTracking().Where(x => x.EnvioId == envioId)
+            .OrderByDescending(x => x.FechaCreacion)
+            .Select(x => new IncidenciaResponse(x.IncidenciaId, x.EnvioId, x.EnvioEquipoId, x.TransporteId,
+                x.Descripcion, x.FechaCreacion, x.UsuarioCreacionId)).ToListAsync(cancellationToken);
+        return Result<IReadOnlyCollection<IncidenciaResponse>>.Success(incidencias);
     }
 }

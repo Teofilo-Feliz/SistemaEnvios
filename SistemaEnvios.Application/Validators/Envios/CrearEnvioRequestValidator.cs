@@ -9,8 +9,6 @@ public sealed class CrearEnvioRequestValidator : AbstractValidator<CrearEnvioReq
     {
         RuleFor(x => x.UbicacionOrigenId).GreaterThan(0);
         RuleFor(x => x.UbicacionDestinoId).GreaterThan(0).NotEqual(x => x.UbicacionOrigenId);
-        RuleFor(x => x.EstadoEnvioId).GreaterThan(0);
-        RuleFor(x => x.UsuarioSolicitanteId).NotEmpty();
         RuleFor(x => x.Observaciones).MaximumLength(2000);
     }
 }

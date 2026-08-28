@@ -1,13 +1,13 @@
 using SistemaEnvios.Application.Common;
-using SistemaEnvios.Domain.Entities;
+using SistemaEnvios.Application.DTOs.TiposEquipos;
 
 namespace SistemaEnvios.Application.Interfaces.Services;
 
 public interface ITipoEquipoService
 {
-    Task<Result<int>> CrearAsync(TipoEquipo tipoEquipo, CancellationToken cancellationToken = default);
-    Task<Result<TipoEquipo>> ObtenerAsync(int tipoEquipoId, CancellationToken cancellationToken = default);
-    Task<Result<IReadOnlyCollection<TipoEquipo>>> ListarAsync(bool soloActivos = true, CancellationToken cancellationToken = default);
-    Task<Result> ActualizarAsync(TipoEquipo tipoEquipo, CancellationToken cancellationToken = default);
-    Task<Result> CambiarActivoAsync(int tipoEquipoId, bool activo, Guid usuarioId, CancellationToken cancellationToken = default);
+    Task<Result<int>> CrearAsync(GuardarTipoEquipoRequest request, CancellationToken cancellationToken = default);
+    Task<Result<TipoEquipoResponse>> ObtenerAsync(int tipoEquipoId, CancellationToken cancellationToken = default);
+    Task<Result<IReadOnlyCollection<TipoEquipoResponse>>> ListarAsync(bool soloActivos = true, CancellationToken cancellationToken = default);
+    Task<Result> ActualizarAsync(GuardarTipoEquipoRequest request, CancellationToken cancellationToken = default);
+    Task<Result> CambiarActivoAsync(int tipoEquipoId, bool activo, CancellationToken cancellationToken = default);
 }

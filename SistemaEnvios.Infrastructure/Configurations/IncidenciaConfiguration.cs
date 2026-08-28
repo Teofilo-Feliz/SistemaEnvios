@@ -15,5 +15,6 @@ public class IncidenciaConfiguration : IEntityTypeConfiguration<Incidencia>
         b.HasOne(x => x.EnvioEquipo).WithMany(x => x.Incidencias).HasForeignKey(x => x.EnvioEquipoId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.Transporte).WithMany(x => x.Incidencias).HasForeignKey(x => x.TransporteId).OnDelete(DeleteBehavior.Restrict);
         b.Property(x => x.FechaCreacion).HasDefaultValueSql("SYSUTCDATETIME()");
+        b.ToTable(t => t.HasCheckConstraint("CK_Incidencias_UnSoloAlcance", "NOT (EnvioEquipoId IS NOT NULL AND TransporteId IS NOT NULL)"));
     }
 }

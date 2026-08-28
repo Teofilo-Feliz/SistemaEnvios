@@ -12,7 +12,7 @@ namespace SistemaEnvios.Domain.Entities
         public string Tipo { get; set; } = null!;
         public string? NombreChofer { get; set; }
         public string? Placa { get; set; }
-        public DateTime FechaEntregaTransportacion { get; set; }
+        public DateTime? FechaEntregaTransportacion { get; set; }
         public string? Observaciones { get; set; }
         public bool EntregaConfirmada { get; set; }
         public DateTime? FechaConfirmacionEntrega { get; set; }

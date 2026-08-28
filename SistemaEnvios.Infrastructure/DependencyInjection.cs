@@ -13,6 +13,7 @@ using SistemaEnvios.Infrastructure.Services.Estados;
 using SistemaEnvios.Infrastructure.Services.Equipos;
 using SistemaEnvios.Infrastructure.Services.TiposEquipos;
 using SistemaEnvios.Infrastructure.Services.Ubicaciones;
+using SistemaEnvios.Infrastructure.Services.Dashboard;
 using FluentValidation;
 using SistemaEnvios.Application.Validators.Envios;
 using SistemaEnvios.Application.Validators.Transportes;
@@ -20,6 +21,7 @@ using SistemaEnvios.Application.Validators.Recepciones;
 using SistemaEnvios.Application.Validators.Incidencias;
 using SistemaEnvios.Application.Interfaces.Repositories;
 using SistemaEnvios.Application.Interfaces.Services;
+using SistemaEnvios.Application.Interfaces.Services.Dashboard;
 
 namespace SistemaEnvios.Infrastructure;
 
@@ -27,7 +29,14 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDbContext<SistemaEnviosDbContext>(options => options.UseSqlServer(configuration.GetConnectionString("SistemaEnvios")));
+        var connectionString = configuration.GetConnectionString("SistemaEnvios");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException(
+                "Debe configurar la cadena de conexión 'ConnectionStrings:SistemaEnvios'.");
+        }
+
+        services.AddDbContext<SistemaEnviosDbContext>(options => options.UseSqlServer(connectionString));
         services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
         services.AddScoped<IEnvioEquipoRepository, EnvioEquipoRepository>();
         services.AddScoped<IEnvioService, EnvioService>();
@@ -42,6 +51,7 @@ public static class DependencyInjection
         services.AddScoped<IEquipoService, EquipoService>();
         services.AddScoped<ITipoEquipoService, TipoEquipoService>();
         services.AddScoped<IUbicacionService, UbicacionService>();
+        services.AddScoped<IDashboardService, DashboardService>();
         services.AddValidatorsFromAssemblyContaining<CrearEnvioRequestValidator>();
         return services;
     }

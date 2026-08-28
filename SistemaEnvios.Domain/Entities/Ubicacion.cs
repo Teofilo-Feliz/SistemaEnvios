@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using SistemaEnvios.Domain.Enums;
 
 namespace SistemaEnvios.Domain.Entities
 {
@@ -9,6 +10,7 @@ namespace SistemaEnvios.Domain.Entities
         public int UbicacionId { get; set; }
         public string Nombre { get; set; } = null!;
         public string CodigoCentro { get; set; } = null!;
+        public TipoUbicacionEnum Tipo { get; set; }
         public bool Activo { get; set; }
 
         public ICollection<Envio> EnviosOrigen { get; set; } = [];

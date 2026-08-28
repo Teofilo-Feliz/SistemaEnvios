@@ -1,7 +1,9 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using SistemaEnvios.Application.Common;
+using SistemaEnvios.Application.DTOs.Equipos;
 using SistemaEnvios.Application.Interfaces.Repositories;
+using SistemaEnvios.Application.Interfaces.Security;
 using SistemaEnvios.Application.Interfaces.Services;
 using SistemaEnvios.Domain.Entities;
 using SistemaEnvios.Infrastructure.Persistence;
@@ -11,80 +13,139 @@ namespace SistemaEnvios.Infrastructure.Services.Equipos;
 public sealed class EquipoService(
     SistemaEnviosDbContext db,
     IUnitOfWork unitOfWork,
-    IValidator<Equipo> validator) : IEquipoService
+    IValidator<CrearEquipoRequest> crearValidator,
+    IValidator<ActualizarEquipoRequest> actualizarValidator,
+    IUserContext userContext) : IEquipoService
 {
-    public async Task<Result<Equipo>> ObtenerAsync(int equipoId, CancellationToken cancellationToken = default)
+    public async Task<Result<EquipoResponse>> ObtenerAsync(int equipoId, CancellationToken cancellationToken = default)
     {
-        var equipo = await db.Equipos.AsNoTracking().FirstOrDefaultAsync(x => x.EquipoId == equipoId, cancellationToken);
-        return equipo is null ? Result<Equipo>.Failure("El equipo no existe.") : Result<Equipo>.Success(equipo);
+        var equipo = await db.Equipos.AsNoTracking()
+            .Where(x => x.EquipoId == equipoId)
+            .Select(x => new EquipoResponse(x.EquipoId, x.CodigoActivo, x.NumeroSerie, x.TipoEquipoId,
+                x.UbicacionActualId, x.Marca, x.Modelo, x.Observaciones))
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return equipo is null
+            ? Result<EquipoResponse>.Failure("El equipo no existe.", ErrorType.NotFound)
+            : Result<EquipoResponse>.Success(equipo);
     }
 
-    public async Task<Result<IReadOnlyCollection<Equipo>>> ListarAsync(CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyCollection<EquipoResponse>>> ListarAsync(CancellationToken cancellationToken = default)
     {
-        var equipos = await db.Equipos.AsNoTracking().OrderBy(x => x.Marca).ThenBy(x => x.Modelo).ToListAsync(cancellationToken);
-        return Result<IReadOnlyCollection<Equipo>>.Success(equipos);
+        var equipos = await db.Equipos.AsNoTracking()
+            .OrderBy(x => x.Marca)
+            .ThenBy(x => x.Modelo)
+            .Select(x => new EquipoResponse(x.EquipoId, x.CodigoActivo, x.NumeroSerie, x.TipoEquipoId,
+                x.UbicacionActualId, x.Marca, x.Modelo, x.Observaciones))
+            .ToListAsync(cancellationToken);
+
+        return Result<IReadOnlyCollection<EquipoResponse>>.Success(equipos);
     }
 
-    public async Task<Result<int>> CrearAsync(Equipo equipo, CancellationToken cancellationToken = default)
+    public async Task<Result<int>> CrearAsync(CrearEquipoRequest request, CancellationToken cancellationToken = default)
     {
-        var validation = await validator.ValidateAsync(equipo, cancellationToken);
-        if (!validation.IsValid) return Result<int>.Failure(validation.ToErrorMessage());
+        var validation = await crearValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+            return Result<int>.Failure(validation.ToErrorMessage(), ErrorType.Validation);
 
-        if (!await db.TiposEquipo.AnyAsync(x => x.TipoEquipoId == equipo.TipoEquipoId && x.Activo, cancellationToken))
-            return Result<int>.Failure("El tipo de equipo no existe o está inactivo.");
+        if (userContext.UserId is not Guid usuarioId)
+            return Result<int>.Failure("No fue posible identificar al usuario autenticado.", ErrorType.Unauthorized);
 
-        if (!await db.Ubicaciones.AnyAsync(x => x.UbicacionId == equipo.UbicacionActualId && x.Activo, cancellationToken))
-            return Result<int>.Failure("La ubicación no existe o está inactiva.");
+        var referenciasValidas = await ReferenciasValidasAsync(request.TipoEquipoId, request.UbicacionActualId, cancellationToken);
+        if (referenciasValidas.IsFailure)
+            return Result<int>.Failure(referenciasValidas.Error!, referenciasValidas.ErrorType);
 
-        var codigoActivo = NormalizarOpcional(equipo.CodigoActivo);
-        var numeroSerie = NormalizarOpcional(equipo.NumeroSerie);
+        var codigoActivo = NormalizarOpcional(request.CodigoActivo);
+        var numeroSerie = NormalizarOpcional(request.NumeroSerie);
+        var unicidad = await ValidarUnicidadAsync(0, codigoActivo, numeroSerie, cancellationToken);
+        if (unicidad.IsFailure)
+            return Result<int>.Failure(unicidad.Error!, unicidad.ErrorType);
 
-        if (codigoActivo is not null &&
-            await db.Equipos.AnyAsync(x => x.CodigoActivo == codigoActivo, cancellationToken))
-            return Result<int>.Failure("Ya existe un equipo con el código de activo indicado.");
-
-        if (numeroSerie is not null &&
-            await db.Equipos.AnyAsync(x => x.NumeroSerie == numeroSerie, cancellationToken))
-            return Result<int>.Failure("Ya existe un equipo con el número de serie indicado.");
-
-        equipo.CodigoActivo = codigoActivo;
-        equipo.NumeroSerie = numeroSerie;
-        equipo.Marca = equipo.Marca.Trim();
-        equipo.Modelo = equipo.Modelo.Trim();
-        equipo.Observaciones = NormalizarOpcional(equipo.Observaciones);
-        equipo.FechaCreacion = DateTime.UtcNow;
+        var equipo = new Equipo
+        {
+            CodigoActivo = codigoActivo,
+            NumeroSerie = numeroSerie,
+            TipoEquipoId = request.TipoEquipoId,
+            UbicacionActualId = request.UbicacionActualId,
+            Marca = request.Marca.Trim(),
+            Modelo = request.Modelo.Trim(),
+            Observaciones = NormalizarOpcional(request.Observaciones),
+            FechaCreacion = DateTime.UtcNow,
+            UsuarioCreacionId = usuarioId
+        };
 
         db.Equipos.Add(equipo);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result<int>.Success(equipo.EquipoId);
     }
 
-    public async Task<Result> ActualizarAsync(Equipo equipo, CancellationToken cancellationToken = default)
+    public async Task<Result> ActualizarAsync(ActualizarEquipoRequest request, CancellationToken cancellationToken = default)
     {
-        var validation = await validator.ValidateAsync(equipo, cancellationToken);
-        if (!validation.IsValid) return Result.Failure(validation.ToErrorMessage());
-        var actual = await db.Equipos.FindAsync([equipo.EquipoId], cancellationToken);
-        if (actual is null) return Result.Failure("El equipo no existe.");
-        if (!await db.TiposEquipo.AnyAsync(x => x.TipoEquipoId == equipo.TipoEquipoId && x.Activo, cancellationToken))
-            return Result.Failure("El tipo de equipo no existe o está inactivo.");
-        if (!await db.Ubicaciones.AnyAsync(x => x.UbicacionId == equipo.UbicacionActualId && x.Activo, cancellationToken))
-            return Result.Failure("La ubicación no existe o está inactiva.");
-        var codigo = NormalizarOpcional(equipo.CodigoActivo);
-        var serie = NormalizarOpcional(equipo.NumeroSerie);
-        if (codigo is not null && await db.Equipos.AnyAsync(x => x.EquipoId != equipo.EquipoId && x.CodigoActivo == codigo, cancellationToken))
-            return Result.Failure("Ya existe un equipo con el código de activo indicado.");
-        if (serie is not null && await db.Equipos.AnyAsync(x => x.EquipoId != equipo.EquipoId && x.NumeroSerie == serie, cancellationToken))
-            return Result.Failure("Ya existe un equipo con el número de serie indicado.");
-        actual.CodigoActivo = codigo;
-        actual.NumeroSerie = serie;
-        actual.TipoEquipoId = equipo.TipoEquipoId;
-        actual.UbicacionActualId = equipo.UbicacionActualId;
-        actual.Marca = equipo.Marca.Trim();
-        actual.Modelo = equipo.Modelo.Trim();
-        actual.Observaciones = NormalizarOpcional(equipo.Observaciones);
-        actual.FechaModificacion = DateTime.UtcNow;
-        actual.UsuarioModificacionId = equipo.UsuarioModificacionId;
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        var validation = await actualizarValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+            return Result.Failure(validation.ToErrorMessage(), ErrorType.Validation);
+
+        if (userContext.UserId is not Guid usuarioId)
+            return Result.Failure("No fue posible identificar al usuario autenticado.", ErrorType.Unauthorized);
+
+        var equipo = await db.Equipos.FindAsync([request.EquipoId], cancellationToken);
+        if (equipo is null)
+            return Result.Failure("El equipo no existe.", ErrorType.NotFound);
+
+        var referenciasValidas = await ReferenciasValidasAsync(request.TipoEquipoId, request.UbicacionActualId, cancellationToken);
+        if (referenciasValidas.IsFailure)
+            return referenciasValidas;
+
+        var codigoActivo = NormalizarOpcional(request.CodigoActivo);
+        var numeroSerie = NormalizarOpcional(request.NumeroSerie);
+        var unicidad = await ValidarUnicidadAsync(request.EquipoId, codigoActivo, numeroSerie, cancellationToken);
+        if (unicidad.IsFailure)
+            return unicidad;
+
+        if (equipo.UbicacionActualId != request.UbicacionActualId &&
+            await db.ReservasEquipoEnvio.AnyAsync(x => x.EquipoId == request.EquipoId, cancellationToken))
+            return Result.Failure(
+                "No se puede cambiar la ubicación de un equipo reservado en un envío activo.",
+                ErrorType.Conflict);
+
+        equipo.CodigoActivo = codigoActivo;
+        equipo.NumeroSerie = numeroSerie;
+        equipo.TipoEquipoId = request.TipoEquipoId;
+        equipo.UbicacionActualId = request.UbicacionActualId;
+        equipo.Marca = request.Marca.Trim();
+        equipo.Modelo = request.Modelo.Trim();
+        equipo.Observaciones = NormalizarOpcional(request.Observaciones);
+        equipo.FechaModificacion = DateTime.UtcNow;
+        equipo.UsuarioModificacionId = usuarioId;
+
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Result.Failure(
+                "El equipo fue modificado o reservado por otra operación. Actualice los datos e intente nuevamente.",
+                ErrorType.Conflict);
+        }
+        return Result.Success();
+    }
+
+    private async Task<Result> ReferenciasValidasAsync(int tipoEquipoId, int ubicacionId, CancellationToken cancellationToken)
+    {
+        if (!await db.TiposEquipo.AnyAsync(x => x.TipoEquipoId == tipoEquipoId && x.Activo, cancellationToken))
+            return Result.Failure("El tipo de equipo no existe o está inactivo.", ErrorType.Validation);
+        if (!await db.Ubicaciones.AnyAsync(x => x.UbicacionId == ubicacionId && x.Activo, cancellationToken))
+            return Result.Failure("La ubicación no existe o está inactiva.", ErrorType.Validation);
+        return Result.Success();
+    }
+
+    private async Task<Result> ValidarUnicidadAsync(int equipoId, string? codigoActivo, string? numeroSerie, CancellationToken cancellationToken)
+    {
+        if (codigoActivo is not null && await db.Equipos.AnyAsync(x => x.EquipoId != equipoId && x.CodigoActivo == codigoActivo, cancellationToken))
+            return Result.Failure("Ya existe un equipo con el código de activo indicado.", ErrorType.Conflict);
+        if (numeroSerie is not null && await db.Equipos.AnyAsync(x => x.EquipoId != equipoId && x.NumeroSerie == numeroSerie, cancellationToken))
+            return Result.Failure("Ya existe un equipo con el número de serie indicado.", ErrorType.Conflict);
         return Result.Success();
     }
 

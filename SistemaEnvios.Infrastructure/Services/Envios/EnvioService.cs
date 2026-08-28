@@ -1,63 +1,235 @@
-using SistemaEnvios.Application.Common;
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
+using SistemaEnvios.Application.Common;
 using SistemaEnvios.Application.DTOs.Envios;
 using SistemaEnvios.Application.Interfaces.Repositories;
+using SistemaEnvios.Application.Interfaces.Security;
 using SistemaEnvios.Application.Interfaces.Services;
+using SistemaEnvios.Domain.Constants;
 using SistemaEnvios.Domain.Entities;
-using Microsoft.EntityFrameworkCore;
+using SistemaEnvios.Domain.Enums;
 using SistemaEnvios.Infrastructure.Persistence;
+
 namespace SistemaEnvios.Infrastructure.Services.Envios;
 
-public class EnvioService(
-IGenericRepository<Envio> envios,
-SistemaEnviosDbContext db,
-IUnitOfWork unitOfWork,
-IValidator<CrearEnvioRequest> validator) : IEnvioService
+public sealed class EnvioService(
+    IGenericRepository<Envio> envios,
+    SistemaEnviosDbContext db,
+    IUnitOfWork unitOfWork,
+    IValidator<CrearEnvioRequest> validator,
+    IValidator<ActualizarEnvioRequest> actualizarValidator,
+    IUserContext userContext) : IEnvioService
 {
-    public async Task<Result<EnvioResponse>> CrearAsync(CrearEnvioRequest request, CancellationToken cancellationToken = default)
+    public async Task<Result<EnvioResponse>> CrearAsync(
+        CrearEnvioRequest request,
+        CancellationToken cancellationToken = default)
     {
         var validation = await validator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
-        {
-            return Result<EnvioResponse>.Failure(validation.ToErrorMessage());
-        }
+            return Result<EnvioResponse>.Failure(validation.ToErrorMessage(), ErrorType.Validation);
 
-        if (request.UbicacionOrigenId == request.UbicacionDestinoId)
-            return Result<EnvioResponse>.Failure("La ubicación de origen y destino no pueden ser iguales.");
-        if (!await db.Ubicaciones.AnyAsync(x => x.UbicacionId == request.UbicacionOrigenId && x.Activo, cancellationToken) ||
-            !await db.Ubicaciones.AnyAsync(x => x.UbicacionId == request.UbicacionDestinoId && x.Activo, cancellationToken))
-            return Result<EnvioResponse>.Failure("La ubicación de origen o destino no existe o está inactiva.");
-        if (!await db.EstadosEnvio.AnyAsync(x => x.EstadoEnvioId == request.EstadoEnvioId && x.Activo, cancellationToken))
-            return Result<EnvioResponse>.Failure("El estado del envío no existe o está inactivo.");
+        if (userContext.UserId is not Guid usuarioId)
+            return Result<EnvioResponse>.Failure("No fue posible identificar al usuario autenticado.", ErrorType.Unauthorized);
+
+        var ubicaciones = await db.Ubicaciones
+            .Where(x => (x.UbicacionId == request.UbicacionOrigenId ||
+                         x.UbicacionId == request.UbicacionDestinoId) && x.Activo)
+            .ToDictionaryAsync(x => x.UbicacionId, cancellationToken);
+
+        if (ubicaciones.Count != 2)
+            return Result<EnvioResponse>.Failure("La ubicación de origen o destino no existe o está inactiva.", ErrorType.Validation);
+
+        var origen = ubicaciones[request.UbicacionOrigenId];
+        var destino = ubicaciones[request.UbicacionDestinoId];
+        var direccionResult = DeterminarDireccion(origen, destino);
+
+        if (direccionResult.IsFailure)
+            return Result<EnvioResponse>.Failure(direccionResult.Error!, direccionResult.ErrorType);
+
+        var direccion = direccionResult.Value;
+        var codigoInicial = direccion == DireccionEnvioEnum.HaciaTecnologia
+            ? EstadoEnvioCodigos.EnFilial
+            : EstadoEnvioCodigos.EnPreparacionTecnologia;
+        var estadoInicial = await db.EstadosEnvio.FirstOrDefaultAsync(
+            x => x.Codigo == codigoInicial && x.Activo,
+            cancellationToken);
+
+        if (estadoInicial is null)
+            return Result<EnvioResponse>.Failure("El estado inicial del flujo no se encuentra configurado.", ErrorType.Conflict);
+
+        var fechaActual = DateTime.UtcNow;
         var envio = new Envio
         {
-            NumeroEnvio = $"ENV-{DateTime.UtcNow:yyyy}-{Guid.NewGuid():N}"[..18].ToUpperInvariant(),
+            NumeroEnvio = $"ENV-{fechaActual:yyyy}-{Guid.NewGuid():N}"[..18].ToUpperInvariant(),
             UbicacionOrigenId = request.UbicacionOrigenId,
             UbicacionDestinoId = request.UbicacionDestinoId,
-            EstadoEnvioId = request.EstadoEnvioId,
-            UsuarioSolicitanteId = request.UsuarioSolicitanteId,
-            Observaciones = request.Observaciones,
-            FechaCreacion = DateTime.UtcNow
+            EstadoEnvioId = estadoInicial.EstadoEnvioId,
+            Direccion = direccion,
+            UsuarioSolicitanteId = usuarioId,
+            Observaciones = NormalizarOpcional(request.Observaciones),
+            FechaCreacion = fechaActual,
+            UsuarioCreacionId = usuarioId
         };
+
         await envios.AddAsync(envio, cancellationToken);
+        db.HistorialEstadosEnvio.Add(new HistorialEstadoEnvio
+        {
+            Envio = envio,
+            EstadoEnvioId = estadoInicial.EstadoEnvioId,
+            UbicacionId = request.UbicacionOrigenId,
+            UsuarioId = usuarioId,
+            Fecha = fechaActual,
+            Observaciones = "Envío creado.",
+            FechaCreacion = fechaActual,
+            UsuarioCreacionId = usuarioId
+        });
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result<EnvioResponse>.Success(ToResponse(envio));
     }
 
-    public async Task<Result<EnvioResponse>> ObtenerAsync(int envioId, CancellationToken cancellationToken = default)
+    public async Task<Result<EnvioResponse>> ObtenerAsync(
+        int envioId,
+        CancellationToken cancellationToken = default)
     {
         var envio = await envios.GetByIdAsync(envioId, cancellationToken);
-        return envio is null ? Result<EnvioResponse>.Failure("El envío no existe.") : Result<EnvioResponse>.Success(ToResponse(envio));
+        return envio is null
+            ? Result<EnvioResponse>.Failure("El envío no existe.", ErrorType.NotFound)
+            : Result<EnvioResponse>.Success(ToResponse(envio));
     }
 
-    public async Task<Result<IReadOnlyCollection<EnvioResponse>>> ListarAsync(CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyCollection<EnvioResponse>>> ListarAsync(
+        CancellationToken cancellationToken = default)
     {
-        var resultado = await db.Envios.AsNoTracking()
+        var resultado = await db.Envios
+            .AsNoTracking()
             .OrderByDescending(x => x.FechaCreacion)
-            .Select(x => new EnvioResponse(x.EnvioId, x.NumeroEnvio, x.UbicacionOrigenId, x.UbicacionDestinoId, x.EstadoEnvioId, x.UsuarioSolicitanteId, x.Observaciones))
+            .Select(x => new EnvioResponse(
+                x.EnvioId,
+                x.NumeroEnvio,
+                x.UbicacionOrigenId,
+                x.UbicacionDestinoId,
+                x.EstadoEnvioId,
+                x.Direccion,
+                x.UsuarioSolicitanteId,
+                x.Observaciones))
             .ToListAsync(cancellationToken);
+
         return Result<IReadOnlyCollection<EnvioResponse>>.Success(resultado);
     }
 
-    private static EnvioResponse ToResponse(Envio e) => new(e.EnvioId, e.NumeroEnvio, e.UbicacionOrigenId, e.UbicacionDestinoId, e.EstadoEnvioId, e.UsuarioSolicitanteId, e.Observaciones);
+    public async Task<Result> ActualizarAsync(
+        ActualizarEnvioRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var validation = await actualizarValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+            return Result.Failure(validation.ToErrorMessage(), ErrorType.Validation);
+        if (userContext.UserId is not Guid usuarioId)
+            return Result.Failure("No fue posible identificar al usuario autenticado.", ErrorType.Unauthorized);
+
+        var envio = await db.Envios.Include(x => x.EstadoEnvio)
+            .FirstOrDefaultAsync(x => x.EnvioId == request.EnvioId, cancellationToken);
+        if (envio is null)
+            return Result.Failure("El envío no existe.", ErrorType.NotFound);
+        if (!EsEstadoEditable(envio.EstadoEnvio.Codigo))
+            return Result.Failure("El envío ya fue despachado y no admite modificaciones.", ErrorType.Conflict);
+
+        var ubicaciones = await db.Ubicaciones
+            .Where(x => (x.UbicacionId == request.UbicacionOrigenId ||
+                         x.UbicacionId == request.UbicacionDestinoId) && x.Activo)
+            .ToDictionaryAsync(x => x.UbicacionId, cancellationToken);
+        if (ubicaciones.Count != 2)
+            return Result.Failure("La ubicación de origen o destino no existe o está inactiva.", ErrorType.Validation);
+
+        var direccionResult = DeterminarDireccion(
+            ubicaciones[request.UbicacionOrigenId],
+            ubicaciones[request.UbicacionDestinoId]);
+        if (direccionResult.IsFailure)
+            return Result.Failure(direccionResult.Error!, direccionResult.ErrorType);
+
+        var codigoInicial = direccionResult.Value == DireccionEnvioEnum.HaciaTecnologia
+            ? EstadoEnvioCodigos.EnFilial
+            : EstadoEnvioCodigos.EnPreparacionTecnologia;
+        var estadoInicial = await db.EstadosEnvio.FirstOrDefaultAsync(
+            x => x.Codigo == codigoInicial && x.Activo,
+            cancellationToken);
+        if (estadoInicial is null)
+            return Result.Failure("El estado inicial del flujo no se encuentra configurado.", ErrorType.Conflict);
+
+        var equiposFueraDelNuevoOrigen = await db.EnvioEquipos
+            .AnyAsync(
+                x => x.EnvioId == envio.EnvioId &&
+                     x.Equipo.UbicacionActualId != request.UbicacionOrigenId,
+                cancellationToken);
+        if (equiposFueraDelNuevoOrigen)
+            return Result.Failure(
+                "No se puede cambiar el origen porque uno o más equipos no se encuentran en la nueva ubicación.",
+                ErrorType.Conflict);
+
+        var fecha = DateTime.UtcNow;
+        var cambioFlujo = envio.Direccion != direccionResult.Value || envio.EstadoEnvioId != estadoInicial.EstadoEnvioId;
+        envio.UbicacionOrigenId = request.UbicacionOrigenId;
+        envio.UbicacionDestinoId = request.UbicacionDestinoId;
+        envio.Direccion = direccionResult.Value;
+        envio.EstadoEnvioId = estadoInicial.EstadoEnvioId;
+        envio.Observaciones = NormalizarOpcional(request.Observaciones);
+        envio.FechaModificacion = fecha;
+        envio.UsuarioModificacionId = usuarioId;
+
+        if (cambioFlujo)
+        {
+            db.HistorialEstadosEnvio.Add(new HistorialEstadoEnvio
+            {
+                EnvioId = envio.EnvioId,
+                EstadoEnvioId = estadoInicial.EstadoEnvioId,
+                UbicacionId = envio.UbicacionOrigenId,
+                UsuarioId = usuarioId,
+                Fecha = fecha,
+                Observaciones = "Dirección del envío actualizada antes del despacho.",
+                FechaCreacion = fecha,
+                UsuarioCreacionId = usuarioId
+            });
+        }
+
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Result.Failure(
+                "El envío fue modificado por otra operación. Actualice los datos e intente nuevamente.",
+                ErrorType.Conflict);
+        }
+        return Result.Success();
+    }
+
+    private static Result<DireccionEnvioEnum> DeterminarDireccion(Ubicacion origen, Ubicacion destino)
+    {
+        if (origen.Tipo == TipoUbicacionEnum.Filial && destino.Tipo == TipoUbicacionEnum.Tecnologia)
+            return Result<DireccionEnvioEnum>.Success(DireccionEnvioEnum.HaciaTecnologia);
+
+        if (origen.Tipo == TipoUbicacionEnum.Tecnologia && destino.Tipo == TipoUbicacionEnum.Filial)
+            return Result<DireccionEnvioEnum>.Success(DireccionEnvioEnum.HaciaFilial);
+
+        return Result<DireccionEnvioEnum>.Failure(
+            "El envío debe realizarse entre una filial y Tecnología.", ErrorType.Validation);
+    }
+
+    private static EnvioResponse ToResponse(Envio envio) => new(
+        envio.EnvioId,
+        envio.NumeroEnvio,
+        envio.UbicacionOrigenId,
+        envio.UbicacionDestinoId,
+        envio.EstadoEnvioId,
+        envio.Direccion,
+        envio.UsuarioSolicitanteId,
+        envio.Observaciones);
+
+    private static string? NormalizarOpcional(string? valor) =>
+        string.IsNullOrWhiteSpace(valor) ? null : valor.Trim();
+
+    private static bool EsEstadoEditable(string codigo) =>
+        codigo is EstadoEnvioCodigos.EnFilial or EstadoEnvioCodigos.EnPreparacionTecnologia;
 }

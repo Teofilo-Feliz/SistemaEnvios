@@ -10,5 +10,9 @@ public sealed class VerificarEquipoRequestValidator : AbstractValidator<Verifica
         RuleFor(x => x.EnvioEquipoId).GreaterThan(0);
         RuleFor(x => x.Estado).IsInEnum().NotEqual(Domain.Enums.EstadoRecepcionEquipoEnum.Pendiente);
         RuleFor(x => x.Observaciones).MaximumLength(2000);
+        RuleFor(x => x.Observaciones)
+            .NotEmpty()
+            .When(x => x.Estado == Domain.Enums.EstadoRecepcionEquipoEnum.VerificadoConIncidencia)
+            .WithMessage("Debe documentar la incidencia encontrada en el equipo.");
     }
 }

@@ -1,74 +1,294 @@
-using Microsoft.EntityFrameworkCore;
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 using SistemaEnvios.Application.Common;
 using SistemaEnvios.Application.DTOs.Recepciones;
 using SistemaEnvios.Application.Interfaces.Repositories;
+using SistemaEnvios.Application.Interfaces.Security;
 using SistemaEnvios.Application.Interfaces.Services;
+using SistemaEnvios.Domain.Constants;
 using SistemaEnvios.Domain.Entities;
 using SistemaEnvios.Domain.Enums;
 using SistemaEnvios.Infrastructure.Persistence;
 
 namespace SistemaEnvios.Infrastructure.Services.Recepciones;
 
-public sealed class RecepcionService(SistemaEnviosDbContext db, IUnitOfWork unitOfWork, IValidator<CrearRecepcionRequest> crearValidator, IValidator<VerificarEquipoRequest> verificarValidator) : IRecepcionService
+public sealed class RecepcionService(
+    SistemaEnviosDbContext db,
+    IUnitOfWork unitOfWork,
+    IValidator<CrearRecepcionRequest> crearValidator,
+    IValidator<VerificarEquipoRequest> verificarValidator,
+    IValidator<AsignarTecnicoRequest> asignarValidator,
+    IUserContext userContext) : IRecepcionService
 {
-    public async Task<Result<Recepcion>> ObtenerPorEnvioAsync(int envioId, CancellationToken cancellationToken = default)
+    public async Task<Result<RecepcionResponse>> ObtenerPorEnvioAsync(
+        int envioId,
+        CancellationToken cancellationToken = default)
     {
-        var recepcion = await db.Recepciones.AsNoTracking().FirstOrDefaultAsync(x => x.EnvioId == envioId, cancellationToken);
-        return recepcion is null ? Result<Recepcion>.Failure("La recepción no existe.") : Result<Recepcion>.Success(recepcion);
+        var recepcion = await db.Recepciones
+            .AsNoTracking()
+            .Where(x => x.EnvioId == envioId)
+            .Select(x => new RecepcionResponse(x.RecepcionId, x.EnvioId, x.TecnicoAsignadoId,
+                x.UsuarioQueRecibioId, x.FechaAsignacion, x.FechaRecepcion, x.EstadoRecepcion,
+                x.Observaciones, x.UsuarioQueAsignoId))
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return recepcion is null
+            ? Result<RecepcionResponse>.Failure("La recepción no existe.", ErrorType.NotFound)
+            : Result<RecepcionResponse>.Success(recepcion);
     }
 
-    public async Task<Result<int>> CrearAsync(CrearRecepcionRequest request, CancellationToken cancellationToken = default)
+    public async Task<Result<int>> CrearAsync(
+        CrearRecepcionRequest request,
+        CancellationToken cancellationToken = default)
     {
         var validation = await crearValidator.ValidateAsync(request, cancellationToken);
-        if (!validation.IsValid) return Result<int>.Failure(validation.ToErrorMessage());
-        if (!await db.Envios.AnyAsync(x => x.EnvioId == request.EnvioId, cancellationToken)) return Result<int>.Failure("El envío no existe.");
-        if (await db.Recepciones.AnyAsync(x => x.EnvioId == request.EnvioId, cancellationToken)) return Result<int>.Failure("El envío ya tiene una recepción.");
-        var recepcion = new Recepcion { EnvioId = request.EnvioId, UsuarioQueAsignoId = request.UsuarioQueAsignoId, TecnicoAsignadoId = request.TecnicoAsignadoId, FechaAsignacion = request.TecnicoAsignadoId.HasValue ? DateTime.UtcNow : null, EstadoRecepcion = request.TecnicoAsignadoId.HasValue ? EstadoRecepcionEnum.Asignada : EstadoRecepcionEnum.Pendiente, Observaciones = request.Observaciones, FechaCreacion = DateTime.UtcNow };
+        if (!validation.IsValid)
+            return Result<int>.Failure(validation.ToErrorMessage(), ErrorType.Validation);
+
+        if (userContext.UserId is not Guid usuarioId)
+            return Result<int>.Failure("No fue posible identificar al usuario autenticado.", ErrorType.Unauthorized);
+
+        var envio = await db.Envios
+            .Include(x => x.EstadoEnvio)
+            .FirstOrDefaultAsync(x => x.EnvioId == request.EnvioId, cancellationToken);
+
+        if (envio is null)
+            return Result<int>.Failure("El envío no existe.", ErrorType.NotFound);
+
+        if (!PermiteCrearRecepcion(envio.Direccion, envio.EstadoEnvio.Codigo))
+            return Result<int>.Failure("El estado actual del envío no permite iniciar la recepción.", ErrorType.Conflict);
+
+        if (await db.Recepciones.AnyAsync(x => x.EnvioId == request.EnvioId, cancellationToken))
+            return Result<int>.Failure("El envío ya tiene una recepción.", ErrorType.Conflict);
+
+        var fechaActual = DateTime.UtcNow;
+        var recepcion = new Recepcion
+        {
+            EnvioId = request.EnvioId,
+            UsuarioQueAsignoId = usuarioId,
+            TecnicoAsignadoId = request.TecnicoAsignadoId,
+            FechaAsignacion = request.TecnicoAsignadoId.HasValue ? fechaActual : null,
+            EstadoRecepcion = request.TecnicoAsignadoId.HasValue
+                ? EstadoRecepcionEnum.Asignada
+                : EstadoRecepcionEnum.Pendiente,
+            Observaciones = NormalizarOpcional(request.Observaciones),
+            FechaCreacion = fechaActual,
+            UsuarioCreacionId = usuarioId
+        };
+
         db.Recepciones.Add(recepcion);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result<int>.Success(recepcion.RecepcionId);
     }
 
-    public async Task<Result> VerificarEquipoAsync(VerificarEquipoRequest request, CancellationToken cancellationToken = default)
+    public async Task<Result> VerificarEquipoAsync(
+        VerificarEquipoRequest request,
+        CancellationToken cancellationToken = default)
     {
         var validation = await verificarValidator.ValidateAsync(request, cancellationToken);
-        if (!validation.IsValid) return Result.Failure(validation.ToErrorMessage());
-        var recepcion = await db.Recepciones.FindAsync([request.RecepcionId], cancellationToken);
-        if (recepcion is null) return Result.Failure("La recepción no existe.");
+        if (!validation.IsValid)
+            return Result.Failure(validation.ToErrorMessage(), ErrorType.Validation);
+
+        if (userContext.UserId is not Guid usuarioId)
+            return Result.Failure("No fue posible identificar al usuario autenticado.", ErrorType.Unauthorized);
+
+        var recepcion = await db.Recepciones
+            .Include(x => x.Envio)
+            .ThenInclude(x => x.EstadoEnvio)
+            .FirstOrDefaultAsync(x => x.RecepcionId == request.RecepcionId, cancellationToken);
+
+        if (recepcion is null)
+            return Result.Failure("La recepción no existe.", ErrorType.NotFound);
+
         if (recepcion.EstadoRecepcion is EstadoRecepcionEnum.Completada or EstadoRecepcionEnum.CompletadaConIncidencia)
-            return Result.Failure("La recepción ya fue completada.");
-        if (!await db.EnvioEquipos.AnyAsync(x => x.EnvioEquipoId == request.EnvioEquipoId && x.EnvioId == recepcion.EnvioId, cancellationToken)) return Result.Failure("El equipo no pertenece al envío.");
+            return Result.Failure("La recepción ya fue completada.", ErrorType.Conflict);
+
+        if (!PermiteVerificar(recepcion.Envio.Direccion, recepcion.Envio.EstadoEnvio.Codigo))
+            return Result.Failure("El estado actual del envío no permite verificar equipos.", ErrorType.Conflict);
+
+        var equipoValido = await db.EnvioEquipos.AnyAsync(
+            x => x.EnvioEquipoId == request.EnvioEquipoId && x.EnvioId == recepcion.EnvioId,
+            cancellationToken);
+        if (!equipoValido)
+            return Result.Failure("El equipo no pertenece al envío.", ErrorType.Validation);
+
         if (await db.RecepcionEquipos.AnyAsync(x => x.EnvioEquipoId == request.EnvioEquipoId, cancellationToken))
-            return Result.Failure("El equipo ya fue verificado.");
-        db.RecepcionEquipos.Add(new RecepcionEquipo { RecepcionId = request.RecepcionId, EnvioEquipoId = request.EnvioEquipoId, EstadoRecepcionEquipo = request.Estado, FechaVerificacion = DateTime.UtcNow, Observaciones = request.Observaciones, FechaCreacion = DateTime.UtcNow });
+            return Result.Failure("El equipo ya fue verificado.", ErrorType.Conflict);
+
+        var fechaActual = DateTime.UtcNow;
+        db.RecepcionEquipos.Add(new RecepcionEquipo
+        {
+            RecepcionId = request.RecepcionId,
+            EnvioEquipoId = request.EnvioEquipoId,
+            EstadoRecepcionEquipo = request.Estado,
+            FechaVerificacion = fechaActual,
+            Observaciones = NormalizarOpcional(request.Observaciones),
+            FechaCreacion = fechaActual,
+            UsuarioCreacionId = usuarioId
+        });
+
         recepcion.EstadoRecepcion = EstadoRecepcionEnum.EnProceso;
+        recepcion.FechaModificacion = fechaActual;
+        recepcion.UsuarioModificacionId = usuarioId;
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
 
-    public async Task<Result> CompletarAsync(int recepcionId, Guid usuarioId, CancellationToken cancellationToken = default)
+    public async Task<Result> AsignarTecnicoAsync(
+        AsignarTecnicoRequest request,
+        CancellationToken cancellationToken = default)
     {
-        if (usuarioId == Guid.Empty) return Result.Failure("El usuario es requerido.");
-        var recepcion = await db.Recepciones.FindAsync([recepcionId], cancellationToken);
-        if (recepcion is null) return Result.Failure("La recepción no existe.");
-        if (recepcion.EstadoRecepcion is EstadoRecepcionEnum.Completada or EstadoRecepcionEnum.CompletadaConIncidencia)
-            return Result.Failure("La recepción ya fue completada.");
+        var validation = await asignarValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+            return Result.Failure(validation.ToErrorMessage(), ErrorType.Validation);
+        if (userContext.UserId is not Guid usuarioId)
+            return Result.Failure("No fue posible identificar al usuario autenticado.", ErrorType.Unauthorized);
 
-        var totalEquipos = await db.EnvioEquipos.CountAsync(x => x.EnvioId == recepcion.EnvioId, cancellationToken);
-        if (totalEquipos == 0) return Result.Failure("El envío no tiene equipos registrados.");
-        var equiposVerificados = await db.RecepcionEquipos.CountAsync(x => x.RecepcionId == recepcionId, cancellationToken);
-        if (equiposVerificados != totalEquipos) return Result.Failure("Aún existen equipos pendientes de verificación.");
+        var recepcion = await db.Recepciones.FindAsync([request.RecepcionId], cancellationToken);
+        if (recepcion is null)
+            return Result.Failure("La recepción no existe.", ErrorType.NotFound);
+        if (recepcion.EstadoRecepcion is EstadoRecepcionEnum.EnProceso or
+            EstadoRecepcionEnum.Completada or
+            EstadoRecepcionEnum.CompletadaConIncidencia)
+            return Result.Failure("La recepción ya inició y no admite reasignación.", ErrorType.Conflict);
 
-        var conIncidencia = await db.RecepcionEquipos.AnyAsync(
-            x => x.RecepcionId == recepcionId && x.EstadoRecepcionEquipo == EstadoRecepcionEquipoEnum.VerificadoConIncidencia,
-            cancellationToken);
-        recepcion.EstadoRecepcion = conIncidencia ? EstadoRecepcionEnum.CompletadaConIncidencia : EstadoRecepcionEnum.Completada;
-        recepcion.UsuarioQueRecibioId = usuarioId;
-        recepcion.FechaRecepcion = DateTime.UtcNow;
-        recepcion.FechaModificacion = DateTime.UtcNow;
+        var fecha = DateTime.UtcNow;
+        recepcion.TecnicoAsignadoId = request.TecnicoAsignadoId;
+        recepcion.FechaAsignacion = fecha;
+        recepcion.EstadoRecepcion = EstadoRecepcionEnum.Asignada;
+        recepcion.FechaModificacion = fecha;
         recepcion.UsuarioModificacionId = usuarioId;
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
+
+    public async Task<Result> CompletarAsync(
+        int recepcionId,
+        CancellationToken cancellationToken = default)
+    {
+        if (userContext.UserId is not Guid usuarioId)
+            return Result.Failure("No fue posible identificar al usuario autenticado.", ErrorType.Unauthorized);
+
+        var recepcion = await db.Recepciones
+            .Include(x => x.Envio)
+            .ThenInclude(x => x.EstadoEnvio)
+            .FirstOrDefaultAsync(x => x.RecepcionId == recepcionId, cancellationToken);
+
+        if (recepcion is null)
+            return Result.Failure("La recepción no existe.", ErrorType.NotFound);
+
+        if (recepcion.EstadoRecepcion is EstadoRecepcionEnum.Completada or EstadoRecepcionEnum.CompletadaConIncidencia)
+            return Result.Failure("La recepción ya fue completada.", ErrorType.Conflict);
+
+        var totalEquipos = await db.EnvioEquipos.CountAsync(
+            x => x.EnvioId == recepcion.EnvioId,
+            cancellationToken);
+        if (totalEquipos == 0)
+            return Result.Failure("El envío no tiene equipos registrados.", ErrorType.Conflict);
+
+        var equiposVerificados = await db.RecepcionEquipos.CountAsync(
+            x => x.RecepcionId == recepcionId,
+            cancellationToken);
+        if (equiposVerificados != totalEquipos)
+            return Result.Failure("Aún existen equipos pendientes de verificación.", ErrorType.Conflict);
+
+        var conIncidencia = await db.RecepcionEquipos.AnyAsync(
+            x => x.RecepcionId == recepcionId &&
+                 x.EstadoRecepcionEquipo == EstadoRecepcionEquipoEnum.VerificadoConIncidencia,
+            cancellationToken);
+        var codigoFinal = recepcion.Envio.Direccion == DireccionEnvioEnum.HaciaTecnologia
+            ? EstadoEnvioCodigos.RecibidoPorTecnologia
+            : EstadoEnvioCodigos.RecepcionValidadaEnFilial;
+        var estadoFinal = await db.EstadosEnvio.FirstOrDefaultAsync(
+            x => x.Codigo == codigoFinal && x.Activo && x.EsFinal,
+            cancellationToken);
+
+        if (estadoFinal is null)
+            return Result.Failure("El estado final del flujo no se encuentra configurado.", ErrorType.Conflict);
+
+        var transicionPermitida = await db.TransicionesEstadoEnvio.AnyAsync(
+            x => x.EstadoOrigenId == recepcion.Envio.EstadoEnvioId &&
+                 x.EstadoDestinoId == estadoFinal.EstadoEnvioId && x.Activo,
+            cancellationToken);
+        if (!transicionPermitida)
+            return Result.Failure("El estado actual del envío no permite completar la recepción.", ErrorType.Conflict);
+
+        var fechaActual = DateTime.UtcNow;
+        recepcion.EstadoRecepcion = conIncidencia
+            ? EstadoRecepcionEnum.CompletadaConIncidencia
+            : EstadoRecepcionEnum.Completada;
+        recepcion.UsuarioQueRecibioId = usuarioId;
+        recepcion.FechaRecepcion = fechaActual;
+        recepcion.FechaModificacion = fechaActual;
+        recepcion.UsuarioModificacionId = usuarioId;
+
+        recepcion.Envio.EstadoEnvioId = estadoFinal.EstadoEnvioId;
+        recepcion.Envio.FechaFinalizacion = fechaActual;
+        recepcion.Envio.FechaModificacion = fechaActual;
+        recepcion.Envio.UsuarioModificacionId = usuarioId;
+
+        db.HistorialEstadosEnvio.Add(new HistorialEstadoEnvio
+        {
+            EnvioId = recepcion.EnvioId,
+            EstadoEnvioId = estadoFinal.EstadoEnvioId,
+            UbicacionId = recepcion.Envio.UbicacionDestinoId,
+            UsuarioId = usuarioId,
+            Fecha = fechaActual,
+            Observaciones = conIncidencia
+                ? "Recepción completada con incidencia."
+                : "Recepción completada.",
+            FechaCreacion = fechaActual,
+            UsuarioCreacionId = usuarioId
+        });
+
+        var equiposRecibidos = await db.EnvioEquipos
+            .Where(x => x.EnvioId == recepcion.EnvioId)
+            .Select(x => x.Equipo)
+            .ToListAsync(cancellationToken);
+        foreach (var equipo in equiposRecibidos)
+        {
+            equipo.UbicacionActualId = recepcion.Envio.UbicacionDestinoId;
+            equipo.FechaModificacion = fechaActual;
+            equipo.UsuarioModificacionId = usuarioId;
+        }
+
+        var reservas = await db.ReservasEquipoEnvio
+            .Where(x => x.EnvioId == recepcion.EnvioId)
+            .ToListAsync(cancellationToken);
+        db.ReservasEquipoEnvio.RemoveRange(reservas);
+
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Result.Failure(
+                "El envío fue modificado por otra operación. Actualice los datos e intente nuevamente.",
+                ErrorType.Conflict);
+        }
+        return Result.Success();
+    }
+
+    private static bool PermiteCrearRecepcion(DireccionEnvioEnum direccion, string codigoEstado) =>
+        direccion switch
+        {
+            DireccionEnvioEnum.HaciaTecnologia =>
+                codigoEstado is EstadoEnvioCodigos.EnEsperaDeTecnologia or EstadoEnvioCodigos.EnProcesoDeRevision,
+            DireccionEnvioEnum.HaciaFilial =>
+                codigoEstado is EstadoEnvioCodigos.PendienteRecepcionFilial or EstadoEnvioCodigos.RecibidoEnFilial,
+            _ => false
+        };
+
+    private static bool PermiteVerificar(DireccionEnvioEnum direccion, string codigoEstado) =>
+        direccion switch
+        {
+            DireccionEnvioEnum.HaciaTecnologia => codigoEstado == EstadoEnvioCodigos.EnProcesoDeRevision,
+            DireccionEnvioEnum.HaciaFilial => codigoEstado == EstadoEnvioCodigos.RecibidoEnFilial,
+            _ => false
+        };
+
+    private static string? NormalizarOpcional(string? valor) =>
+        string.IsNullOrWhiteSpace(valor) ? null : valor.Trim();
 }

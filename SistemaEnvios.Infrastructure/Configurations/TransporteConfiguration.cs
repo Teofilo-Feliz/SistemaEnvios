@@ -16,7 +16,11 @@ public class TransporteConfiguration : IEntityTypeConfiguration<Transporte>
         b.Property(x => x.Placa).HasMaxLength(20);
         b.Property(x => x.Observaciones).HasMaxLength(2000);
         b.HasOne(x => x.Envio).WithOne(x => x.Transporte).HasForeignKey<Transporte>(x => x.EnvioId).OnDelete(DeleteBehavior.Cascade);
-        b.ToTable(t => t.HasCheckConstraint("CK_Transporte_Confirmacion", "(EntregaConfirmada = 0 AND FechaConfirmacionEntrega IS NULL AND UsuarioConfirmacionId IS NULL) OR (EntregaConfirmada = 1 AND FechaConfirmacionEntrega IS NOT NULL AND UsuarioConfirmacionId IS NOT NULL)"));
+        b.ToTable(t => t.HasCheckConstraint(
+            "CK_Transporte_Confirmacion",
+            "(EntregaConfirmada = 0 AND FechaConfirmacionEntrega IS NULL AND UsuarioConfirmacionId IS NULL) OR " +
+            "(EntregaConfirmada = 1 AND FechaEntregaTransportacion IS NOT NULL AND FechaConfirmacionEntrega IS NOT NULL " +
+            "AND FechaConfirmacionEntrega >= FechaEntregaTransportacion AND UsuarioConfirmacionId IS NOT NULL)"));
         b.Property(x => x.FechaCreacion).HasDefaultValueSql("SYSUTCDATETIME()");
     }
 }

@@ -3,6 +3,7 @@ namespace SistemaEnvios.Application.Interfaces.Security;
 public interface IUserContext
 {
     bool IsAuthenticated { get; }
+    Guid? UserId { get; }
     string? Subject { get; }
     string? Email { get; }
     string? Name { get; }

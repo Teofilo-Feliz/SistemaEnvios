@@ -14,5 +14,6 @@ public class RecepcionConfiguration : IEntityTypeConfiguration<Recepcion>
         b.Property(x => x.Observaciones).HasMaxLength(2000);
         b.HasOne(x => x.Envio).WithOne(x => x.Recepcion).HasForeignKey<Recepcion>(x => x.EnvioId).OnDelete(DeleteBehavior.Cascade);
         b.Property(x => x.FechaCreacion).HasDefaultValueSql("SYSUTCDATETIME()");
+        b.ToTable(t => t.HasCheckConstraint("CK_Recepciones_Estado", "EstadoRecepcion BETWEEN 1 AND 5"));
     }
 }
