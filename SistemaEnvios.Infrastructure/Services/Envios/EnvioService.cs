@@ -20,6 +20,31 @@ public sealed class EnvioService(
     IValidator<ActualizarEnvioRequest> actualizarValidator,
     IUserContext userContext) : IEnvioService
 {
+    public async Task<Result<EnvioResponse>> CrearConEquiposAsync(CrearEnvioConEquiposRequest request, CancellationToken cancellationToken = default)
+    {
+        if (request.Equipos is null || request.Equipos.Count == 0)
+            return Result<EnvioResponse>.Failure("El envío debe incluir al menos un equipo.", ErrorType.Validation);
+        var tickets = request.Equipos.Select(x => x.NumeroTicket?.Trim()).ToList();
+        if (tickets.Any(x => string.IsNullOrWhiteSpace(x) || x.Length is < 3 or > 50 || !x.All(char.IsDigit)) || tickets.Distinct(StringComparer.Ordinal).Count() != tickets.Count)
+            return Result<EnvioResponse>.Failure("Los tickets deben ser numéricos, tener entre 3 y 50 dígitos y no repetirse.", ErrorType.Validation);
+        if (userContext.UserId is not Guid usuarioId)
+            return Result<EnvioResponse>.Failure("No fue posible identificar al usuario autenticado.", ErrorType.Unauthorized);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var envioResult = await CrearAsync(new CrearEnvioRequest { UbicacionOrigenId = request.UbicacionOrigenId, UbicacionDestinoId = request.UbicacionDestinoId, Observaciones = request.Observaciones }, cancellationToken);
+        if (envioResult.IsFailure) return envioResult;
+        foreach (var item in request.Equipos)
+        {
+            var equipo = await db.Equipos.FindAsync([item.EquipoId], cancellationToken);
+            if (equipo is null || equipo.UbicacionActualId != request.UbicacionOrigenId)
+                return Result<EnvioResponse>.Failure("Uno de los equipos no existe o no está en el origen.", ErrorType.Conflict);
+            if (await db.EnvioEquipos.AnyAsync(x => x.NumeroTicket == item.NumeroTicket.Trim(), cancellationToken) || await db.ReservasEquipoEnvio.AnyAsync(x => x.EquipoId == item.EquipoId, cancellationToken))
+                return Result<EnvioResponse>.Failure($"El ticket {item.NumeroTicket} o el equipo ya pertenece a otro envío.", ErrorType.Conflict);
+            db.EnvioEquipos.Add(new Domain.Entities.EnvioEquipo { EnvioId = envioResult.Value!.EnvioId, EquipoId = item.EquipoId, NumeroTicket = item.NumeroTicket.Trim(), Observaciones = item.Observaciones?.Trim() ?? "Equipo asociado al envío.", UsuarioSolicitanteId = usuarioId, FechaCreacion = DateTime.UtcNow, UsuarioCreacionId = usuarioId });
+            db.ReservasEquipoEnvio.Add(new Domain.Entities.ReservaEquipoEnvio { EquipoId = item.EquipoId, EnvioId = envioResult.Value.EnvioId, FechaReserva = DateTime.UtcNow, UsuarioId = usuarioId });
+        }
+        try { await unitOfWork.SaveChangesAsync(cancellationToken); await transaction.CommitAsync(cancellationToken); return envioResult; }
+        catch (DbUpdateException) { await transaction.RollbackAsync(cancellationToken); return Result<EnvioResponse>.Failure("No fue posible asociar los equipos; el envío no se creó.", ErrorType.Conflict); }
+    }
     public async Task<Result<EnvioResponse>> CrearAsync(
         CrearEnvioRequest request,
         CancellationToken cancellationToken = default)

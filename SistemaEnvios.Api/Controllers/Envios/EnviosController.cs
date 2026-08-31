@@ -41,6 +41,14 @@ public sealed class EnviosController(
         return result.ToCreatedAtActionResult(this, nameof(Obtener), new { envioId = result.Value?.EnvioId });
     }
 
+    [HttpPost("con-equipos")]
+    [Authorize(Policy = PermissionNames.EnviosCrear)]
+    public async Task<IActionResult> CrearConEquipos([FromBody] CrearEnvioConEquiposRequest request, CancellationToken cancellationToken)
+    {
+        var result = await envioService.CrearConEquiposAsync(request, cancellationToken);
+        return result.ToCreatedAtActionResult(this, nameof(Obtener), new { envioId = result.Value?.EnvioId });
+    }
+
     [HttpPut("{envioId:int}")]
     [Authorize(Policy = PermissionNames.EnviosEditar)]
     public async Task<IActionResult> Actualizar(

@@ -191,8 +191,7 @@ public sealed class EnvioEquipoService(
         return Result.Success();
     }
 
-    private static bool EsEstadoEditable(string codigo) =>
-        codigo is EstadoEnvioCodigos.EnFilial or EstadoEnvioCodigos.EnPreparacionTecnologia;
+    private static bool EsEstadoEditable(string codigo) => codigo == EstadoEnvioCodigos.EnFilial;
 
     private static void MarcarEnvioModificado(Envio envio, Guid usuarioId)
     {
