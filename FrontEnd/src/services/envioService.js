@@ -5,6 +5,7 @@ export const envioService = {
   paged: (params) => api.get('/envios/paginado', { params }),
   get: (id) => api.get(`/envios/${id}`),
   create: (payload) => api.post('/envios', payload),
+  createWithEquipment: (payload) => api.post('/envios/con-equipos', payload),
   update: (id, payload) => api.put(`/envios/${id}`, payload),
   history: (id) => api.get(`/envios/${id}/historial`),
   changeState: (id, payload) => api.post(`/envios/${id}/estado`, payload),

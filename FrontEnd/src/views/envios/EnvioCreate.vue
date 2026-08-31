@@ -324,20 +324,14 @@ async function save() {
           ubicacionDestinoId: Number(form.destinationId),
           observaciones: form.notes || null,
         })
-      : await envioService.create({
+      : await envioService.createWithEquipment({
           ubicacionOrigenId: Number(form.originId),
           ubicacionDestinoId: Number(form.destinationId),
           observaciones: form.notes || null,
+          equipos: form.equipment.map((e) => ({ equipoId: Number(e.existingId), numeroTicket: e.ticket, observaciones: e.notes || "Equipo asociado al envío." })),
         });
     const id = editing.value ? route.params.id : r.data.envioId;
     if (!editing.value) {
-      for (const e of form.equipment)
-        await envioService.addEquipment({
-          envioId: Number(id),
-          equipoId: Number(e.existingId),
-          numeroTicket: e.ticket,
-          observaciones: e.notes || "Equipo asociado al envío.",
-        });
       await transporteService.create({
         envioId: Number(id),
         tipoTransporteId: Number(form.transportTypeId),
