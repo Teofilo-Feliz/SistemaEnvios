@@ -5,7 +5,7 @@ using System.Text;
 
 namespace SistemaEnvios.Domain.Entities
 {
-    public class RecepcionEquipo : AuditoriaEntitie
+public class RecepcionEquipo : AuditoriaEntitie
     {
         public int RecepcionEquipoId { get; set; }
         public int RecepcionId { get; set; }
@@ -16,6 +16,7 @@ namespace SistemaEnvios.Domain.Entities
 
         public Recepcion Recepcion { get; set; } = null!;
         public EnvioEquipo EnvioEquipo { get; set; } = null!;
+        public byte[] RowVersion { get; set; } = [];
 
     }
 }

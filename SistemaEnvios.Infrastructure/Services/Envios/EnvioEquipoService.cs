@@ -52,6 +52,9 @@ public sealed class EnvioEquipoService(
         if (await repository.ExisteEnEnvioAsync(request.EnvioId, request.EquipoId, cancellationToken))
             return Result<int>.Failure("El equipo ya pertenece a este envío.", ErrorType.Conflict);
 
+        if (await db.EnvioEquipos.AnyAsync(x => x.NumeroTicket == request.NumeroTicket.Trim(), cancellationToken))
+            return Result<int>.Failure("El número de ticket ya fue utilizado en otro envío.", ErrorType.Conflict);
+
         var perteneceAEnvioActivo = await db.ReservasEquipoEnvio.AnyAsync(
             x => x.EquipoId == request.EquipoId,
             cancellationToken);
@@ -112,6 +115,17 @@ public sealed class EnvioEquipoService(
         return Result<IReadOnlyCollection<EnvioEquipoResponse>>.Success(equipos);
     }
 
+    public async Task<Result<bool>> TicketDisponibleAsync(string numeroTicket, int? excluirEnvioEquipoId = null, CancellationToken cancellationToken = default)
+    {
+        var ticket = numeroTicket?.Trim();
+        if (string.IsNullOrWhiteSpace(ticket) || !ticket.All(char.IsDigit))
+            return Result<bool>.Failure("El número de ticket debe contener únicamente caracteres numéricos.", ErrorType.Validation);
+        var existe = await db.EnvioEquipos.AsNoTracking().AnyAsync(
+            x => x.NumeroTicket == ticket && (!excluirEnvioEquipoId.HasValue || x.EnvioEquipoId != excluirEnvioEquipoId.Value),
+            cancellationToken);
+        return Result<bool>.Success(!existe);
+    }
+
     public async Task<Result> ActualizarAsync(
         ActualizarEnvioEquipoRequest request,
         CancellationToken cancellationToken = default)
@@ -128,6 +142,8 @@ public sealed class EnvioEquipoService(
             return Result.Failure("El equipo asociado al envío no existe.", ErrorType.NotFound);
         if (!EsEstadoEditable(detalle.Envio.EstadoEnvio.Codigo))
             return Result.Failure("El envío ya fue despachado y no admite modificaciones.", ErrorType.Conflict);
+        if (await db.EnvioEquipos.AnyAsync(x => x.NumeroTicket == request.NumeroTicket.Trim() && x.EnvioEquipoId != request.EnvioEquipoId, cancellationToken))
+            return Result.Failure("El número de ticket ya fue utilizado en otro envío.", ErrorType.Conflict);
 
         detalle.NumeroTicket = request.NumeroTicket.Trim();
         detalle.Observaciones = request.Observaciones.Trim();

@@ -27,7 +27,7 @@ public sealed class RecepcionService(
         var recepcion = await db.Recepciones
             .AsNoTracking()
             .Where(x => x.EnvioId == envioId)
-            .Select(x => new RecepcionResponse(x.RecepcionId, x.EnvioId, x.TecnicoAsignadoId,
+            .Select(x => new RecepcionResponse(x.RecepcionId, x.EnvioId, x.TecnicoAsignadoUsuarioId, x.TecnicoAsignadoNombre, x.TecnicoAsignadoNumeroEmpleado,
                 x.UsuarioQueRecibioId, x.FechaAsignacion, x.FechaRecepcion, x.EstadoRecepcion,
                 x.Observaciones, x.UsuarioQueAsignoId))
             .FirstOrDefaultAsync(cancellationToken);
@@ -61,14 +61,22 @@ public sealed class RecepcionService(
         if (await db.Recepciones.AnyAsync(x => x.EnvioId == request.EnvioId, cancellationToken))
             return Result<int>.Failure("El envío ya tiene una recepción.", ErrorType.Conflict);
 
+        UsuarioReferencia? tecnico = null;
+        if (request.TecnicoAsignadoUsuarioId.HasValue)
+        {
+            tecnico = await db.UsuariosReferencia.FirstOrDefaultAsync(x => x.UsuarioExternoId == request.TecnicoAsignadoUsuarioId && x.EsTecnico && x.Activo, cancellationToken);
+            if (tecnico is null) return Result<int>.Failure("El técnico no existe, está inactivo o no está sincronizado desde AuthManager.", ErrorType.Validation);
+        }
         var fechaActual = DateTime.UtcNow;
         var recepcion = new Recepcion
         {
             EnvioId = request.EnvioId,
             UsuarioQueAsignoId = usuarioId,
-            TecnicoAsignadoId = request.TecnicoAsignadoId,
-            FechaAsignacion = request.TecnicoAsignadoId.HasValue ? fechaActual : null,
-            EstadoRecepcion = request.TecnicoAsignadoId.HasValue
+            TecnicoAsignadoUsuarioId = tecnico?.UsuarioExternoId,
+            TecnicoAsignadoNombre = tecnico?.NombreCompleto,
+            TecnicoAsignadoNumeroEmpleado = tecnico?.NumeroEmpleado,
+            FechaAsignacion = tecnico is not null ? fechaActual : null,
+            EstadoRecepcion = tecnico is not null
                 ? EstadoRecepcionEnum.Asignada
                 : EstadoRecepcionEnum.Pendiente,
             Observaciones = NormalizarOpcional(request.Observaciones),
@@ -154,7 +162,11 @@ public sealed class RecepcionService(
             return Result.Failure("La recepción ya inició y no admite reasignación.", ErrorType.Conflict);
 
         var fecha = DateTime.UtcNow;
-        recepcion.TecnicoAsignadoId = request.TecnicoAsignadoId;
+        var tecnico = await db.UsuariosReferencia.FirstOrDefaultAsync(x => x.UsuarioExternoId == request.TecnicoAsignadoUsuarioId && x.EsTecnico && x.Activo, cancellationToken);
+        if (tecnico is null) return Result.Failure("El técnico no existe, está inactivo o no está sincronizado desde AuthManager.", ErrorType.Validation);
+        recepcion.TecnicoAsignadoUsuarioId = tecnico.UsuarioExternoId;
+        recepcion.TecnicoAsignadoNombre = tecnico.NombreCompleto;
+        recepcion.TecnicoAsignadoNumeroEmpleado = tecnico.NumeroEmpleado;
         recepcion.FechaAsignacion = fecha;
         recepcion.EstadoRecepcion = EstadoRecepcionEnum.Asignada;
         recepcion.FechaModificacion = fecha;

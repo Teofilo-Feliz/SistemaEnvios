@@ -5,7 +5,9 @@ namespace SistemaEnvios.Application.DTOs.Recepciones;
 public sealed record RecepcionResponse(
     int RecepcionId,
     int EnvioId,
-    int? TecnicoAsignadoId,
+    Guid? TecnicoAsignadoUsuarioId,
+    string? TecnicoAsignadoNombre,
+    string? TecnicoAsignadoNumeroEmpleado,
     Guid? UsuarioQueRecibioId,
     DateTime? FechaAsignacion,
     DateTime? FechaRecepcion,

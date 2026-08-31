@@ -23,6 +23,10 @@ GO
 USE SistemaEnviosDB;
 GO
 
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+GO
+
 CREATE TABLE dbo.Ubicaciones
 (
     UbicacionId INT IDENTITY(1,1) NOT NULL,
@@ -52,6 +56,58 @@ CREATE TABLE dbo.TiposEquipo
     CONSTRAINT PK_TiposEquipo PRIMARY KEY (TipoEquipoId),
     CONSTRAINT UQ_TiposEquipo_Nombre UNIQUE (Nombre)
 );
+GO
+
+CREATE TABLE dbo.TiposTransporte
+(
+    TipoTransporteId INT IDENTITY(1,1) NOT NULL,
+    Codigo NVARCHAR(50) NOT NULL,
+    Nombre NVARCHAR(100) NOT NULL,
+    Estrategia TINYINT NOT NULL,
+    Activo BIT NOT NULL CONSTRAINT DF_TiposTransporte_Activo DEFAULT (1),
+    FechaCreacion DATETIME2(7) NOT NULL CONSTRAINT DF_TiposTransporte_FechaCreacion DEFAULT (SYSUTCDATETIME()),
+    UsuarioCreacionId UNIQUEIDENTIFIER NULL,
+    FechaModificacion DATETIME2(7) NULL,
+    UsuarioModificacionId UNIQUEIDENTIFIER NULL,
+    RowVersion ROWVERSION NOT NULL,
+    CONSTRAINT PK_TiposTransporte PRIMARY KEY (TipoTransporteId),
+    CONSTRAINT UQ_TiposTransporte_Codigo UNIQUE (Codigo),
+    CONSTRAINT CK_TiposTransporte_Estrategia CHECK (Estrategia IN (1,2))
+);
+GO
+
+CREATE TABLE dbo.ChoferesInternos
+(
+    ChoferInternoId INT IDENTITY(1,1) NOT NULL,
+    NombreCompleto NVARCHAR(150) NOT NULL,
+    NumeroEmpleado NVARCHAR(30) NOT NULL,
+    Activo BIT NOT NULL CONSTRAINT DF_ChoferesInternos_Activo DEFAULT (1),
+    FechaCreacion DATETIME2(7) NOT NULL CONSTRAINT DF_ChoferesInternos_FechaCreacion DEFAULT (SYSUTCDATETIME()),
+    UsuarioCreacionId UNIQUEIDENTIFIER NULL,
+    FechaModificacion DATETIME2(7) NULL,
+    UsuarioModificacionId UNIQUEIDENTIFIER NULL,
+    RowVersion ROWVERSION NOT NULL,
+    CONSTRAINT PK_ChoferesInternos PRIMARY KEY (ChoferInternoId),
+    CONSTRAINT UQ_ChoferesInternos_NumeroEmpleado UNIQUE (NumeroEmpleado)
+);
+GO
+
+CREATE TABLE dbo.UsuariosReferencia
+(
+    UsuarioExternoId UNIQUEIDENTIFIER NOT NULL,
+    NombreCompleto NVARCHAR(150) NOT NULL,
+    NumeroEmpleado NVARCHAR(30) NULL,
+    Correo NVARCHAR(254) NULL,
+    EsTecnico BIT NOT NULL,
+    Activo BIT NOT NULL,
+    FechaUltimaSincronizacion DATETIME2(7) NOT NULL,
+    Origen NVARCHAR(30) NOT NULL CONSTRAINT DF_UsuariosReferencia_Origen DEFAULT(N'AUTHMANAGER'),
+    RowVersion ROWVERSION NOT NULL,
+    CONSTRAINT PK_UsuariosReferencia PRIMARY KEY(UsuarioExternoId)
+);
+GO
+CREATE UNIQUE INDEX UX_UsuariosReferencia_NumeroEmpleado ON dbo.UsuariosReferencia(NumeroEmpleado) WHERE NumeroEmpleado IS NOT NULL;
+CREATE INDEX IX_UsuariosReferencia_TecnicosActivos ON dbo.UsuariosReferencia(EsTecnico,Activo,NombreCompleto);
 GO
 
 CREATE TABLE dbo.EstadosEnvio
@@ -127,6 +183,8 @@ GO
 CREATE INDEX IX_Envios_EstadoEnvioId ON dbo.Envios(EstadoEnvioId);
 CREATE INDEX IX_Envios_UbicacionOrigenId ON dbo.Envios(UbicacionOrigenId);
 CREATE INDEX IX_Envios_UbicacionDestinoId ON dbo.Envios(UbicacionDestinoId);
+CREATE INDEX IX_Envios_FechaCreacion ON dbo.Envios(FechaCreacion DESC);
+CREATE INDEX IX_Envios_Estado_Fecha ON dbo.Envios(EstadoEnvioId, FechaCreacion DESC);
 GO
 
 CREATE TABLE dbo.ReservasEquipoEnvio
@@ -170,6 +228,7 @@ CREATE TABLE dbo.EnvioEquipos
     UsuarioCreacionId UNIQUEIDENTIFIER NULL,
     FechaModificacion DATETIME2(7) NULL,
     UsuarioModificacionId UNIQUEIDENTIFIER NULL,
+    RowVersion ROWVERSION NOT NULL,
     CONSTRAINT PK_EnvioEquipos PRIMARY KEY (EnvioEquipoId),
     CONSTRAINT UQ_EnvioEquipos_EnvioEquipo UNIQUE (EnvioId, EquipoId),
     CONSTRAINT FK_EnvioEquipos_Envios FOREIGN KEY (EnvioId) REFERENCES dbo.Envios(EnvioId) ON DELETE CASCADE,
@@ -178,37 +237,63 @@ CREATE TABLE dbo.EnvioEquipos
 GO
 
 CREATE INDEX IX_EnvioEquipos_EquipoId ON dbo.EnvioEquipos(EquipoId);
+CREATE UNIQUE INDEX UX_EnvioEquipos_NumeroTicket ON dbo.EnvioEquipos(NumeroTicket);
 GO
 
 CREATE TABLE dbo.Transportes
 (
     TransporteId INT IDENTITY(1,1) NOT NULL,
     EnvioId INT NOT NULL,
-    Tipo NVARCHAR(50) NOT NULL,
-    NombreChofer NVARCHAR(150) NULL,
-    Placa NVARCHAR(20) NULL,
-    FechaEntregaTransportacion DATETIME2(7) NULL,
+    TipoTransporteId INT NOT NULL,
     Observaciones NVARCHAR(2000) NULL,
-    EntregaConfirmada BIT NOT NULL CONSTRAINT DF_Transportes_EntregaConfirmada DEFAULT (0),
-    FechaConfirmacionEntrega DATETIME2(7) NULL,
-    UsuarioConfirmacionId UNIQUEIDENTIFIER NULL,
     FechaCreacion DATETIME2(7) NOT NULL CONSTRAINT DF_Transportes_FechaCreacion DEFAULT (SYSUTCDATETIME()),
     UsuarioCreacionId UNIQUEIDENTIFIER NULL,
     FechaModificacion DATETIME2(7) NULL,
     UsuarioModificacionId UNIQUEIDENTIFIER NULL,
+    RowVersion ROWVERSION NOT NULL,
     CONSTRAINT PK_Transportes PRIMARY KEY (TransporteId),
     CONSTRAINT UQ_Transportes_EnvioId UNIQUE (EnvioId),
     CONSTRAINT FK_Transportes_Envios FOREIGN KEY (EnvioId) REFERENCES dbo.Envios(EnvioId) ON DELETE CASCADE,
-    CONSTRAINT CK_Transporte_Confirmacion CHECK
-    (
-        (EntregaConfirmada = 0 AND FechaConfirmacionEntrega IS NULL AND UsuarioConfirmacionId IS NULL)
-        OR
-        (EntregaConfirmada = 1
-            AND FechaEntregaTransportacion IS NOT NULL
-            AND FechaConfirmacionEntrega IS NOT NULL
-            AND FechaConfirmacionEntrega >= FechaEntregaTransportacion
-            AND UsuarioConfirmacionId IS NOT NULL)
-    )
+    CONSTRAINT FK_Transportes_TiposTransporte FOREIGN KEY (TipoTransporteId) REFERENCES dbo.TiposTransporte(TipoTransporteId)
+);
+GO
+
+CREATE INDEX IX_Transportes_TipoTransporteId ON dbo.Transportes(TipoTransporteId);
+GO
+
+CREATE TABLE dbo.TransportesInternos
+(
+    TransporteId INT NOT NULL,
+    ChoferInternoId INT NOT NULL,
+    NombreChoferAlMomento NVARCHAR(150) NOT NULL,
+    NumeroEmpleadoAlMomento NVARCHAR(30) NOT NULL,
+    FechaEntregaTransportacion DATETIME2(7) NULL,
+    EntregaConfirmada BIT NOT NULL CONSTRAINT DF_TransportesInternos_Confirmada DEFAULT (0),
+    FechaConfirmacionEntrega DATETIME2(7) NULL,
+    UsuarioConfirmacionId UNIQUEIDENTIFIER NULL,
+    RowVersion ROWVERSION NOT NULL,
+    CONSTRAINT PK_TransportesInternos PRIMARY KEY (TransporteId),
+    CONSTRAINT FK_TransportesInternos_Transportes FOREIGN KEY (TransporteId) REFERENCES dbo.Transportes(TransporteId) ON DELETE CASCADE,
+    CONSTRAINT FK_TransportesInternos_Choferes FOREIGN KEY (ChoferInternoId) REFERENCES dbo.ChoferesInternos(ChoferInternoId),
+    CONSTRAINT CK_TransportesInternos_Confirmacion CHECK ((EntregaConfirmada=0 AND FechaConfirmacionEntrega IS NULL AND UsuarioConfirmacionId IS NULL) OR (EntregaConfirmada=1 AND FechaEntregaTransportacion IS NOT NULL AND FechaConfirmacionEntrega>=FechaEntregaTransportacion AND UsuarioConfirmacionId IS NOT NULL))
+);
+GO
+CREATE INDEX IX_TransportesInternos_ChoferInternoId ON dbo.TransportesInternos(ChoferInternoId);
+GO
+
+CREATE TABLE dbo.TransportesPrivados
+(
+    TransporteId INT NOT NULL,
+    NombreResponsable NVARCHAR(150) NOT NULL,
+    Parentesco NVARCHAR(50) NOT NULL,
+    CedulaResponsable VARCHAR(11) NOT NULL,
+    PlacaVehiculo NVARCHAR(20) NOT NULL,
+    FechaEntrega DATETIME2(7) NULL,
+    UsuarioQueEntregoId UNIQUEIDENTIFIER NULL,
+    RowVersion ROWVERSION NOT NULL,
+    CONSTRAINT PK_TransportesPrivados PRIMARY KEY (TransporteId),
+    CONSTRAINT FK_TransportesPrivados_Transportes FOREIGN KEY (TransporteId) REFERENCES dbo.Transportes(TransporteId) ON DELETE CASCADE,
+    CONSTRAINT CK_TransportesPrivados_Cedula CHECK (CedulaResponsable NOT LIKE '%[^0-9]%' AND LEN(CedulaResponsable)=11)
 );
 GO
 
@@ -216,7 +301,9 @@ CREATE TABLE dbo.Recepciones
 (
     RecepcionId INT IDENTITY(1,1) NOT NULL,
     EnvioId INT NOT NULL,
-    TecnicoAsignadoId INT NULL,
+    TecnicoAsignadoUsuarioId UNIQUEIDENTIFIER NULL,
+    TecnicoAsignadoNombre NVARCHAR(150) NULL,
+    TecnicoAsignadoNumeroEmpleado NVARCHAR(30) NULL,
     UsuarioQueRecibioId UNIQUEIDENTIFIER NULL,
     FechaAsignacion DATETIME2(7) NULL,
     FechaRecepcion DATETIME2(7) NULL,
@@ -227,9 +314,11 @@ CREATE TABLE dbo.Recepciones
     UsuarioCreacionId UNIQUEIDENTIFIER NULL,
     FechaModificacion DATETIME2(7) NULL,
     UsuarioModificacionId UNIQUEIDENTIFIER NULL,
+    RowVersion ROWVERSION NOT NULL,
     CONSTRAINT PK_Recepciones PRIMARY KEY (RecepcionId),
     CONSTRAINT UQ_Recepciones_EnvioId UNIQUE (EnvioId),
     CONSTRAINT FK_Recepciones_Envios FOREIGN KEY (EnvioId) REFERENCES dbo.Envios(EnvioId) ON DELETE CASCADE,
+    CONSTRAINT FK_Recepciones_UsuariosReferencia FOREIGN KEY (TecnicoAsignadoUsuarioId) REFERENCES dbo.UsuariosReferencia(UsuarioExternoId),
     CONSTRAINT CK_Recepciones_Estado CHECK (EstadoRecepcion BETWEEN 1 AND 5)
 );
 GO
@@ -246,6 +335,7 @@ CREATE TABLE dbo.RecepcionEquipos
     UsuarioCreacionId UNIQUEIDENTIFIER NULL,
     FechaModificacion DATETIME2(7) NULL,
     UsuarioModificacionId UNIQUEIDENTIFIER NULL,
+    RowVersion ROWVERSION NOT NULL,
     CONSTRAINT PK_RecepcionEquipos PRIMARY KEY (RecepcionEquipoId),
     CONSTRAINT UQ_RecepcionEquipos_EnvioEquipoId UNIQUE (EnvioEquipoId),
     CONSTRAINT FK_RecepcionEquipos_Recepciones FOREIGN KEY (RecepcionId) REFERENCES dbo.Recepciones(RecepcionId) ON DELETE CASCADE,
@@ -310,10 +400,30 @@ CREATE INDEX IX_Historiales_EstadoEnvioId ON dbo.HistorialesEstadoEnvio(EstadoEn
 CREATE INDEX IX_Historiales_UbicacionId ON dbo.HistorialesEstadoEnvio(UbicacionId);
 GO
 
+CREATE TABLE dbo.Notificaciones
+(
+    NotificacionId BIGINT IDENTITY(1,1) NOT NULL,
+    EnvioId INT NOT NULL,
+    Tipo NVARCHAR(50) NOT NULL,
+    Titulo NVARCHAR(200) NOT NULL,
+    Mensaje NVARCHAR(1000) NOT NULL,
+    DestinatarioRol NVARCHAR(50) NOT NULL,
+    DestinatarioUsuarioId UNIQUEIDENTIFIER NULL,
+    FechaCreacion DATETIME2(7) NOT NULL CONSTRAINT DF_Notificaciones_Fecha DEFAULT(SYSUTCDATETIME()),
+    FechaLeida DATETIME2(7) NULL,
+    UsuarioLecturaId UNIQUEIDENTIFIER NULL,
+    CONSTRAINT PK_Notificaciones PRIMARY KEY(NotificacionId),
+    CONSTRAINT FK_Notificaciones_Envios FOREIGN KEY(EnvioId) REFERENCES dbo.Envios(EnvioId) ON DELETE CASCADE
+);
+GO
+CREATE INDEX IX_Notificaciones_Rol_Leida_Fecha ON dbo.Notificaciones(DestinatarioRol,FechaLeida,FechaCreacion DESC);
+GO
+
 INSERT INTO dbo.EstadosEnvio (Codigo, Nombre, Descripcion, EsFinal, Activo)
 VALUES
     (N'EN_FILIAL', N'En filial', N'El envío hacia Tecnología se prepara en la filial.', 0, 1),
     (N'ENTREGADO_TRANSPORTACION', N'Entregado a transportación', N'La filial entregó el envío a transportación.', 0, 1),
+    (N'DESPACHADO_TRANSPORTE_PRIVADO', N'Entregado a transporte privado', N'La filial entregó el envío a un responsable privado.', 0, 1),
     (N'PENDIENTE_CONFIRMACION_TRANSPORTE', N'Pendiente de confirmación', N'Transportación debe confirmar la custodia.', 0, 1),
     (N'CONFIRMADO_TRANSPORTACION', N'Confirmado por transportación', N'Transportación confirmó la recepción del envío.', 0, 1),
     (N'EN_TRANSITO', N'En tránsito', N'El envío se encuentra en traslado.', 0, 1),
@@ -336,12 +446,15 @@ FROM
     VALUES
         (N'EN_FILIAL', N'ENTREGADO_TRANSPORTACION'),
         (N'ENTREGADO_TRANSPORTACION', N'PENDIENTE_CONFIRMACION_TRANSPORTE'),
+        (N'EN_FILIAL', N'DESPACHADO_TRANSPORTE_PRIVADO'),
+        (N'DESPACHADO_TRANSPORTE_PRIVADO', N'EN_TRANSITO'),
         (N'PENDIENTE_CONFIRMACION_TRANSPORTE', N'CONFIRMADO_TRANSPORTACION'),
         (N'CONFIRMADO_TRANSPORTACION', N'EN_TRANSITO'),
         (N'EN_TRANSITO', N'RECIBIDO_TRANSPORTACION'),
         (N'EN_TRANSITO', N'INCIDENCIA_TRANSPORTACION'),
         (N'INCIDENCIA_TRANSPORTACION', N'EN_TRANSITO'),
         (N'RECIBIDO_TRANSPORTACION', N'ESPERA_TECNOLOGIA'),
+        (N'EN_TRANSITO', N'ESPERA_TECNOLOGIA'),
         (N'ESPERA_TECNOLOGIA', N'EN_REVISION'),
         (N'EN_REVISION', N'RECIBIDO_TECNOLOGIA'),
         (N'PREPARACION_TECNOLOGIA', N'DESPACHADO_TECNOLOGIA'),
@@ -352,4 +465,19 @@ FROM
 ) AS flujo(CodigoOrigen, CodigoDestino)
 INNER JOIN dbo.EstadosEnvio origen ON origen.Codigo = flujo.CodigoOrigen
 INNER JOIN dbo.EstadosEnvio destino ON destino.Codigo = flujo.CodigoDestino;
+GO
+
+INSERT INTO dbo.TiposTransporte (Codigo, Nombre, Estrategia, Activo)
+VALUES (N'INTERNO', N'Interno', 1, 1), (N'PRIVADO', N'Privado', 2, 1);
+GO
+
+-- Catálogos mínimos para que una instalación nueva pueda operar y probar el flujo.
+INSERT INTO dbo.Ubicaciones (Nombre, CodigoCentro, Tipo, Activo)
+VALUES
+    (N'Centro de Tecnología', N'TECNOLOGIA', 2, 1),
+    (N'Filial Principal', N'FILIAL-PRINCIPAL', 1, 1);
+GO
+
+INSERT INTO dbo.TiposEquipo (Nombre, Activo)
+VALUES (N'Laptop', 1), (N'Computadora de escritorio', 1), (N'Monitor', 1), (N'Impresora', 1), (N'Otro', 1);
 GO

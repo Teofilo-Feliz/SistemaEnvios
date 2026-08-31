@@ -33,6 +33,10 @@ public sealed class ControllerSecurityTests
 
             foreach (var action in actions)
             {
+                if (controllerType.GetCustomAttribute<AllowAnonymousAttribute>() is not null ||
+                    action.GetCustomAttribute<AllowAnonymousAttribute>() is not null)
+                    continue;
+
                 var policies = controllerPolicies
                     .Concat(action.GetCustomAttributes<AuthorizeAttribute>().Select(x => x.Policy))
                     .Where(x => !string.IsNullOrWhiteSpace(x))

@@ -1,0 +1,5 @@
+<script setup>
+import { Pencil, Trash2 } from 'lucide-vue-next'
+defineProps({ equipments: { type: Array, default: () => [] } }); const emit = defineEmits(['remove', 'edit'])
+</script>
+<template><div v-if="equipments.length" class="table-responsive equipment-preview"><table class="data-table shipment-equipment-table"><thead><tr><th>Tipo</th><th>Marca</th><th>Modelo</th><th>Serial</th><th>Código activo</th><th>Ticket</th><th>Acciones</th></tr></thead><tbody><tr v-for="equipment in equipments" :key="equipment.id"><td>{{ equipment.typeName }}</td><td>{{ equipment.brand }}</td><td>{{ equipment.model }}</td><td>{{ equipment.serial }}</td><td>{{ equipment.assetCode || '—' }}</td><td>{{ equipment.ticket }}</td><td><button class="table-action" type="button" title="Editar equipo" @click="emit('edit', equipment)"><Pencil :size="14" /></button><button class="table-action" type="button" title="Eliminar equipo" @click="emit('remove', equipment.id)"><Trash2 :size="14" /></button></td></tr></tbody></table></div><div v-else class="equipment-empty">Aún no agregas equipos. Completa los datos y pulsa “Agregar”.</div></template>

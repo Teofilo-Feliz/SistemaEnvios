@@ -112,10 +112,29 @@ public sealed class EnvioService(
                 x.EstadoEnvioId,
                 x.Direccion,
                 x.UsuarioSolicitanteId,
-                x.Observaciones))
+                x.Observaciones,
+                x.Transporte == null ? null : x.Transporte.TipoTransporteId,
+                x.Transporte == null ? null : x.Transporte.TipoTransporte.Estrategia,
+                x.Transporte == null ? null : x.Transporte.TipoTransporte.Nombre))
             .ToListAsync(cancellationToken);
 
         return Result<IReadOnlyCollection<EnvioResponse>>.Success(resultado);
+    }
+
+    public async Task<Result<PaginaEnviosResponse>> ConsultarAsync(ConsultarEnviosRequest request, CancellationToken cancellationToken = default)
+    {
+        var page = Math.Max(1, request.Page); var pageSize = Math.Clamp(request.PageSize, 1, 100);
+        var query = db.Envios.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(request.Search)) { var term = request.Search.Trim(); query = query.Where(x => x.NumeroEnvio.Contains(term) || (x.Observaciones != null && x.Observaciones.Contains(term))); }
+        if (request.EstadoEnvioId.HasValue) query = query.Where(x => x.EstadoEnvioId == request.EstadoEnvioId);
+        if (request.TipoTransporteId.HasValue) query = query.Where(x => x.Transporte != null && x.Transporte.TipoTransporteId == request.TipoTransporteId);
+        if (request.UbicacionOrigenId.HasValue) query = query.Where(x => x.UbicacionOrigenId == request.UbicacionOrigenId);
+        if (request.UbicacionDestinoId.HasValue) query = query.Where(x => x.UbicacionDestinoId == request.UbicacionDestinoId);
+        if (request.Direccion is 1 or 2) query = query.Where(x => (int)x.Direccion == request.Direccion);
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query.OrderByDescending(x => x.FechaCreacion).ThenByDescending(x => x.EnvioId).Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(x => new EnvioResponse(x.EnvioId,x.NumeroEnvio,x.UbicacionOrigenId,x.UbicacionDestinoId,x.EstadoEnvioId,x.Direccion,x.UsuarioSolicitanteId,x.Observaciones,x.Transporte == null ? null : x.Transporte.TipoTransporteId,x.Transporte == null ? null : x.Transporte.TipoTransporte.Estrategia,x.Transporte == null ? null : x.Transporte.TipoTransporte.Nombre)).ToListAsync(cancellationToken);
+        return Result<PaginaEnviosResponse>.Success(new(items,page,pageSize,total,(int)Math.Ceiling(total/(double)pageSize)));
     }
 
     public async Task<Result> ActualizarAsync(
@@ -225,11 +244,14 @@ public sealed class EnvioService(
         envio.EstadoEnvioId,
         envio.Direccion,
         envio.UsuarioSolicitanteId,
-        envio.Observaciones);
+        envio.Observaciones,
+        envio.Transporte?.TipoTransporteId,
+        envio.Transporte?.TipoTransporte.Estrategia,
+        envio.Transporte?.TipoTransporte.Nombre);
 
     private static string? NormalizarOpcional(string? valor) =>
         string.IsNullOrWhiteSpace(valor) ? null : valor.Trim();
 
     private static bool EsEstadoEditable(string codigo) =>
-        codigo is EstadoEnvioCodigos.EnFilial or EstadoEnvioCodigos.EnPreparacionTecnologia;
+        codigo == EstadoEnvioCodigos.EnFilial;
 }

@@ -14,6 +14,7 @@ using SistemaEnvios.Infrastructure.Services.Equipos;
 using SistemaEnvios.Infrastructure.Services.TiposEquipos;
 using SistemaEnvios.Infrastructure.Services.Ubicaciones;
 using SistemaEnvios.Infrastructure.Services.Dashboard;
+using SistemaEnvios.Infrastructure.Services.Notificaciones;
 using FluentValidation;
 using SistemaEnvios.Application.Validators.Envios;
 using SistemaEnvios.Application.Validators.Transportes;
@@ -36,13 +37,14 @@ public static class DependencyInjection
                 "Debe configurar la cadena de conexión 'ConnectionStrings:SistemaEnvios'.");
         }
 
-        services.AddDbContext<SistemaEnviosDbContext>(options => options.UseSqlServer(connectionString));
+        services.AddDbContextPool<SistemaEnviosDbContext>(options => options.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure(3)));
         services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
         services.AddScoped<IEnvioEquipoRepository, EnvioEquipoRepository>();
         services.AddScoped<IEnvioService, EnvioService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IEnvioEquipoService, EnvioEquipoService>();
         services.AddScoped<ITransporteService, TransporteService>();
+        services.AddScoped<ICatalogoTransporteService, CatalogoTransporteService>();
         services.AddScoped<IRecepcionService, RecepcionService>();
         services.AddScoped<IIncidenciaService, IncidenciaService>();
         services.AddScoped<IEstadoEnvioService, EstadoEnvioService>();
@@ -52,6 +54,7 @@ public static class DependencyInjection
         services.AddScoped<ITipoEquipoService, TipoEquipoService>();
         services.AddScoped<IUbicacionService, UbicacionService>();
         services.AddScoped<IDashboardService, DashboardService>();
+        services.AddScoped<INotificacionService, NotificacionService>();
         services.AddValidatorsFromAssemblyContaining<CrearEnvioRequestValidator>();
         return services;
     }

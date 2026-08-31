@@ -4,6 +4,7 @@ public static class EstadoEnvioCodigos
 {
     public const string EnFilial = "EN_FILIAL";
     public const string EntregadoATransportacion = "ENTREGADO_TRANSPORTACION";
+    public const string DespachadoTransportePrivado = "DESPACHADO_TRANSPORTE_PRIVADO";
     public const string EnProcesoConfirmacionTransportacion = "PENDIENTE_CONFIRMACION_TRANSPORTE";
     public const string ConfirmadoPorTransportacion = "CONFIRMADO_TRANSPORTACION";
     public const string EnTransito = "EN_TRANSITO";

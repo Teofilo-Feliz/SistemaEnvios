@@ -10,6 +10,7 @@ public class RecepcionEquipoConfiguration : IEntityTypeConfiguration<RecepcionEq
     {
         b.ToTable("RecepcionEquipos");
         b.HasKey(x => x.RecepcionEquipoId);
+        b.Property(x => x.RowVersion).IsRowVersion();
         b.HasIndex(x => x.EnvioEquipoId).IsUnique();
         b.Property(x => x.Observaciones).HasMaxLength(2000);
         b.HasOne(x => x.Recepcion).WithMany(x => x.Equipos).HasForeignKey(x => x.RecepcionId).OnDelete(DeleteBehavior.Cascade);

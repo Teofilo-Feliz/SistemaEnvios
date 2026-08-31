@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SistemaEnvios.Api.Extensions;
+using SistemaEnvios.Api.Contracts.Envios;
 using SistemaEnvios.Application.DTOs.Envios;
 using SistemaEnvios.Application.DTOs.Estados;
 using SistemaEnvios.Application.Interfaces.Services;
@@ -19,6 +20,11 @@ public sealed class EnviosController(
     [Authorize(Policy = PermissionNames.EnviosConsultar)]
     public async Task<IActionResult> Listar(CancellationToken cancellationToken) =>
         (await envioService.ListarAsync(cancellationToken)).ToActionResult(this);
+
+    [HttpGet("paginado")]
+    [Authorize(Policy = PermissionNames.EnviosConsultar)]
+    public async Task<IActionResult> Consultar([FromQuery] ConsultarEnviosRequest request, CancellationToken cancellationToken) =>
+        (await envioService.ConsultarAsync(request, cancellationToken)).ToActionResult(this);
 
     [HttpGet("{envioId:int}")]
     [Authorize(Policy = PermissionNames.EnviosConsultar)]
@@ -67,6 +73,29 @@ public sealed class EnviosController(
         };
         return (await estadoService.CambiarAsync(command, cancellationToken)).ToActionResult(this);
     }
+
+    [HttpPost("{envioId:int}/entrega-transportacion")]
+    [Authorize(Policy = PermissionNames.EnviosDespachar)]
+    public async Task<IActionResult> EntregarATransportacion(
+        int envioId,
+        [FromBody] EntregaTransportacionRequest? request,
+        CancellationToken cancellationToken) =>
+        (await estadoService.EntregarATransportacionAsync(envioId, request?.Observaciones, cancellationToken)).ToActionResult(this);
+
+    [HttpPost("{envioId:int}/entrega-privada")]
+    [Authorize(Policy = PermissionNames.EnviosDespachar)]
+    public async Task<IActionResult> EntregarPrivado(int envioId, [FromBody] EntregaTransportacionRequest? request, CancellationToken cancellationToken) =>
+        (await estadoService.EntregarTransportePrivadoAsync(envioId, request?.Observaciones, cancellationToken)).ToActionResult(this);
+
+    [HttpPost("{envioId:int}/llegada-tecnologia")]
+    [Authorize(Policy = PermissionNames.RecepcionesGestionar)]
+    public async Task<IActionResult> RegistrarLlegadaTecnologia(int envioId, [FromBody] EntregaTransportacionRequest? request, CancellationToken cancellationToken) =>
+        (await estadoService.RegistrarLlegadaTecnologiaAsync(envioId, request?.Observaciones, cancellationToken)).ToActionResult(this);
+
+    [HttpPost("{envioId:int}/confirmar-llegada-transportacion")]
+    [Authorize(Policy = PermissionNames.TransportesConfirmar)]
+    public async Task<IActionResult> ConfirmarLlegadaTransportacion(int envioId, [FromBody] EntregaTransportacionRequest? request, CancellationToken cancellationToken) =>
+        (await estadoService.ConfirmarLlegadaTransportacionAsync(envioId, request?.Observaciones, cancellationToken)).ToActionResult(this);
 
     [HttpGet("{envioId:int}/historial")]
     [Authorize(Policy = PermissionNames.EnviosConsultar)]

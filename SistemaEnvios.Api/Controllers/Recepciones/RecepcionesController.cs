@@ -38,7 +38,7 @@ public sealed class RecepcionesController(IRecepcionService service) : Controlle
         var command = new AsignarTecnicoRequest
         {
             RecepcionId = recepcionId,
-            TecnicoAsignadoId = request.TecnicoAsignadoId
+            TecnicoAsignadoUsuarioId = request.TecnicoAsignadoUsuarioId
         };
         return (await service.AsignarTecnicoAsync(command, cancellationToken)).ToActionResult(this);
     }

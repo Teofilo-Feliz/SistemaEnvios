@@ -16,8 +16,14 @@ public class SistemaEnviosDbContext(DbContextOptions<SistemaEnviosDbContext> opt
     public DbSet<RecepcionEquipo> RecepcionEquipos => Set<RecepcionEquipo>();
     public DbSet<TipoEquipo> TiposEquipo => Set<TipoEquipo>();
     public DbSet<Transporte> Transportes => Set<Transporte>();
+    public DbSet<TipoTransporte> TiposTransporte => Set<TipoTransporte>();
+    public DbSet<ChoferInterno> ChoferesInternos => Set<ChoferInterno>();
+    public DbSet<TransporteInterno> TransportesInternos => Set<TransporteInterno>();
+    public DbSet<TransportePrivado> TransportesPrivados => Set<TransportePrivado>();
     public DbSet<Ubicacion> Ubicaciones => Set<Ubicacion>();
     public DbSet<ReservaEquipoEnvio> ReservasEquipoEnvio => Set<ReservaEquipoEnvio>();
+    public DbSet<UsuarioReferencia> UsuariosReferencia => Set<UsuarioReferencia>();
+    public DbSet<Notificacion> Notificaciones => Set<Notificacion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

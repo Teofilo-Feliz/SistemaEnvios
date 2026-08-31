@@ -70,7 +70,12 @@ public sealed class EstadoEnvioServiceTests
             UsuarioSolicitanteId = UsuarioId,
             Observaciones = "Prueba"
         });
-        var transporte = new Transporte { EnvioId = envio.EnvioId, Tipo = "Interno" };
+        var tipo = new TipoTransporte { Codigo = "INTERNO", Nombre = "Interno", Estrategia = EstrategiaTransporteEnum.TransportacionInstitucional, Activo = true };
+        var chofer = new ChoferInterno { NombreCompleto = "Chofer prueba", NumeroEmpleado = "EMP-1", Activo = true };
+        db.AddRange(tipo, chofer);
+        await db.SaveChangesAsync();
+        var interno = new TransporteInterno { ChoferInternoId = chofer.ChoferInternoId, NombreChoferAlMomento = chofer.NombreCompleto, NumeroEmpleadoAlMomento = chofer.NumeroEmpleado };
+        var transporte = new Transporte { EnvioId = envio.EnvioId, TipoTransporteId = tipo.TipoTransporteId, Interno = interno };
         db.Transportes.Add(transporte);
         await db.SaveChangesAsync();
 
@@ -81,8 +86,40 @@ public sealed class EstadoEnvioServiceTests
         });
 
         Assert.True(resultado.IsSuccess);
-        Assert.NotNull(transporte.FechaEntregaTransportacion);
+        Assert.NotNull(interno.FechaEntregaTransportacion);
         Assert.Equal(destino.EstadoEnvioId, envio.EstadoEnvioId);
+    }
+
+    [Fact]
+    public async Task TransportePrivado_OmiteConfirmacionYEntraDirectamenteATecnologia()
+    {
+        await using var db = CrearContexto();
+        var filial = CrearEstado(EstadoEnvioCodigos.EnFilial);
+        var privado = CrearEstado(EstadoEnvioCodigos.DespachadoTransportePrivado);
+        var transito = CrearEstado(EstadoEnvioCodigos.EnTransito);
+        var espera = CrearEstado(EstadoEnvioCodigos.EnEsperaDeTecnologia);
+        var ubicaciones = CrearUbicaciones();
+        db.AddRange(filial, privado, transito, espera, ubicaciones.Origen, ubicaciones.Destino);
+        await db.SaveChangesAsync();
+        var envio = CrearEnvio(filial.EstadoEnvioId, ubicaciones.Origen.UbicacionId, ubicaciones.Destino.UbicacionId);
+        db.Envios.Add(envio);
+        db.EnvioEquipos.Add(new EnvioEquipo { Envio = envio, EquipoId = 101, NumeroTicket = "T-101", UsuarioSolicitanteId = UsuarioId, Observaciones = "Prueba" });
+        var tipo = new TipoTransporte { Codigo = "PRIVADO", Nombre = "Privado", Estrategia = EstrategiaTransporteEnum.EntregaDirectaTecnologia, Activo = true };
+        db.Add(tipo); await db.SaveChangesAsync();
+        db.Transportes.Add(new Transporte { EnvioId = envio.EnvioId, TipoTransporteId = tipo.TipoTransporteId, Privado = new TransportePrivado { NombreResponsable = "Juan Pérez", Parentesco = "Padre", CedulaResponsable = "00112345678", PlacaVehiculo = "A123456" } });
+        db.TransicionesEstadoEnvio.AddRange(
+            new TransicionEstadoEnvio { EstadoOrigenId = filial.EstadoEnvioId, EstadoDestinoId = privado.EstadoEnvioId, Activo = true },
+            new TransicionEstadoEnvio { EstadoOrigenId = privado.EstadoEnvioId, EstadoDestinoId = transito.EstadoEnvioId, Activo = true },
+            new TransicionEstadoEnvio { EstadoOrigenId = transito.EstadoEnvioId, EstadoDestinoId = espera.EstadoEnvioId, Activo = true });
+        await db.SaveChangesAsync();
+        var servicio = CrearServicio(db);
+
+        var entrega = await servicio.EntregarTransportePrivadoAsync(envio.EnvioId);
+        var llegada = await servicio.RegistrarLlegadaTecnologiaAsync(envio.EnvioId);
+
+        Assert.True(entrega.IsSuccess); Assert.True(llegada.IsSuccess);
+        Assert.Equal(espera.EstadoEnvioId, envio.EstadoEnvioId);
+        Assert.Equal(3, await db.HistorialEstadosEnvio.CountAsync(x => x.EnvioId == envio.EnvioId));
     }
 
     private static EstadoEnvio CrearEstado(string codigo) => new()

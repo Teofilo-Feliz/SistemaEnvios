@@ -42,7 +42,7 @@ public sealed class EnvioEquipoServiceTests
         {
             EnvioId = segundoEnvio.EnvioId,
             EquipoId = equipo.EquipoId,
-            NumeroTicket = "T-2",
+            NumeroTicket = "1002",
             Observaciones = "Otra falla"
         });
 
@@ -78,7 +78,7 @@ public sealed class EnvioEquipoServiceTests
         {
             EnvioId = envio.EnvioId,
             EquipoId = equipo.EquipoId,
-            NumeroTicket = "T-3",
+            NumeroTicket = "1003",
             Observaciones = "Prueba"
         });
 

@@ -11,6 +11,11 @@ namespace SistemaEnvios.Api.Controllers.Envios;
 [Route("api/envio-equipos")]
 public sealed class EnvioEquiposController(IEnvioEquipoService service) : ControllerBase
 {
+    [HttpGet("ticket-disponible/{numeroTicket}")]
+    [Authorize(Policy = PermissionNames.EnviosConsultar)]
+    public async Task<IActionResult> TicketDisponible(string numeroTicket, [FromQuery] int? excluirEnvioEquipoId, CancellationToken cancellationToken) =>
+        (await service.TicketDisponibleAsync(numeroTicket, excluirEnvioEquipoId, cancellationToken)).ToActionResult(this);
+
     [HttpGet("por-envio/{envioId:int}")]
     [Authorize(Policy = PermissionNames.EnviosConsultar)]
     public async Task<IActionResult> ListarPorEnvio(int envioId, CancellationToken cancellationToken) =>

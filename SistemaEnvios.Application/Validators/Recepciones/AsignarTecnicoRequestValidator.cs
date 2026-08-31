@@ -8,6 +8,6 @@ public sealed class AsignarTecnicoRequestValidator : AbstractValidator<AsignarTe
     public AsignarTecnicoRequestValidator()
     {
         RuleFor(x => x.RecepcionId).GreaterThan(0);
-        RuleFor(x => x.TecnicoAsignadoId).GreaterThan(0);
+        RuleFor(x => x.TecnicoAsignadoUsuarioId).NotEqual(Guid.Empty);
     }
 }

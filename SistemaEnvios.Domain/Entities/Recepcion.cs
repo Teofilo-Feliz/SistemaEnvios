@@ -10,7 +10,9 @@ namespace SistemaEnvios.Domain.Entities
     {
         public int RecepcionId { get; set; }
         public int EnvioId { get; set; }
-        public int? TecnicoAsignadoId { get; set; }
+        public Guid? TecnicoAsignadoUsuarioId { get; set; }
+        public string? TecnicoAsignadoNombre { get; set; }
+        public string? TecnicoAsignadoNumeroEmpleado { get; set; }
         public Guid? UsuarioQueRecibioId { get; set; }
         public DateTime? FechaAsignacion { get; set; }
         public DateTime? FechaRecepcion { get; set; }
@@ -20,6 +22,8 @@ namespace SistemaEnvios.Domain.Entities
 
         public Envio Envio { get; set; } = null!;
         public ICollection<RecepcionEquipo> Equipos { get; set; } = [];
+        public UsuarioReferencia? TecnicoAsignado { get; set; }
+        public byte[] RowVersion { get; set; } = [];
 
 
     }

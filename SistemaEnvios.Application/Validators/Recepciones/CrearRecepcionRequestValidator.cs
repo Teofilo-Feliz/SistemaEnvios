@@ -7,7 +7,7 @@ public sealed class CrearRecepcionRequestValidator : AbstractValidator<CrearRece
     public CrearRecepcionRequestValidator()
     {
         RuleFor(x => x.EnvioId).GreaterThan(0);
-        RuleFor(x => x.TecnicoAsignadoId).GreaterThan(0).When(x => x.TecnicoAsignadoId.HasValue);
+        RuleFor(x => x.TecnicoAsignadoUsuarioId).NotEqual(Guid.Empty).When(x => x.TecnicoAsignadoUsuarioId.HasValue);
         RuleFor(x => x.Observaciones).MaximumLength(2000);
     }
 }

@@ -1,0 +1,2 @@
+<script setup>import { Check, Clock3 } from 'lucide-vue-next'; defineProps({ events:Array })</script>
+<template><ol class="timeline"><li v-for="event in events" :key="event.label" :class="{completed:event.date,current:event.current}"><span class="timeline-marker"><Check v-if="event.date" :size="13"/><Clock3 v-else :size="13"/></span><div><strong>{{event.label}}</strong><time>{{event.date||'Pendiente'}}</time><small v-if="event.actor">{{event.actor}}</small></div></li></ol></template>

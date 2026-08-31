@@ -10,4 +10,7 @@ int UbicacionDestinoId,
 int EstadoEnvioId,
 DireccionEnvioEnum Direccion,
 Guid UsuarioSolicitanteId,
-string? Observaciones);
+string? Observaciones,
+int? TipoTransporteId,
+EstrategiaTransporteEnum? EstrategiaTransporte,
+string? NombreTipoTransporte);

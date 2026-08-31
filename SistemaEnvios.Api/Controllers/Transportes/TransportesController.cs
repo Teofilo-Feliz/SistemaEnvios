@@ -38,9 +38,12 @@ public sealed class TransportesController(ITransporteService service) : Controll
         var command = new ActualizarTransporteRequest
         {
             TransporteId = transporteId,
-            Tipo = request.Tipo,
-            NombreChofer = request.NombreChofer,
-            Placa = request.Placa,
+            TipoTransporteId = request.TipoTransporteId,
+            ChoferInternoId = request.ChoferInternoId,
+            NombreResponsable = request.NombreResponsable,
+            Parentesco = request.Parentesco,
+            CedulaResponsable = request.CedulaResponsable,
+            PlacaVehiculo = request.PlacaVehiculo,
             Observaciones = request.Observaciones
         };
         return (await service.ActualizarAsync(command, cancellationToken)).ToActionResult(this);
