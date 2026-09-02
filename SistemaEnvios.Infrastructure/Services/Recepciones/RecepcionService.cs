@@ -18,12 +18,16 @@ public sealed class RecepcionService(
     IValidator<CrearRecepcionRequest> crearValidator,
     IValidator<VerificarEquipoRequest> verificarValidator,
     IValidator<AsignarTecnicoRequest> asignarValidator,
-    IUserContext userContext) : IRecepcionService
+    IUserContext userContext,
+    IAlcanceEnvios alcance) : IRecepcionService
 {
     public async Task<Result<RecepcionResponse>> ObtenerPorEnvioAsync(
         int envioId,
         CancellationToken cancellationToken = default)
     {
+        var enAlcance = await alcance.VerificarAsync(envioId, cancellationToken);
+        if (enAlcance.IsFailure) return Result<RecepcionResponse>.Failure(enAlcance.Error!, enAlcance.ErrorType);
+
         var recepcion = await db.Recepciones
             .AsNoTracking()
             .Where(x => x.EnvioId == envioId)
@@ -54,6 +58,9 @@ public sealed class RecepcionService(
 
         if (envio is null)
             return Result<int>.Failure("El envío no existe.", ErrorType.NotFound);
+
+        var enAlcanceEnvio = await alcance.VerificarAsync(envio.EnvioId, cancellationToken);
+        if (enAlcanceEnvio.IsFailure) return Result<int>.Failure(enAlcanceEnvio.Error!, enAlcanceEnvio.ErrorType);
 
         if (!PermiteCrearRecepcion(envio.Direccion, envio.EstadoEnvio.Codigo))
             return Result<int>.Failure("El estado actual del envío no permite iniciar la recepción.", ErrorType.Conflict);
@@ -108,6 +115,9 @@ public sealed class RecepcionService(
         if (recepcion is null)
             return Result.Failure("La recepción no existe.", ErrorType.NotFound);
 
+        var enAlcance = await alcance.VerificarAsync(recepcion.EnvioId, cancellationToken);
+        if (enAlcance.IsFailure) return enAlcance;
+
         if (recepcion.EstadoRecepcion is EstadoRecepcionEnum.Completada or EstadoRecepcionEnum.CompletadaConIncidencia)
             return Result.Failure("La recepción ya fue completada.", ErrorType.Conflict);
 
@@ -156,6 +166,9 @@ public sealed class RecepcionService(
         var recepcion = await db.Recepciones.FindAsync([request.RecepcionId], cancellationToken);
         if (recepcion is null)
             return Result.Failure("La recepción no existe.", ErrorType.NotFound);
+
+        var enAlcance = await alcance.VerificarAsync(recepcion.EnvioId, cancellationToken);
+        if (enAlcance.IsFailure) return enAlcance;
         if (recepcion.EstadoRecepcion is EstadoRecepcionEnum.EnProceso or
             EstadoRecepcionEnum.Completada or
             EstadoRecepcionEnum.CompletadaConIncidencia)
@@ -189,6 +202,9 @@ public sealed class RecepcionService(
 
         if (recepcion is null)
             return Result.Failure("La recepción no existe.", ErrorType.NotFound);
+
+        var enAlcance = await alcance.VerificarAsync(recepcion.EnvioId, cancellationToken);
+        if (enAlcance.IsFailure) return enAlcance;
 
         if (recepcion.EstadoRecepcion is EstadoRecepcionEnum.Completada or EstadoRecepcionEnum.CompletadaConIncidencia)
             return Result.Failure("La recepción ya fue completada.", ErrorType.Conflict);
@@ -286,8 +302,12 @@ public sealed class RecepcionService(
     private static bool PermiteCrearRecepcion(DireccionEnvioEnum direccion, string codigoEstado) =>
         direccion switch
         {
+            // Interno: la recepción arranca en RECIBIDO_TRANSPORTACION. Privado: conserva su
+            // ruta por ESPERA_TECNOLOGIA y EN_REVISION, que no cambió.
             DireccionEnvioEnum.HaciaTecnologia =>
-                codigoEstado is EstadoEnvioCodigos.EnEsperaDeTecnologia or EstadoEnvioCodigos.EnProcesoDeRevision,
+                codigoEstado is EstadoEnvioCodigos.RecibidoPorTransportacion
+                    or EstadoEnvioCodigos.EnEsperaDeTecnologia
+                    or EstadoEnvioCodigos.EnProcesoDeRevision,
             DireccionEnvioEnum.HaciaFilial =>
                 codigoEstado is EstadoEnvioCodigos.PendienteRecepcionFilial or EstadoEnvioCodigos.RecibidoEnFilial,
             _ => false
@@ -296,8 +316,10 @@ public sealed class RecepcionService(
     private static bool PermiteVerificar(DireccionEnvioEnum direccion, string codigoEstado) =>
         direccion switch
         {
-            DireccionEnvioEnum.HaciaTecnologia => codigoEstado == EstadoEnvioCodigos.EnProcesoDeRevision,
-            DireccionEnvioEnum.HaciaFilial => codigoEstado == EstadoEnvioCodigos.RecibidoEnFilial,
+            DireccionEnvioEnum.HaciaTecnologia =>
+                codigoEstado is EstadoEnvioCodigos.RecibidoPorTransportacion
+                    or EstadoEnvioCodigos.EnProcesoDeRevision,
+            DireccionEnvioEnum.HaciaFilial => codigoEstado is EstadoEnvioCodigos.PendienteRecepcionFilial or EstadoEnvioCodigos.RecibidoEnFilial,
             _ => false
         };
 

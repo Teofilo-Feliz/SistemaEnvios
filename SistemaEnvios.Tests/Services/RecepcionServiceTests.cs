@@ -4,6 +4,7 @@ using SistemaEnvios.Domain.Constants;
 using SistemaEnvios.Domain.Entities;
 using SistemaEnvios.Domain.Enums;
 using SistemaEnvios.Infrastructure.Persistence;
+using SistemaEnvios.Infrastructure.Security;
 using SistemaEnvios.Infrastructure.Services.Recepciones;
 using SistemaEnvios.Tests.Security;
 
@@ -93,7 +94,7 @@ public sealed class RecepcionServiceTests
         new CrearRecepcionRequestValidator(),
         new VerificarEquipoRequestValidator(),
         new AsignarTecnicoRequestValidator(),
-        new FakeUserContext(usuarioId));
+        FakeUserContext.Global(usuarioId), new AlcanceEnvios(db, FakeUserContext.Global(usuarioId)));
 
     private static SistemaEnviosDbContext CrearContexto() => new(
         new DbContextOptionsBuilder<SistemaEnviosDbContext>()

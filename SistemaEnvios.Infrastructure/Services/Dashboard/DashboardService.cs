@@ -1,25 +1,27 @@
 using Microsoft.EntityFrameworkCore;
 using SistemaEnvios.Application.Common;
 using SistemaEnvios.Application.DTOs.Dashboard;
+using SistemaEnvios.Application.Interfaces.Security;
 using SistemaEnvios.Application.Interfaces.Services.Dashboard;
 using SistemaEnvios.Domain.Constants;
 using SistemaEnvios.Infrastructure.Persistence;
 
 namespace SistemaEnvios.Infrastructure.Services.Dashboard;
 
-public sealed class DashboardService(SistemaEnviosDbContext db) : IDashboardService
+public sealed class DashboardService(SistemaEnviosDbContext db, IAlcanceEnvios alcance) : IDashboardService
 {
     public async Task<Result<DashboardResponse>> ObtenerAsync(int meses = 12, CancellationToken cancellationToken = default)
     {
         meses = Math.Clamp(meses, 1, 24);
         var desde = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1).AddMonths(-(meses - 1));
-        var envios = db.Envios.AsNoTracking();
+        var envios = await alcance.FiltrarAsync(db.Envios.AsNoTracking(), cancellationToken);
+        var enAlcance = envios.Select(x => x.EnvioId);
         var estados = await db.EstadosEnvio.AsNoTracking().ToDictionaryAsync(x => x.EstadoEnvioId, x => x.Codigo, cancellationToken);
         var resumen = new DashboardSummary(
             await envios.CountAsync(cancellationToken),
             await envios.CountAsync(x => x.EstadoEnvio.Codigo == EstadoEnvioCodigos.EnTransito, cancellationToken),
-            await db.Incidencias.CountAsync(cancellationToken),
-            await envios.CountAsync(x => x.EstadoEnvio.Codigo == EstadoEnvioCodigos.PendienteRecepcionFilial || x.EstadoEnvio.Codigo == EstadoEnvioCodigos.EnEsperaDeTecnologia, cancellationToken),
+            await db.Incidencias.CountAsync(x => enAlcance.Contains(x.EnvioId), cancellationToken),
+            await envios.CountAsync(x => x.EstadoEnvio.Codigo == EstadoEnvioCodigos.PendienteRecepcionFilial || x.EstadoEnvio.Codigo == EstadoEnvioCodigos.EnEsperaDeTecnologia || x.EstadoEnvio.Codigo == EstadoEnvioCodigos.RecibidoPorTransportacion, cancellationToken),
             await envios.CountAsync(x => x.EstadoEnvio.Codigo == EstadoEnvioCodigos.RecibidoPorTecnologia || x.EstadoEnvio.Codigo == EstadoEnvioCodigos.RecibidoEnFilial || x.EstadoEnvio.Codigo == EstadoEnvioCodigos.RecepcionValidadaEnFilial, cancellationToken),
             await envios.CountAsync(x => x.EstadoEnvio.Codigo == EstadoEnvioCodigos.EnProcesoDeRevision, cancellationToken),
             await envios.CountAsync(x => x.EstadoEnvio.EsFinal, cancellationToken));
@@ -37,6 +39,7 @@ public sealed class DashboardService(SistemaEnviosDbContext db) : IDashboardServ
         var byOrigin = byOriginRows.Select(x => new DashboardLabelValue(x.Label, x.Total)).ToArray();
 
         var byTypeRows = await db.EnvioEquipos
+            .Where(x => enAlcance.Contains(x.EnvioId))
             .Include(x => x.Equipo)
             .ThenInclude(x => x.TipoEquipo)
             .GroupBy(x => x.Equipo.TipoEquipo.Nombre)

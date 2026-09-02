@@ -11,15 +11,35 @@ import { filterFields } from "@/config/filterFields";
 import { envioService } from "@/services/envioService";
 import { catalogoService } from "@/services/catalogoService";
 import { useUiStore } from "@/stores/uiStore";
+import { useAuthStore } from "@/stores/authStore";
 
 const router = useRouter();
 const ui = useUiStore();
+const auth = useAuthStore();
 const loading = ref(true);
 const error = ref("");
 const page = ref(1);
 const rows = ref([]);
 const totalItems = ref(0);
 const locations = ref([]);
+
+// Solo el perfil global elige filial. A los demás el backend ya les acotó la consulta, así que
+// mostrarles el selector sugeriría un control que no tienen.
+const filialSeleccionada = ref("");
+const filiales = computed(() =>
+  locations.value.filter((x) => x.tipo === 1 || x.tipo === "Filial"),
+);
+const alcanceTexto = computed(() => {
+  if (auth.esGlobal) {
+    const filial = filiales.value.find(
+      (x) => String(x.ubicacionId) === String(filialSeleccionada.value),
+    );
+    return filial ? `Envíos de ${filial.nombre}` : "Todas las filiales";
+  }
+  return auth.filialNombre
+    ? `Envíos de ${auth.filialNombre}`
+    : "Consulta y gestiona el ciclo de vida de los envíos";
+});
 const states = ref([]);
 const transportTypes = ref([]);
 const activeFilters = ref({ logic: "AND", rules: [] });
@@ -81,7 +101,8 @@ function mapRow(item) {
     direccion: String(item.direccion),
     tipoTransporteId: item.tipoTransporteId == null ? "" : String(item.tipoTransporteId),
     observaciones: item.observaciones || "",
-    canEdit: stateCode(item.estadoEnvioId) === "EN_FILIAL",
+    // Editable mientras no se haya movido, en cualquiera de las dos direcciones.
+    canEdit: ["EN_FILIAL", "PREPARACION_TECNOLOGIA"].includes(stateCode(item.estadoEnvioId)),
   };
 }
 function compare(value, operator, expected) {
@@ -131,6 +152,7 @@ async function load() {
       if (["estadoEnvioId", "tipoTransporteId", "ubicacionOrigenId", "ubicacionDestinoId", "direccion"].includes(rule.field)) params[rule.field] = rule.value;
       if (rule.field === "numeroEnvio") params.search = rule.value;
     }
+    if (auth.puedeFiltrarPorFilial && filialSeleccionada.value) params.ubicacionId = filialSeleccionada.value;
     const [shipments, locationResponse, stateResponse, transportResponse] = await Promise.all([
       envioService.paged(params),
       catalogoService.locations(),
@@ -161,12 +183,25 @@ function clear() {
 }
 onMounted(load);
 watch(page, load);
+watch(filialSeleccionada, () => { page.value = 1; load(); });
 </script>
 <template>
   <div>
     <PageHeader
       title="Envíos"
-      subtitle="Consulta y gestiona el ciclo de vida de los envíos"
+      :subtitle="alcanceTexto"
+      ><label v-if="auth.puedeFiltrarPorFilial" class="filial-scope"
+        ><span>Filial</span>
+        <select v-model="filialSeleccionada" :disabled="loading">
+          <option value="">Todas las filiales</option>
+          <option
+            v-for="filial in filiales"
+            :key="filial.ubicacionId"
+            :value="String(filial.ubicacionId)"
+          >
+            {{ filial.nombre }}
+          </option>
+        </select></label
       ><button class="btn btn-secondary" :disabled="loading" @click="load">
         <RefreshCw :size="16" /> Actualizar</button
       ><RouterLink class="btn btn-primary" to="/envios/nuevo"
@@ -194,3 +229,31 @@ watch(page, load);
     /></BaseCard>
   </div>
 </template>
+
+<style scoped>
+.filial-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--text-muted, #64748b);
+}
+.filial-scope span {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+.filial-scope select {
+  padding: 7px 10px;
+  border: 1px solid var(--border, #d7dee6);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  color: inherit;
+  font: inherit;
+  font-size: 0.86rem;
+  min-width: 190px;
+}
+.filial-scope select:disabled {
+  opacity: 0.6;
+}
+</style>

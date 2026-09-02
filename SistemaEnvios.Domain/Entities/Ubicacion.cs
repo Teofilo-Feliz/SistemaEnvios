@@ -10,6 +10,8 @@ namespace SistemaEnvios.Domain.Entities
         public int UbicacionId { get; set; }
         public string Nombre { get; set; } = null!;
         public string CodigoCentro { get; set; } = null!;
+        /// <summary>Id de la filial en AuthManager (claim "affiliate"). NULL en ubicaciones que no son filial.</summary>
+        public int? FilialExternaId { get; set; }
         public TipoUbicacionEnum Tipo { get; set; }
         public bool Activo { get; set; }
 

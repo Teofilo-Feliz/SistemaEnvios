@@ -7,25 +7,27 @@ import {
   RefreshCw,
   Truck,
 } from "lucide-vue-next";
-import { useRouter } from "vue-router";
+import { useRouter, useRoute } from "vue-router";
 import PageHeader from "@/components/common/PageHeader.vue";
 import BaseCard from "@/components/common/BaseCard.vue";
 import BaseTable from "@/components/common/BaseTable.vue";
 import AdvancedFilter from "@/components/filters/AdvancedFilter.vue";
 import DashboardKpiCard from "@/components/dashboard/DashboardKpiCard.vue";
+import Pagination from "@/components/common/Pagination.vue";
 import { filterFields } from "@/config/filterFields";
 import { envioService } from "@/services/envioService";
 import { catalogoService } from "@/services/catalogoService";
 import { useUiStore } from "@/stores/uiStore";
 import { isInternalTransport } from "@/utils/transport";
 import { confirmAction, notifyNotificationsChanged } from "@/utils/confirm";
-const router = useRouter(),
+const router = useRouter(), route = useRoute(),
   ui = useUiStore(),
   loading = ref(true),
   rows = ref([]),
   locations = ref([]),
   states = ref([]),
   filters = ref({ logic: "AND", rules: [] });
+const page = ref(1), pageSize = 10;
 const columns = [
   { key: "number", label: "Envío" },
   { key: "origin", label: "Origen" },
@@ -50,14 +52,14 @@ const stats = computed(() => [
   {
     title: "Pendientes de confirmación",
     value: rows.value.filter(
-      (x) => x.status === "PENDIENTE_CONFIRMACION_TRANSPORTE",
+      (x) => x.status === "ENTREGADO_TRANSPORTACION",
     ).length,
     icon: Clock3,
     tone: "amber",
   },
   {
     title: "Confirmados",
-    value: rows.value.filter((x) => x.status === "CONFIRMADO_TRANSPORTACION")
+    value: rows.value.filter((x) => x.status === "EN_TRANSITO")
       .length,
     icon: PackageCheck,
     tone: "blue",
@@ -106,6 +108,9 @@ const filtered = computed(() =>
     ? rows.value.filter((x) => match(x, filters.value))
     : rows.value,
 );
+const pagedRows = computed(() => filtered.value.slice((page.value - 1) * pageSize, page.value * pageSize));
+const assignmentRows = computed(() => pagedRows.value.filter(x => x.status === "TRANSPORTE_ASIGNADO"));
+const otherRows = computed(() => pagedRows.value.filter(x => x.status !== "TRANSPORTE_ASIGNADO"));
 async function load() {
   loading.value = true;
   try {
@@ -133,9 +138,10 @@ async function load() {
       ubicacionDestinoId: x.ubicacionDestinoId,
       numeroEnvio: x.numeroEnvio,
       direccion: String(x.direccion),
-      canConfirm: states.value.find((y) => y.estadoEnvioId === x.estadoEnvioId)?.codigo === "EN_TRANSITO" && isInternalTransport(x.estrategiaTransporte),
-      confirmTitle: "Confirmar llegada a Tecnología",
+      canConfirm: ["TRANSPORTE_ASIGNADO", "EN_TRANSITO"].includes(states.value.find((y) => y.estadoEnvioId === x.estadoEnvioId)?.codigo) && Boolean(x.estrategiaTransporte),
+      confirmTitle: states.value.find((y) => y.estadoEnvioId === x.estadoEnvioId)?.codigo === "TRANSPORTE_ASIGNADO" ? "Despachado por transportación" : "Confirmar llegada a Tecnología",
     }));
+    if (route.query.estado) filters.value = { logic: "AND", rules: [{ field: "status", operator: "equals", value: String(route.query.estado) }] };
   } catch (e) {
     ui.notify(
       e.userMessage || "No fue posible cargar transportación.",
@@ -147,12 +153,20 @@ async function load() {
 }
 function search(x) {
   filters.value = x;
+  page.value = 1;
 }
 function clear() {
   filters.value = { logic: "AND", rules: [] };
+  page.value = 1;
   load();
 }
 async function confirmArrival(row) {
+  if (row.status === "TRANSPORTE_ASIGNADO") {
+    const accepted = await confirmAction({ title: "Despachar envío a filial", text: `¿Confirmas el despacho del envío ${row.number}?`, confirmText: "Despachar" });
+    if (!accepted) return;
+    try { await envioService.dispatchFromTechnology(row.id); ui.notify("Envío despachado y notificado a la filial.", "success"); await load(); } catch (e) { ui.notify(e.userMessage || "No fue posible despachar el envío.", "error"); }
+    return;
+  }
   const accepted = await confirmAction({ title: "Confirmar llegada a Transportación", text: `¿Confirmas que el envío ${row.number} llegó a Transportación? Pasará a espera de Tecnología.`, confirmText: "Confirmar llegada" });
   if (!accepted) return;
   try { await envioService.confirmTransportArrival(row.id); notifyNotificationsChanged(); ui.notify("Llegada confirmada. Tecnología fue notificada."); await load(); }
@@ -178,13 +192,14 @@ onMounted(load);
       :loading="loading"
       @search="search"
       @clear="clear"
-    /><BaseCard title="Operaciones activas" :padded="false"
+    /><BaseCard title="Despacho por Transportación — listos para salir" :padded="false"
       ><BaseTable
         :columns="columns"
-        :rows="filtered"
+        :rows="assignmentRows"
         :loading="loading"
         @confirm="confirmArrival"
         @view="(row) => router.push(`/envios/${row.id}`)"
-    /></BaseCard>
+    /><div class="transport-section-hint">Los envíos con chofer asignado aparecen aquí. Usa el botón de acción para marcarlos como despachados.</div></BaseCard>
+    <BaseCard title="Seguimiento y confirmaciones" :padded="false"><BaseTable :columns="columns" :rows="otherRows" :loading="loading" @confirm="confirmArrival" @view="(row) => router.push(`/envios/${row.id}`)" /><Pagination v-if="filtered.length" v-model:page="page" :total="filtered.length" :page-size="pageSize" /></BaseCard>
   </div>
 </template>

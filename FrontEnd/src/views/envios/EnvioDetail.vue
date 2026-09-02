@@ -14,7 +14,10 @@ import BaseCard from "@/components/common/BaseCard.vue";
 import StatusBadge from "@/components/common/StatusBadge.vue";
 import ShipmentTimeline from "@/components/envios/ShipmentTimeline.vue";
 import BaseTable from "@/components/common/BaseTable.vue";
+import EquipoInfoCard from "@/components/equipos/EquipoInfoCard.vue";
+import ModalCard from "@/components/common/ModalCard.vue";
 import { envioService } from "@/services/envioService";
+import { equipoService } from "@/services/equipoService";
 import { transporteService } from "@/services/transporteService";
 import { catalogoService } from "@/services/catalogoService";
 import { useUiStore } from "@/stores/uiStore";
@@ -36,6 +39,9 @@ const shipment = ref(null);
 const locations = ref([]);
 const states = ref([]);
 const equipment = ref([]);
+const equipoDetails = ref({});
+const equipoTypes = ref([]);
+const selectedEquipoId = ref(null);
 const history = ref([]);
 const transport = ref(null);
 const reception = ref(null);
@@ -50,6 +56,8 @@ const tabs = [
 ];
 const equipCols = [
   { key: "equipment", label: "Equipo" },
+  { key: "serial", label: "Serial" },
+  { key: "asset", label: "Código activo" },
   { key: "ticket", label: "Ticket" },
   { key: "observations", label: "Observaciones" },
 ];
@@ -60,10 +68,19 @@ const stateCode = (id) =>
   states.value.find((x) => x.estadoEnvioId === id)?.codigo || "";
 const stateName = (id) =>
   states.value.find((x) => x.estadoEnvioId === id)?.nombre || stateCode(id);
+const esEnvioHaciaFilial = computed(() => {
+  const direccion = shipment.value?.direccion;
+  return direccion === 2 || String(direccion).toLowerCase() === "haciafilial" || String(direccion).toLowerCase().includes("filial");
+});
 const flowLabel = computed(() =>
-  shipment.value?.direccion === 2
+  esEnvioHaciaFilial.value
     ? "Tecnología → Filial"
     : "Filial → Tecnología",
+);
+// Editable mientras no haya empezado a moverse. Cada dirección tiene su estado de partida:
+// la filial prepara en EN_FILIAL y Tecnología en PREPARACION_TECNOLOGIA.
+const esEditable = computed(() =>
+  ["EN_FILIAL", "PREPARACION_TECNOLOGIA"].includes(stateCode(shipment.value?.estadoEnvioId)),
 );
 const events = computed(() =>
   history.value.map((x) => ({
@@ -73,13 +90,62 @@ const events = computed(() =>
     current: x.estadoEnvioId === shipment.value?.estadoEnvioId,
   })),
 );
+// La asociación envío-equipo solo trae el equipoId; la marca, el modelo y el serial salen
+// del equipo, que se carga aparte (equipoDetails) para no mostrar "Equipo #12".
 const mappedEquipment = computed(() =>
-  equipment.value.map((x) => ({
-    equipment: `Equipo #${x.equipoId}`,
-    ticket: x.numeroTicket || "—",
-    observations: x.observaciones || "—",
-  })),
+  equipment.value.map((x) => {
+    const detalle = equipoDetails.value[x.equipoId];
+    return {
+      id: x.equipoId,
+      equipment: detalle ? `${detalle.marca} ${detalle.modelo}` : `Equipo #${x.equipoId}`,
+      serial: detalle?.numeroSerie || "—",
+      asset: detalle?.codigoActivo || "—",
+      ticket: x.numeroTicket || "—",
+      observations: x.observaciones || "—",
+    };
+  }),
 );
+const equipoSeleccionado = computed(() =>
+  selectedEquipoId.value ? equipoDetails.value[selectedEquipoId.value] || null : null,
+);
+const tipoDeEquipo = (equipo) =>
+  equipoTypes.value.find((x) => x.tipoEquipoId === equipo.tipoEquipoId)?.nombre || "Equipo";
+// Si el detalle no quedó cacheado (esa consulta falló al abrir la pestaña), se pide ahora:
+// sin esto el ojito no abriría nada y el usuario no sabría por qué.
+async function verEquipo(row) {
+  if (!equipoDetails.value[row.id]) {
+    try {
+      const { data } = await equipoService.get(row.id);
+      equipoDetails.value = { ...equipoDetails.value, [data.equipoId]: data };
+    } catch (error) {
+      ui.showToast(
+        error.userMessage || "No fue posible cargar la información del equipo.",
+        "error",
+      );
+      return;
+    }
+  }
+  selectedEquipoId.value = row.id;
+}
+// Cada equipo se pide por separado: no hay endpoint que devuelva el detalle de varios a la
+// vez. Un fallo puntual no rompe la pestaña, solo deja esa fila con el identificador.
+async function cargarEquipos() {
+  selectedEquipoId.value = null;
+  const ids = [...new Set(equipment.value.map((x) => x.equipoId))];
+  if (!ids.length) {
+    equipoDetails.value = {};
+    return;
+  }
+  const [detalles, tipos] = await Promise.all([
+    Promise.all(ids.map((id) => equipoService.get(id).catch(() => null))),
+    catalogoService.types().catch(() => ({ data: [] })),
+  ]);
+  equipoDetails.value = Object.fromEntries(
+    detalles.filter(Boolean).map((respuesta) => [respuesta.data.equipoId, respuesta.data]),
+  );
+  equipoTypes.value = tipos.data || [];
+}
+
 async function load() {
   loading.value = true;
   try {
@@ -109,6 +175,7 @@ async function load() {
     locations.value = locationResult.data || [];
     states.value = stateResult.data || [];
     equipment.value = equipmentResult.data || [];
+    await cargarEquipos();
     history.value = historyResult.data || [];
     transport.value = transportResult.data;
     reception.value = receptionResult.data;
@@ -126,7 +193,7 @@ async function confirmTransport() {
   if (
     !transport.value?.transporteId ||
     stateCode(shipment.value?.estadoEnvioId) !==
-      "PENDIENTE_CONFIRMACION_TRANSPORTE" ||
+      "ENTREGADO_TRANSPORTACION" ||
     transport.value.entregaConfirmada
   )
     return;
@@ -180,6 +247,13 @@ async function deliverToTransport() {
     delivering.value = false;
   }
 }
+async function deliverTechnologyToTransport() {
+  if (!(await confirmAction({ title: "Entregar a transportación", text: `¿Confirmas que el envío ${shipment.value.numeroEnvio} fue entregado a Transportación? Pasará a En tránsito hacia la filial.`, confirmText: "Entregado a transportación" }))) return;
+  delivering.value = true;
+  try { await envioService.dispatchFromTechnology(route.params.id); ui.showToast("Entrega registrada. El envío quedó en tránsito hacia la filial.", "success"); await load(); }
+  catch (error) { ui.showToast(error.userMessage || "No fue posible registrar la entrega.", "error"); }
+  finally { delivering.value = false; }
+}
 async function registerTechnologyArrival() {
   const interno=isInternalTransport(transport.value?.estrategia);
   const accepted = await confirmAction({ title: interno ? "Confirmar llegada a Transportación" : "Confirmar recepción privada", text: `¿Deseas confirmar la llegada del envío ${shipment.value.numeroEnvio}?`, confirmText: "Confirmar llegada" });
@@ -221,6 +295,9 @@ onMounted(load);
           : "Entregado a transportación"
     }}
   </button>
+  <button v-if="!loading && shipment && esEnvioHaciaFilial && auth.can('envios.despachar') && stateCode(shipment.estadoEnvioId) === 'PREPARACION_TECNOLOGIA'" class="btn btn-primary shipment-delivery-action" :disabled="delivering" type="button" @click="deliverTechnologyToTransport">
+    {{ delivering ? "Procesando…" : "Entregado a transportación" }}
+  </button>
   <div v-if="loading" class="page-loading">Cargando envío…</div>
   <div v-else-if="shipment">
     <PageHeader
@@ -228,7 +305,7 @@ onMounted(load);
       subtitle="Seguimiento integral y trazabilidad del envío"
       ><button class="btn btn-secondary" @click="router.back()">
         <ArrowLeft :size="16" /> Volver</button
-      ><button v-if="stateCode(shipment.estadoEnvioId) === 'EN_FILIAL' && auth.can('envios.editar')" class="btn btn-primary" @click="router.push(`/envios/${shipment.envioId}/editar`)">
+      ><button v-if="esEditable && auth.can('envios.editar')" class="btn btn-primary" @click="router.push(`/envios/${shipment.envioId}/editar`)">
         <Pencil :size="16" /> Editar envío</button
       ><button class="btn btn-secondary" @click="printPage">
         <Printer :size="16" /> Imprimir</button
@@ -304,7 +381,7 @@ onMounted(load);
       v-else-if="tab === 'equipment'"
       title="Equipos del envío"
       :padded="false"
-      ><BaseTable :columns="equipCols" :rows="mappedEquipment"
+      ><BaseTable :columns="equipCols" :rows="mappedEquipment" @view="verEquipo"
     /></BaseCard>
     <BaseCard v-else-if="tab === 'history'" title="Historial real del envío"
       ><ShipmentTimeline :events="events"
@@ -332,7 +409,7 @@ onMounted(load);
           v-if="
             auth.can('transportes.confirmar') &&
             stateCode(shipment.estadoEnvioId) ===
-              'PENDIENTE_CONFIRMACION_TRANSPORTE' &&
+              'ENTREGADO_TRANSPORTACION' &&
             !transport.entregaConfirmada
           "
           class="btn btn-primary"
@@ -421,4 +498,36 @@ onMounted(load);
       </div>
     </div>
   </div>
+
+  <!-- Fuera del overlay de entrega: si queda dentro, solo se renderiza cuando ese
+       diálogo está abierto y el ojito no muestra nada. -->
+  <ModalCard
+    :open="Boolean(equipoSeleccionado)"
+    :eyebrow="equipoSeleccionado ? tipoDeEquipo(equipoSeleccionado) : ''"
+    :title="equipoSeleccionado ? `${equipoSeleccionado.marca} ${equipoSeleccionado.modelo}` : ''"
+    @close="selectedEquipoId = null"
+  >
+    <EquipoInfoCard
+      v-if="equipoSeleccionado"
+      :equipo="equipoSeleccionado"
+      :types="equipoTypes"
+      :locations="locations"
+    />
+    <template #footer>
+      <button
+        v-if="equipoSeleccionado"
+        class="btn btn-ghost"
+        type="button"
+        @click="router.push(`/equipos/${equipoSeleccionado.equipoId}`)"
+      >
+        Abrir ficha completa
+      </button>
+    </template>
+  </ModalCard>
 </template>
+
+<style scoped>
+.modal-link {
+  font-size: 12.5px;
+}
+</style>

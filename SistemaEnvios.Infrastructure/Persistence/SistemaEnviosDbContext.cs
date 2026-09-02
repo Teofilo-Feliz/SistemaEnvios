@@ -24,6 +24,8 @@ public class SistemaEnviosDbContext(DbContextOptions<SistemaEnviosDbContext> opt
     public DbSet<ReservaEquipoEnvio> ReservasEquipoEnvio => Set<ReservaEquipoEnvio>();
     public DbSet<UsuarioReferencia> UsuariosReferencia => Set<UsuarioReferencia>();
     public DbSet<Notificacion> Notificaciones => Set<Notificacion>();
+    public DbSet<PermisoPosicion> PermisosPorPosicion => Set<PermisoPosicion>();
+    public DbSet<PerfilPosicion> PerfilesPorPosicion => Set<PerfilPosicion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

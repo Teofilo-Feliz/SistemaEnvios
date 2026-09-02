@@ -7,6 +7,7 @@ using SistemaEnvios.Domain.Entities;
 using SistemaEnvios.Domain.Enums;
 using SistemaEnvios.Infrastructure.Persistence;
 using SistemaEnvios.Infrastructure.Repositories;
+using SistemaEnvios.Infrastructure.Security;
 using SistemaEnvios.Infrastructure.Services.Envios;
 using SistemaEnvios.Tests.Security;
 
@@ -175,7 +176,8 @@ public sealed class EnvioServiceTests
         new UnitOfWork(db),
         new CrearEnvioRequestValidator(),
         new ActualizarEnvioRequestValidator(),
-        new FakeUserContext(UsuarioId));
+        FakeUserContext.Global(UsuarioId),
+        new AlcanceEnvios(db, FakeUserContext.Global(UsuarioId)));
 
     private static SistemaEnviosDbContext CrearContexto()
     {

@@ -17,7 +17,8 @@ public sealed class EnvioEquipoService(
     IValidator<AgregarEquipoEnvioRequest> validator,
     IValidator<ActualizarEnvioEquipoRequest> actualizarValidator,
     SistemaEnviosDbContext db,
-    IUserContext userContext) : IEnvioEquipoService
+    IUserContext userContext,
+    IAlcanceEnvios alcance) : IEnvioEquipoService
 {
     public async Task<Result<int>> AgregarAsync(
         AgregarEquipoEnvioRequest request,
@@ -36,6 +37,9 @@ public sealed class EnvioEquipoService(
 
         if (envio is null)
             return Result<int>.Failure("El envío no existe.", ErrorType.NotFound);
+
+        var enAlcanceEnvio = await alcance.VerificarAsync(envio.EnvioId, cancellationToken);
+        if (enAlcanceEnvio.IsFailure) return Result<int>.Failure(enAlcanceEnvio.Error!, enAlcanceEnvio.ErrorType);
 
         var equipo = await db.Equipos.FindAsync([request.EquipoId], cancellationToken);
         if (equipo is null)
@@ -105,6 +109,9 @@ public sealed class EnvioEquipoService(
         if (!await db.Envios.AnyAsync(x => x.EnvioId == envioId, cancellationToken))
             return Result<IReadOnlyCollection<EnvioEquipoResponse>>.Failure("El envío no existe.", ErrorType.NotFound);
 
+        var enAlcance = await alcance.VerificarAsync(envioId, cancellationToken);
+        if (enAlcance.IsFailure) return Result<IReadOnlyCollection<EnvioEquipoResponse>>.Failure(enAlcance.Error!, enAlcance.ErrorType);
+
         var equipos = await db.EnvioEquipos
             .AsNoTracking()
             .Where(x => x.EnvioId == envioId)
@@ -140,6 +147,9 @@ public sealed class EnvioEquipoService(
             .FirstOrDefaultAsync(x => x.EnvioEquipoId == request.EnvioEquipoId, cancellationToken);
         if (detalle is null)
             return Result.Failure("El equipo asociado al envío no existe.", ErrorType.NotFound);
+
+        var enAlcance = await alcance.VerificarAsync(detalle.EnvioId, cancellationToken);
+        if (enAlcance.IsFailure) return enAlcance;
         if (!EsEstadoEditable(detalle.Envio.EstadoEnvio.Codigo))
             return Result.Failure("El envío ya fue despachado y no admite modificaciones.", ErrorType.Conflict);
         if (await db.EnvioEquipos.AnyAsync(x => x.NumeroTicket == request.NumeroTicket.Trim() && x.EnvioEquipoId != request.EnvioEquipoId, cancellationToken))
@@ -172,6 +182,9 @@ public sealed class EnvioEquipoService(
             .FirstOrDefaultAsync(x => x.EnvioEquipoId == envioEquipoId, cancellationToken);
         if (detalle is null)
             return Result.Failure("El equipo asociado al envío no existe.", ErrorType.NotFound);
+
+        var enAlcance = await alcance.VerificarAsync(detalle.EnvioId, cancellationToken);
+        if (enAlcance.IsFailure) return enAlcance;
         if (!EsEstadoEditable(detalle.Envio.EstadoEnvio.Codigo))
             return Result.Failure("El envío ya fue despachado y no admite modificaciones.", ErrorType.Conflict);
 
@@ -191,7 +204,9 @@ public sealed class EnvioEquipoService(
         return Result.Success();
     }
 
-    private static bool EsEstadoEditable(string codigo) => codigo == EstadoEnvioCodigos.EnFilial;
+    // Igual que en EnvioService: los equipos se pueden tocar mientras el envío no se mueva.
+    private static bool EsEstadoEditable(string codigo) =>
+        codigo is EstadoEnvioCodigos.EnFilial or EstadoEnvioCodigos.EnPreparacionTecnologia;
 
     private static void MarcarEnvioModificado(Envio envio, Guid usuarioId)
     {

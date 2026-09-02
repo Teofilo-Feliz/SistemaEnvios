@@ -16,17 +16,20 @@ public sealed class IncidenciaService : IIncidenciaService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IValidator<CrearIncidenciaRequest> _validator;
     private readonly IUserContext _userContext;
+    private readonly IAlcanceEnvios _alcance;
 
     public IncidenciaService(
         SistemaEnviosDbContext db,
         IUnitOfWork unitOfWork,
         IValidator<CrearIncidenciaRequest> validator,
-        IUserContext userContext)
+        IUserContext userContext,
+        IAlcanceEnvios alcance)
     {
         _db = db;
         _unitOfWork = unitOfWork;
         _validator = validator;
         _userContext = userContext;
+        _alcance = alcance;
     }
 
     public async Task<Result<int>> RegistrarAsync(CrearIncidenciaRequest request, CancellationToken cancellationToken = default)
@@ -48,6 +51,9 @@ public sealed class IncidenciaService : IIncidenciaService
         {
             return Result<int>.Failure("El envío no existe.", ErrorType.NotFound);
         }
+
+        var enAlcanceEnvio = await _alcance.VerificarAsync(envio.EnvioId, cancellationToken);
+        if (enAlcanceEnvio.IsFailure) return Result<int>.Failure(enAlcanceEnvio.Error!, enAlcanceEnvio.ErrorType);
 
         if (envio.EstadoEnvio.EsFinal)
             return Result<int>.Failure("El envío está finalizado y no admite nuevas incidencias.", ErrorType.Conflict);
@@ -104,6 +110,9 @@ public sealed class IncidenciaService : IIncidenciaService
     {
         if (!await _db.Envios.AnyAsync(x => x.EnvioId == envioId, cancellationToken))
             return Result<IReadOnlyCollection<IncidenciaResponse>>.Failure("El envío no existe.", ErrorType.NotFound);
+
+        var enAlcance = await _alcance.VerificarAsync(envioId, cancellationToken);
+        if (enAlcance.IsFailure) return Result<IReadOnlyCollection<IncidenciaResponse>>.Failure(enAlcance.Error!, enAlcance.ErrorType);
         var incidencias = await _db.Incidencias.AsNoTracking().Where(x => x.EnvioId == envioId)
             .OrderByDescending(x => x.FechaCreacion)
             .Select(x => new IncidenciaResponse(x.IncidenciaId, x.EnvioId, x.EnvioEquipoId, x.TransporteId,

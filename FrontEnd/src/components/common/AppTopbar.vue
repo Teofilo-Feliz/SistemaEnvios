@@ -56,7 +56,7 @@ onBeforeUnmount(() => {
     <form class="global-search" @submit.prevent="search"><Search :size="17" /><input v-model="query" placeholder="Buscar envío, ticket, serial, activo…" aria-label="Búsqueda global" /><kbd>⌘ K</kbd></form>
     <div class="topbar-actions">
       <div class="dropdown-wrap"><button class="icon-btn notification-button" aria-label="Notificaciones" @click="toggleNotifications"><Bell :size="20" /><span v-if="notificationCount">{{ notificationCount }}</span></button><NotificationDropdown v-if="showNotifications" :items="notifications" /></div>
-      <div class="dropdown-wrap"><button class="user-trigger" @click="showUser = !showUser; showNotifications = false"><span class="avatar">{{ auth.user?.initials }}</span><span class="user-copy"><strong>{{ auth.user?.name }}</strong><small>{{ auth.user?.role }}</small></span></button><UserMenu v-if="showUser" /></div>
+      <div class="dropdown-wrap"><button class="user-trigger" @click="showUser = !showUser; showNotifications = false"><span class="avatar">{{ auth.initials }}</span><span class="user-copy"><strong>{{ auth.displayName }}</strong><small>{{ auth.affiliateName ? `${auth.roleLabel} · ${auth.affiliateName}` : auth.roleLabel }}</small></span></button><UserMenu v-if="showUser" /></div>
     </div>
   </header>
 </template>

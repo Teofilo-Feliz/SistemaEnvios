@@ -14,12 +14,14 @@ import { envioService } from "@/services/envioService";
 import { transporteService } from "@/services/transporteService";
 import { isInternalTransport, isPrivateTransport } from "@/utils/transport";
 import { useUiStore } from "@/stores/uiStore";
+import { useAuthStore } from "@/stores/authStore";
 import { confirmAction, escapeHtml } from "@/utils/confirm";
 import "@/assets/styles/shipment-create.css";
 
 const router = useRouter(),
   route = useRoute(),
   ui = useUiStore(),
+  auth = useAuthStore(),
   loading = ref(true),
   saving = ref(false),
   registering = ref(false),
@@ -52,7 +54,14 @@ const form = reactive({
   vehiclePlate: "",
   equipment: [],
 });
+// Copia de los equipos tal como estaban al abrir la edición, para calcular la diferencia.
+const equiposOriginales = ref([]);
+// Transporte ya asignado al envío, si lo hay: define si al guardar se crea o se actualiza.
+const transporteExistente = ref(null);
 const item = reactive({
+  // Se conserva al editar un equipo ya asociado: sin esto la edicion se convertiria
+  // en quitar y volver a agregar, perdiendo la asociacion original.
+  envioEquipoId: null,
   existingId: "",
   typeId: "",
   brand: "",
@@ -70,6 +79,7 @@ const itemErrors = reactive({
   ticket: "",
 });
 const editing = computed(() => Boolean(route.params.id));
+const technologyMode = computed(() => route.name === "technology-shipment-create");
 const origin = computed(() =>
   locations.value.find((x) => x.ubicacionId === Number(form.originId)),
 );
@@ -103,6 +113,7 @@ const flowLabel = computed(() =>
 );
 function resetItem() {
   Object.keys(item).forEach((k) => (item[k] = ""));
+  item.envioEquipoId = null;
 }
 function fill(e) {
   item.existingId = e.equipoId;
@@ -194,6 +205,7 @@ async function addEquipment() {
     const id = await ensure();
     form.equipment.push({
       id: Date.now(),
+      envioEquipoId: item.envioEquipoId || null,
       existingId: id,
       typeId: item.typeId,
       brand: item.brand,
@@ -216,6 +228,56 @@ async function addEquipment() {
 function removeEquipment(id) {
   form.equipment = form.equipment.filter((x) => x.id !== id);
 }
+
+// Al editar, el envío puede no tener transporte todavía (se crea) o tenerlo (se actualiza).
+async function guardarTransporte() {
+  if (technologyMode.value || !form.transportTypeId) return;
+  const datos = {
+    tipoTransporteId: Number(form.transportTypeId),
+    choferInternoId: form.internalDriverId ? Number(form.internalDriverId) : null,
+    nombreResponsable: form.privateName || null,
+    parentesco: form.relationship || null,
+    cedulaResponsable: form.privateId || null,
+    placaVehiculo: form.vehiclePlate || null,
+  };
+  if (transporteExistente.value) {
+    await transporteService.update(transporteExistente.value.transporteId, datos);
+  } else {
+    await transporteService.create({ envioId: Number(route.params.id), ...datos });
+  }
+}
+
+// Guarda solo la diferencia contra lo que había: quitar, agregar y actualizar lo que cambió.
+// Enviar todo de nuevo haría fallar el backend, que rechaza asociar dos veces el mismo equipo.
+async function guardarEquipos() {
+  const envioId = Number(route.params.id);
+  const actuales = form.equipment;
+  const previos = equiposOriginales.value;
+
+  const quitados = previos.filter(
+    (anterior) => !actuales.some((x) => x.envioEquipoId === anterior.envioEquipoId),
+  );
+  for (const equipo of quitados) await envioService.removeEquipment(equipo.envioEquipoId);
+
+  for (const equipo of actuales) {
+    if (!equipo.envioEquipoId) {
+      await envioService.addEquipment({
+        envioId,
+        equipoId: Number(equipo.existingId),
+        numeroTicket: equipo.ticket,
+        observaciones: equipo.notes || "Equipo asociado al envío.",
+      });
+      continue;
+    }
+    const anterior = previos.find((x) => x.envioEquipoId === equipo.envioEquipoId);
+    if (anterior && (anterior.ticket !== equipo.ticket || anterior.notes !== equipo.notes)) {
+      await envioService.updateEquipment(equipo.envioEquipoId, {
+        numeroTicket: equipo.ticket,
+        observaciones: equipo.notes || "Equipo asociado al envío.",
+      });
+    }
+  }
+}
 function editEquipment(e) {
   Object.assign(item, e);
   removeEquipment(e.id);
@@ -235,10 +297,79 @@ async function load() {
     transportTypes.value = tt.data || [];
     drivers.value = d.data || [];
     if (editing.value) {
-      const r = await envioService.get(route.params.id);
+      const [r, asociaciones, estados] = await Promise.all([
+        envioService.get(route.params.id),
+        envioService.equipment(route.params.id),
+        catalogoService.states(),
+      ]);
+
+      // Una vez entregado a Transportación el envío ya no se toca. Sin esta comprobación se
+      // podía volver al formulario por URL o con el botón atrás del navegador, editarlo y
+      // recién enterarse del rechazo al guardar.
+      const codigo = (estados.data || []).find(
+        (x) => x.estadoEnvioId === r.data.estadoEnvioId,
+      )?.codigo;
+      if (!["EN_FILIAL", "PREPARACION_TECNOLOGIA"].includes(codigo)) {
+        ui.notify("El envío ya salió y no admite cambios.", "warning");
+        router.replace(`/envios/${route.params.id}`);
+        return;
+      }
+
       form.originId = r.data.ubicacionOrigenId;
       form.destinationId = r.data.ubicacionDestinoId;
       form.notes = r.data.observaciones || "";
+
+      // Los equipos ya asociados se cargan al formulario. Se guarda envioEquipoId para poder
+      // distinguir después qué se agregó, qué cambió y qué se quitó.
+      form.equipment = (asociaciones.data || []).map((asociacion) => {
+        const equipo = registeredEquipment.value.find((x) => x.equipoId === asociacion.equipoId) || {};
+        return {
+          id: `existente-${asociacion.envioEquipoId}`,
+          envioEquipoId: asociacion.envioEquipoId,
+          existingId: asociacion.equipoId,
+          typeId: equipo.tipoEquipoId ?? "",
+          brand: equipo.marca || "",
+          model: equipo.modelo || "",
+          serial: equipo.numeroSerie || "",
+          assetCode: equipo.codigoActivo || "",
+          ticket: asociacion.numeroTicket || "",
+          notes: asociacion.observaciones || "",
+          typeName:
+            types.value.find((x) => x.tipoEquipoId === equipo.tipoEquipoId)?.nombre ||
+            `Tipo #${equipo.tipoEquipoId}`,
+        };
+      });
+      equiposOriginales.value = form.equipment.map((x) => ({ ...x }));
+
+      // El transporte también se puede corregir mientras el envío no salga: un chofer mal
+      // elegido al crear es justo lo que hay que poder arreglar.
+      try {
+        const { data: transporte } = await transporteService.getByEnvio(route.params.id);
+        if (transporte) {
+          transporteExistente.value = transporte;
+          form.transportTypeId = transporte.tipoTransporteId ?? "";
+          form.internalDriverId = transporte.choferInternoId ?? "";
+          form.privateName = transporte.nombreResponsable || "";
+          form.relationship = transporte.parentesco || "";
+          form.privateId = transporte.cedulaResponsable || "";
+          form.vehiclePlate = transporte.placaVehiculo || "";
+        }
+      } catch {
+        // Todavía sin transporte asignado: se registra al guardar.
+        transporteExistente.value = null;
+      }
+    } else if (technologyMode.value) {
+      const headquarters = locations.value.find((x) => isTechnology(x) && (/centro\s*sede/i.test(x.nombre || "") || /tecnolog/i.test(x.nombre || ""))) || locations.value.find(isTechnology);
+      if (headquarters) form.originId = headquarters.ubicacionId;
+    } else {
+      // El token trae la filial del usuario, así que el envío nace con su filial como origen
+      // y Tecnología como destino. Solo el perfil global elige, porque no está atado a una.
+      const tecnologia = locations.value.find(isTechnology);
+      const propia = auth.perfil?.ubicacionId
+        ? locations.value.find((x) => x.ubicacionId === auth.perfil.ubicacionId)
+        : null;
+      if (propia) form.originId = propia.ubicacionId;
+      if (tecnologia) form.destinationId = tecnologia.ubicacionId;
     }
   } catch (e) {
     ui.notify(e.userMessage || "No fue posible cargar los catálogos.", "error");
@@ -256,7 +387,7 @@ function validate() {
   const selected = transportTypes.value.find(
     (x) => x.tipoTransporteId === Number(form.transportTypeId),
   );
-  if (!editing.value) {
+  if (!editing.value && !technologyMode.value) {
     errors.transportType = !selected
       ? "Selecciona el tipo de transporte."
       : isPrivateTransport(selected.estrategia) && isTechnology(origin.value)
@@ -283,22 +414,28 @@ function validate() {
         ? "Indica la placa."
         : "";
   }
-  if (!editing.value && !form.equipment.length)
+  // También al editar: un envío sin equipos no se puede despachar, así que guardarlo así
+  // lo dejaría en un callejón sin salida.
+  if (!form.equipment.length)
     ui.notify("Agrega al menos un equipo antes de guardar.", "warning");
-  return (
-    !Object.values(errors).some(Boolean) &&
-    (editing.value || form.equipment.length)
-  );
+  return !Object.values(errors).some(Boolean) && Boolean(form.equipment.length);
 }
 async function submit() {
   if (!validate()) return;
-  if (!editing.value) {
-    const availability = await Promise.all(form.equipment.map((equipment) => envioService.ticketAvailable(equipment.ticket)));
-    const duplicateIndex = availability.findIndex((response) => response.data !== true);
-    if (duplicateIndex >= 0) {
-      ui.notify(`El ticket ${form.equipment[duplicateIndex].ticket} ya está asociado a otro equipo o envío.`, "error");
-      return;
-    }
+  // Al editar hay que excluir la propia asociación: si no, el ticket que ya tiene el equipo
+  // en este mismo envío se reportaría como ocupado y no se podría guardar nada.
+  const availability = await Promise.all(
+    form.equipment.map((equipment) =>
+      envioService.ticketAvailable(
+        equipment.ticket,
+        equipment.envioEquipoId ? { excluirEnvioEquipoId: equipment.envioEquipoId } : {},
+      ),
+    ),
+  );
+  const duplicateIndex = availability.findIndex((response) => response.data !== true);
+  if (duplicateIndex >= 0) {
+    ui.notify(`El ticket ${form.equipment[duplicateIndex].ticket} ya está asociado a otro equipo o envío.`, "error");
+    return;
   }
   const transportLabel = selectedTransportType.value?.nombre || "Sin indicar";
   const driverLabel = isInternalTransport(selectedTransportType.value?.estrategia)
@@ -319,11 +456,16 @@ async function save() {
   saving.value = true;
   try {
     const r = editing.value
-      ? await envioService.update(route.params.id, {
-          ubicacionOrigenId: Number(form.originId),
-          ubicacionDestinoId: Number(form.destinationId),
-          observaciones: form.notes || null,
-        })
+      ? await (async () => {
+          const respuesta = await envioService.update(route.params.id, {
+            ubicacionOrigenId: Number(form.originId),
+            ubicacionDestinoId: Number(form.destinationId),
+            observaciones: form.notes || null,
+          });
+          await guardarEquipos();
+          await guardarTransporte();
+          return respuesta;
+        })()
       : await envioService.createWithEquipment({
           ubicacionOrigenId: Number(form.originId),
           ubicacionDestinoId: Number(form.destinationId),
@@ -331,7 +473,7 @@ async function save() {
           equipos: form.equipment.map((e) => ({ equipoId: Number(e.existingId), numeroTicket: e.ticket, observaciones: e.notes || "Equipo asociado al envío." })),
         });
     const id = editing.value ? route.params.id : r.data.envioId;
-    if (!editing.value) {
+    if (!editing.value && !technologyMode.value) {
       await transporteService.create({
         envioId: Number(id),
         tipoTransporteId: Number(form.transportTypeId),
@@ -414,14 +556,15 @@ onMounted(load);
             :errors="errors"
             :locations="locations"
             :destination-locations="destinationLocations"
-            :flow-label="flowLabel" /></ShipmentSection
-        ><ShipmentSection v-if="!editing" title="Transportación"
+            :flow-label="flowLabel"
+            :readonly-origin="technologyMode" /></ShipmentSection
+        ><ShipmentSection v-if="!technologyMode" title="Transportación"
           ><ShipmentTransportSection
             :form="form"
             :transport-types="transportTypes"
             :drivers="drivers"
             :errors="errors" /></ShipmentSection
-        ><ShipmentSection v-if="!editing" title="Equipos"
+        ><ShipmentSection title="Equipos"
           ><ShipmentEquipmentSection
             :item="item"
             :equipments="form.equipment"

@@ -1,6 +1,6 @@
 # SistemaEnvios
 
-Backend del sistema logístico de envíos ADR.
+Backend del sistema logístico de envíos REH.
 
 ## Configuración local
 

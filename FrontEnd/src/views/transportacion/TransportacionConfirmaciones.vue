@@ -29,7 +29,7 @@ async function load() {
       envioService.list(),
       catalogoService.states(),
     ]);
-    const pendingId = estados.find((x) => x.codigo === "PENDIENTE_CONFIRMACION_TRANSPORTE")?.estadoEnvioId;
+    const pendingId = estados.find((x) => x.codigo === "ENTREGADO_TRANSPORTACION")?.estadoEnvioId;
     const transitId = estados.find((x) => x.codigo === "EN_TRANSITO")?.estadoEnvioId;
     const items = [];
     for (const envio of envios || []) {

@@ -5,6 +5,7 @@ using SistemaEnvios.Domain.Constants;
 using SistemaEnvios.Domain.Entities;
 using SistemaEnvios.Domain.Enums;
 using SistemaEnvios.Infrastructure.Persistence;
+using SistemaEnvios.Infrastructure.Security;
 using SistemaEnvios.Infrastructure.Services.Transportes;
 using SistemaEnvios.Tests.Security;
 
@@ -15,11 +16,11 @@ public sealed class TransporteServiceTests
     private static readonly Guid UsuarioId = Guid.Parse("8f69cd83-4ce7-46d8-a74f-f34ce7fd5ef2");
 
     [Fact]
-    public async Task ConfirmarEntrega_DejaEnvioEnTransitoYRegistraAmbosEstados()
+    public async Task ConfirmarEntrega_DejaEnvioEnTransitoEnUnSoloPaso()
     {
         await using var db = CrearContexto();
-        var pendiente = CrearEstado(EstadoEnvioCodigos.EnProcesoConfirmacionTransportacion);
-        var confirmado = CrearEstado(EstadoEnvioCodigos.ConfirmadoPorTransportacion);
+        var entregado = CrearEstado(EstadoEnvioCodigos.EntregadoATransportacion);
+        
         var enTransito = CrearEstado(EstadoEnvioCodigos.EnTransito);
         var origen = new Ubicacion
         {
@@ -37,7 +38,7 @@ public sealed class TransporteServiceTests
         };
         var tipo = new TipoTransporte { Codigo = "INTERNO", Nombre = "Interno", Estrategia = EstrategiaTransporteEnum.TransportacionInstitucional, Activo = true };
         var chofer = new ChoferInterno { NombreCompleto = "Chofer prueba", NumeroEmpleado = "EMP-1", Activo = true };
-        db.AddRange(pendiente, confirmado, enTransito, origen, destino, tipo, chofer);
+        db.AddRange(entregado, enTransito, origen, destino, tipo, chofer);
         await db.SaveChangesAsync();
 
         var envio = new Envio
@@ -45,21 +46,15 @@ public sealed class TransporteServiceTests
             NumeroEnvio = "ENV-PRUEBA-TRANSITO",
             UbicacionOrigenId = origen.UbicacionId,
             UbicacionDestinoId = destino.UbicacionId,
-            EstadoEnvioId = pendiente.EstadoEnvioId,
+            EstadoEnvioId = entregado.EstadoEnvioId,
             Direccion = DireccionEnvioEnum.HaciaTecnologia,
             UsuarioSolicitanteId = UsuarioId
         };
         db.Envios.Add(envio);
-        db.TransicionesEstadoEnvio.AddRange(
+        db.TransicionesEstadoEnvio.Add(
             new TransicionEstadoEnvio
             {
-                EstadoOrigenId = pendiente.EstadoEnvioId,
-                EstadoDestinoId = confirmado.EstadoEnvioId,
-                Activo = true
-            },
-            new TransicionEstadoEnvio
-            {
-                EstadoOrigenId = confirmado.EstadoEnvioId,
+                EstadoOrigenId = entregado.EstadoEnvioId,
                 EstadoDestinoId = enTransito.EstadoEnvioId,
                 Activo = true
             });
@@ -77,7 +72,7 @@ public sealed class TransporteServiceTests
             new UnitOfWork(db),
             new CrearTransporteRequestValidator(),
             new ActualizarTransporteRequestValidator(),
-            new FakeUserContext(UsuarioId));
+            FakeUserContext.Global(UsuarioId), new AlcanceEnvios(db, FakeUserContext.Global(UsuarioId)));
 
         var resultado = await servicio.ConfirmarAsync(transporte.TransporteId);
 
@@ -90,7 +85,7 @@ public sealed class TransporteServiceTests
             .OrderBy(x => x.HistorialEstadoEnvioId)
             .Select(x => x.EstadoEnvioId)
             .ToListAsync();
-        Assert.Equal([confirmado.EstadoEnvioId, enTransito.EstadoEnvioId], historial);
+        Assert.Equal([enTransito.EstadoEnvioId], historial);
     }
 
     private static EstadoEnvio CrearEstado(string codigo) => new()

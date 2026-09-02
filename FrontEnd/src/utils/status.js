@@ -3,16 +3,8 @@ export const statusMap = {
     label: "En preparación de tecnología",
     tone: "neutral",
   },
-  PENDIENTE_CONFIRMACION_TRANSPORTE: {
-    label: "Pendiente confirmación",
-    tone: "warning",
-  },
   ENTREGADO_TRANSPORTACION: {
     label: "Entregado a transportación",
-    tone: "info",
-  },
-  CONFIRMADO_TRANSPORTACION: {
-    label: "Confirmado por transportación",
     tone: "info",
   },
   DESPACHADO_TRANSPORTE_PRIVADO: {
@@ -27,7 +19,10 @@ export const statusMap = {
   ESPERA_TECNOLOGIA: { label: "En espera de tecnología", tone: "warning" },
   EN_REVISION_TECNOLOGIA: { label: "En proceso de revisión", tone: "primary" },
   RECIBIDO_TECNOLOGIA: { label: "Recibido por tecnología", tone: "success" },
-  DESPACHADO_TECNOLOGIA: { label: "Despachado por tecnología", tone: "info" },
+  DESPACHADO_TECNOLOGIA: { label: "Entregado a transportación", tone: "info" },
+  EN_TRANSPORTACION: { label: "En transportación", tone: "info" },
+  TRANSPORTE_ASIGNADO: { label: "Chofer asignado", tone: "info" },
+  DESPACHADO_TRANSPORTACION: { label: "Despachado por transportación", tone: "info" },
   PENDIENTE_RECEPCION_FILIAL: {
     label: "Pendiente de recepción en filial",
     tone: "warning",

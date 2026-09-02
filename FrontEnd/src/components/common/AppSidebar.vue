@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from "vue";
 import { useRoute } from "vue-router";
+import logo from "@/assets/img/logitrack.webp";
 import {
   BarChart3,
   Boxes,
@@ -10,7 +11,6 @@ import {
   ClipboardCheck,
   PackageSearch,
   Settings,
-  ShieldCheck,
   Truck,
   X,
 } from "lucide-vue-next";
@@ -62,7 +62,7 @@ const groups = [
       },
       { label: "Operaciones", to: "/transportacion/operaciones" },
       {
-        label: "Registrar vehículo y chofer",
+        label: "Asignar transporte a envío",
         to: "/transportacion/nuevo",
         permission: "transportes.gestionar",
       },
@@ -74,6 +74,7 @@ const groups = [
     icon: ClipboardCheck,
     items: [
       { label: "Notificaciones", to: "/tecnologia/notificaciones" },
+      { label: "Nuevo envío a filial", to: "/tecnologia/envios/nuevo", permission: "canCreateShipment" },
       { label: "Equipos pendientes", to: "/tecnologia?view=pending" },
       { label: "En revisión", to: "/tecnologia?view=review" },
       { label: "Revisados", to: "/tecnologia?view=completed" },
@@ -89,6 +90,12 @@ const groups = [
       { label: "Historial", to: "/seguimiento/historial" },
       { label: "Trazabilidad", to: "/seguimiento/trazabilidad" },
     ],
+  },
+  {
+    key: "filial",
+    label: "Filial",
+    icon: Building2,
+    items: [{ label: "Recepciones pendientes", to: "/filial/recepciones", permission: "canReceiveShipment" }],
   },
   {
     key: "catalogos",
@@ -137,9 +144,9 @@ function active(to) {
 <template>
   <aside class="sidebar" :class="{ open: ui.mobileOpen }">
     <div class="sidebar-brand">
-      <div class="brand-mark"><ShieldCheck :size="22" /></div>
+      <div class="brand-mark"><img :src="logo" alt="LogiTrack" /></div>
       <div class="brand-copy">
-        <strong>ADR Envíos</strong><span>Gestión tecnológica</span>
+        <strong>LogiTrack</strong><span>Gestión tecnológica</span>
       </div>
       <button class="icon-btn mobile-only" @click="ui.mobileOpen = false">
         <X :size="20" />
@@ -185,7 +192,7 @@ function active(to) {
       >
     </nav>
     <div class="sidebar-footer">
-      <BarChart3 :size="17" /><span>Operación ADR · 2026</span>
+      <BarChart3 :size="17" /><span>LogiTrack · 2026</span>
     </div>
   </aside>
 </template>

@@ -1,0 +1,161 @@
+.transport-dashboard {
+  max-width: 1500px;
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Cada fila es una secuencia real de una dirección del flujo, así que la línea que une
+   las tarjetas sí representa un recorrido. */
+.transport-stage-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+  position: relative;
+}
+.transport-stage-grid:before {
+  content: "";
+  position: absolute;
+  top: 70px;
+  left: 12%;
+  right: 12%;
+  height: 3px;
+  background: #cddbe2;
+}
+
+.transport-stage-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-height: 116px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  padding: 13px;
+  text-align: left;
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 3px 9px;
+  align-items: center;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+.transport-stage-card:hover {
+  border-color: #9ab2be;
+}
+.transport-stage-card.active {
+  border-color: var(--primary);
+  background: #f2f6f8;
+}
+.transport-stage-card svg {
+  grid-row: span 2;
+  padding: 8px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #eef2f4;
+  color: var(--muted);
+}
+.transport-stage-card.active svg {
+  background: #dbe7ec;
+  color: var(--primary);
+}
+.transport-stage-card span {
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.2;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  color: var(--ink);
+}
+.transport-stage-card strong {
+  font-size: 20px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.transport-stage-card small {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.transport-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.transport-mini-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: var(--shadow);
+  padding: 14px;
+  min-height: 140px;
+}
+.transport-mini-card h4 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--ink);
+}
+.mini-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+  border-bottom: 1px solid #eef1f3;
+  padding: 5px 0;
+  color: var(--ink);
+}
+.mini-row:last-of-type {
+  border-bottom: 0;
+}
+.mini-row small,
+.transport-mini-card p {
+  color: var(--muted);
+  font-size: 10px;
+}
+.transport-mini-card p {
+  margin: 0;
+}
+
+.pending-alert {
+  background: #fbeceb;
+  color: #9e4039;
+  padding: 9px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+.transport-open-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: auto;
+  background: var(--primary);
+  color: #fff;
+  border-radius: 7px;
+  padding: 10px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 11px;
+  text-decoration: none;
+}
+.transport-open-button:hover {
+  background: var(--primary-hover);
+}
+
+@media (max-width: 900px) {
+  .transport-stage-grid {
+    grid-template-columns: 1fr;
+  }
+  .transport-stage-grid:before {
+    display: none;
+  }
+  .transport-mini-grid {
+    grid-template-columns: 1fr;
+  }
+}

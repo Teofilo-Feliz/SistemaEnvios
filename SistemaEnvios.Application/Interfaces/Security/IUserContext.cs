@@ -9,6 +9,7 @@ public interface IUserContext
     string? Name { get; }
     string? Position { get; }
     string? Affiliate { get; }
+    int? AffiliateId { get; }
     IReadOnlyCollection<string> Roles { get; }
     IReadOnlyCollection<string> Permissions { get; }
 }

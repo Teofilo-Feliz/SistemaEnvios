@@ -34,7 +34,8 @@ public sealed class ControllerSecurityTests
             foreach (var action in actions)
             {
                 if (controllerType.GetCustomAttribute<AllowAnonymousAttribute>() is not null ||
-                    action.GetCustomAttribute<AllowAnonymousAttribute>() is not null)
+                    action.GetCustomAttribute<AllowAnonymousAttribute>() is not null ||
+                    action.GetCustomAttribute<AutenticacionSuficienteAttribute>() is not null)
                     continue;
 
                 var policies = controllerPolicies
@@ -46,6 +47,24 @@ public sealed class ControllerSecurityTests
                 Assert.All(policies, policy => Assert.Contains(policy!, DefinedPermissions));
             }
         }
+    }
+
+    /// <summary>
+    /// La excepción a "toda acción exige una política" tiene que seguir siendo una lista corta
+    /// y decidida a mano. Si aparece otra acción marcada, esta prueba obliga a justificarla.
+    /// </summary>
+    [Fact]
+    public void SoloElPerfilOmiteLaPolitica()
+    {
+        var marcadas = typeof(EnviosController).Assembly.GetTypes()
+            .Where(x => !x.IsAbstract && typeof(ControllerBase).IsAssignableFrom(x))
+            .SelectMany(x => x.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly))
+            .Where(x => x.GetCustomAttribute<AutenticacionSuficienteAttribute>() is not null)
+            .Select(x => $"{x.DeclaringType!.Name}.{x.Name}")
+            .OrderBy(x => x, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(["PerfilController.Obtener"], marcadas);
     }
 
     [Fact]

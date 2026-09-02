@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { ArrowLeft, Save } from "lucide-vue-next";
 import PageHeader from "@/components/common/PageHeader.vue";
@@ -18,7 +18,10 @@ const router = useRouter(),
   saving = ref(false),
   shipments = ref([]),
   transportTypes = ref([]),
-  drivers = ref([]);
+  drivers = ref([]), shipmentStates = ref({});
+const selectedShipment = computed(() => shipments.value.find(x => x.envioId === Number(form.shipmentId)));
+// Desde esta bandeja Transportación siempre asigna un vehículo institucional.
+const availableTransportTypes = computed(() => transportTypes.value.filter(x => isInternalTransport(x.estrategia)));
 const errors = reactive({
   shipment: "",
   transportType: "",
@@ -45,15 +48,29 @@ async function load() {
       catalogoService.transportTypes(),
       catalogoService.internalDrivers(),
     ]);
-    shipments.value = e.data || [];
+    const all = e.data || [];
+    const states = await catalogoService.states();
+    const byId = Object.fromEntries((states.data || []).map(x => [x.estadoEnvioId, x.codigo]));
+    shipmentStates.value = byId;
+    // Esta pantalla solo recibe envíos entregados por Tecnología que aún no tienen transporte.
+    shipments.value = all.filter(x => byId[x.estadoEnvioId] === "EN_TRANSPORTACION" && !x.tipoTransporteId);
     transportTypes.value = t.data || [];
     drivers.value = d.data || [];
+    const internal = transportTypes.value.find(x => isInternalTransport(x.estrategia));
+    if (internal) form.transportTypeId = internal.tipoTransporteId;
   } catch (e) {
     ui.notify(e.userMessage || "No fue posible cargar los catálogos.", "error");
   } finally {
     loading.value = false;
   }
 }
+watch(() => form.shipmentId, () => {
+  if (selectedShipment.value && shipmentStates.value[selectedShipment.value.estadoEnvioId] === "EN_TRANSPORTACION") {
+    const internal = transportTypes.value.find(x => isInternalTransport(x.estrategia));
+    if (internal) form.transportTypeId = internal.tipoTransporteId;
+    form.privateName = form.relationship = form.privateId = form.vehiclePlate = "";
+  }
+});
 async function save() {
   const selected = transportTypes.value.find(
     (x) => x.tipoTransporteId === Number(form.transportTypeId),
@@ -109,8 +126,8 @@ onMounted(load);
 <template>
   <div class="shipment-create-page">
     <PageHeader
-      title="Registrar transporte"
-      subtitle="Asocia el medio de traslado a un envío"
+      title="Asignar transporte"
+      subtitle="Asigna el chofer al envío entregado por Tecnología"
       ><button
         class="btn btn-secondary"
         @click="router.push('/transportacion')"
@@ -145,7 +162,7 @@ onMounted(load);
         ><ShipmentSection title="Datos de transporte"
           ><ShipmentTransportSection
             :form="form"
-            :transport-types="transportTypes"
+            :transport-types="availableTransportTypes"
             :drivers="drivers"
             :errors="errors"
         /></ShipmentSection>

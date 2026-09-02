@@ -13,6 +13,7 @@ public sealed class HttpUserContext(IHttpContextAccessor accessor) : IUserContex
     public string? Name => User.FindFirstValue("name");
     public string? Position => User.FindFirstValue("position");
     public string? Affiliate => User.FindFirstValue("affiliate");
+    public int? AffiliateId => int.TryParse(Affiliate?.Split(',', 2)[0].Trim(), out var id) ? id : null;
     public IReadOnlyCollection<string> Roles => GetValues("roles");
     public IReadOnlyCollection<string> Permissions => GetValues("permissions");
 

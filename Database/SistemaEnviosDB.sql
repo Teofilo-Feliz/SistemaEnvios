@@ -1,5 +1,5 @@
 /*
-    Sistema de Envíos ADR
+    Sistema de Envíos REH
     Esquema oficial alineado con el modelo EF Core.
     SQL Server 2019 o superior.
 
@@ -32,6 +32,8 @@ CREATE TABLE dbo.Ubicaciones
     UbicacionId INT IDENTITY(1,1) NOT NULL,
     Nombre NVARCHAR(150) NOT NULL,
     CodigoCentro NVARCHAR(50) NOT NULL,
+    -- Id de la filial en AuthManager (claim "affiliate"). NULL en ubicaciones que no son filial.
+    FilialExternaId INT NULL,
     Tipo TINYINT NOT NULL,
     Activo BIT NOT NULL CONSTRAINT DF_Ubicaciones_Activo DEFAULT (1),
     FechaCreacion DATETIME2(7) NOT NULL CONSTRAINT DF_Ubicaciones_FechaCreacion DEFAULT (SYSUTCDATETIME()),
@@ -41,6 +43,29 @@ CREATE TABLE dbo.Ubicaciones
     CONSTRAINT PK_Ubicaciones PRIMARY KEY (UbicacionId),
     CONSTRAINT UQ_Ubicaciones_CodigoCentro UNIQUE (CodigoCentro),
     CONSTRAINT CK_Ubicacion_Tipo CHECK (Tipo IN (1, 2))
+);
+GO
+
+CREATE UNIQUE INDEX UX_Ubicaciones_FilialExternaId
+    ON dbo.Ubicaciones(FilialExternaId)
+    WHERE FilialExternaId IS NOT NULL;
+GO
+
+-- Acceso por posicion de AuthManager. Ver Database/Migrations/20260902_AccesoPorPosicion.sql
+CREATE TABLE dbo.PerfilesPorPosicion
+(
+    Posicion NVARCHAR(150) NOT NULL,
+    Perfil   TINYINT       NOT NULL,
+    CONSTRAINT PK_PerfilesPorPosicion PRIMARY KEY (Posicion),
+    CONSTRAINT CK_PerfilPosicion_Perfil CHECK (Perfil IN (1, 2, 3))
+);
+GO
+
+CREATE TABLE dbo.PermisosPorPosicion
+(
+    Posicion NVARCHAR(150) NOT NULL,
+    Permiso  NVARCHAR(50)  NOT NULL,
+    CONSTRAINT PK_PermisosPorPosicion PRIMARY KEY (Posicion, Permiso)
 );
 GO
 
@@ -434,6 +459,9 @@ VALUES
     (N'INCIDENCIA_TRANSPORTACION', N'Incidencia en transportación', N'El traslado presenta una incidencia pendiente.', 0, 1),
     (N'PREPARACION_TECNOLOGIA', N'En preparación por Tecnología', N'Tecnología prepara un nuevo envío hacia una filial.', 0, 1),
     (N'DESPACHADO_TECNOLOGIA', N'Despachado por Tecnología', N'Tecnología entregó el envío para su traslado.', 0, 1),
+    (N'EN_TRANSPORTACION', N'En Transportación', N'El envío fue recibido por el área de Transportación.', 0, 1),
+    (N'TRANSPORTE_ASIGNADO', N'Chofer asignado', N'Transportación asignó el chofer al envío.', 0, 1),
+    (N'DESPACHADO_TRANSPORTACION', N'Despachado por Transportación', N'Transportación despachó el envío hacia la filial.', 0, 1),
     (N'PENDIENTE_RECEPCION_FILIAL', N'Pendiente de recepción en filial', N'El envío espera recepción en la filial destino.', 0, 1),
     (N'RECIBIDO_FILIAL', N'Recibido en filial', N'La filial recibió físicamente el envío.', 0, 1),
     (N'RECEPCION_VALIDADA_FILIAL', N'Recepción validada en filial', N'La filial verificó y cerró la recepción.', 1, 1);
@@ -458,7 +486,10 @@ FROM
         (N'ESPERA_TECNOLOGIA', N'EN_REVISION'),
         (N'EN_REVISION', N'RECIBIDO_TECNOLOGIA'),
         (N'PREPARACION_TECNOLOGIA', N'DESPACHADO_TECNOLOGIA'),
-        (N'DESPACHADO_TECNOLOGIA', N'EN_TRANSITO'),
+        (N'DESPACHADO_TECNOLOGIA', N'EN_TRANSPORTACION'),
+        (N'EN_TRANSPORTACION', N'TRANSPORTE_ASIGNADO'),
+        (N'TRANSPORTE_ASIGNADO', N'DESPACHADO_TRANSPORTACION'),
+        (N'DESPACHADO_TRANSPORTACION', N'EN_TRANSITO'),
         (N'EN_TRANSITO', N'PENDIENTE_RECEPCION_FILIAL'),
         (N'PENDIENTE_RECEPCION_FILIAL', N'RECIBIDO_FILIAL'),
         (N'RECIBIDO_FILIAL', N'RECEPCION_VALIDADA_FILIAL')
@@ -471,13 +502,58 @@ INSERT INTO dbo.TiposTransporte (Codigo, Nombre, Estrategia, Activo)
 VALUES (N'INTERNO', N'Interno', 1, 1), (N'PRIVADO', N'Privado', 2, 1);
 GO
 
--- Catálogos mínimos para que una instalación nueva pueda operar y probar el flujo.
-INSERT INTO dbo.Ubicaciones (Nombre, CodigoCentro, Tipo, Activo)
+-- Ubicaciones reales de ADR: 34 filiales + Tecnologia.
+--
+-- Tipo 2 = Tecnologia, ubicada fisicamente en la Sede Nacional (centro 30 de AuthManager).
+-- Es el destino de todo envio que sale de una filial y el origen de todo envio de retorno.
+--
+-- FilialExternaId es el id de filial que AuthManager emite en el claim "affiliate"
+-- ("30,SANTO DOMINGO (SEDE)"). Solo el 30 esta confirmado; el resto queda NULL a proposito:
+-- un id inventado se veria correcto y acotaria mal los envios. Mientras este NULL, sus
+-- usuarios reciben "La filial N no esta asociada a ninguna ubicacion" en vez de una lista
+-- vacia silenciosa. Completar con Database/Ubicaciones_MapeoAuthManager.sql.
+--
+-- Tecnologia va sin id a proposito: quien trabaja en Tecnologia obtiene alcance Global por
+-- su posicion. Darle el 30 (centro sede) haria que CUALQUIER empleado de la sede con perfil
+-- de filial viera todos los envios, porque todos pasan por Tecnologia.
+INSERT INTO dbo.Ubicaciones (Nombre, CodigoCentro, FilialExternaId, Tipo, Activo)
 VALUES
-    (N'Centro de Tecnología', N'TECNOLOGIA', 2, 1),
-    (N'Filial Principal', N'FILIAL-PRINCIPAL', 1, 1);
+    (N'Tecnología',                    N'TECNOLOGIA',               NULL, 2, 1),
+    (N'Santo Domingo Oeste',           N'SANTO-DOMINGO-OESTE',         4, 1, 1),
+    (N'Santo Domingo Este',            N'SANTO-DOMINGO-ESTE',         16, 1, 1),
+    (N'Guerra',                        N'GUERRA',                     10, 1, 1),
+    (N'San Cristóbal',                 N'SAN-CRISTOBAL',              21, 1, 1),
+    (N'Haina',                         N'HAINA',                      37, 1, 1),
+    (N'Baní',                          N'BANI',                        2, 1, 1),
+    (N'Azua',                          N'AZUA',                        1, 1, 1),
+    (N'San José de Ocoa',              N'SAN-JOSE-DE-OCOA',           23, 1, 1),
+    (N'Rancho Arriba',                 N'RANCHO-ARRIBA',              36, 1, 1),
+    (N'San Juan de la Maguana',        N'SAN-JUAN-DE-LA-MAGUANA',     24, 1, 1),
+    (N'Las Matas de Farfán',           N'LAS-MATAS-DE-FARFAN',        34, 1, 1),
+    (N'Barahona',                      N'BARAHONA',                    3, 1, 1),
+    (N'Bonao',                         N'BONAO',                       5, 1, 1),
+    (N'Maimón',                        N'MAIMON',                     39, 1, 1),
+    (N'La Vega',                       N'LA-VEGA',                    15, 1, 1),
+    (N'Constanza',                     N'CONSTANZA',                   6, 1, 1),
+    (N'Jarabacoa',                     N'JARABACOA',                  13, 1, 1),
+    (N'Santiago',                      N'SANTIAGO',                   27, 1, 1),
+    (N'Puerto Plata',                  N'PUERTO-PLATA',               19, 1, 1),
+    (N'Sosúa',                         N'SOSUA',                      28, 1, 1),
+    (N'Montecristi',                   N'MONTECRISTI',                17, 1, 1),
+    (N'Dajabón',                       N'DAJABON',                     8, 1, 1),
+    (N'Cotuí',                         N'COTUI',                       7, 1, 1),
+    (N'Mao',                           N'MAO',                        29, 1, 1),
+    (N'Salcedo',                       N'SALCEDO',                    20, 1, 1),
+    (N'Nagua',                         N'NAGUA',                      18, 1, 1),
+    (N'Sánchez',                       N'SANCHEZ',                    26, 1, 1),
+    (N'San Francisco de Macorís',      N'SAN-FRANCISCO-DE-MACORIS',   22, 1, 1),
+    (N'Luperón',                       N'LUPERON',                    35, 1, 1),
+    (N'Hato Mayor',                    N'HATO-MAYOR',                 11, 1, 1),
+    (N'El Seibo',                      N'EL-SEIBO',                    9, 1, 1),
+    (N'San Pedro de Macorís',          N'SAN-PEDRO-DE-MACORIS',       25, 1, 1),
+    (N'La Romana',                     N'LA-ROMANA',                  14, 1, 1),
+    (N'Higüey',                        N'HIGUEY',                     12, 1, 1);
 GO
-
 INSERT INTO dbo.TiposEquipo (Nombre, Activo)
 VALUES (N'Laptop', 1), (N'Computadora de escritorio', 1), (N'Monitor', 1), (N'Impresora', 1), (N'Otro', 1);
 GO

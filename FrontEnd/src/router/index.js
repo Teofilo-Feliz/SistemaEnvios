@@ -1,7 +1,14 @@
 import { createRouter, createWebHistory } from "vue-router";
 import AppLayout from "@/layouts/AppLayout.vue";
+import { useAuthStore } from "@/stores/authStore";
+import { userManager } from "@/services/authService";
 const PlaceholderView = () => import("@/views/PlaceholderView.vue");
 const routes = [
+  { path: "/callback", name: "Callback", component: () => import("@/views/auth/OidcCallbackView.vue") },
+  { path: "/silent-renew", name: "SilentRenew", component: () => import("@/views/auth/OidcSilentRenewView.vue") },
+  { path: "/signed-out", name: "SignedOut", component: () => import("@/views/auth/SignedOutView.vue") },
+  { path: "/logout", name: "Logout", component: () => import("@/views/auth/LogoutView.vue") },
+  { path: "/unauthorized", name: "Unauthorized", component: () => import("@/views/auth/UnauthorizedView.vue") },
   {
     path: "/login",
     name: "login",
@@ -37,6 +44,18 @@ const routes = [
         meta: { permission: "envios.consultar" },
       },
       {
+        path: "tecnologia/envios/nuevo",
+        name: "technology-shipment-create",
+        component: () => import("@/views/envios/EnvioCreate.vue"),
+        meta: { permission: "envios.crear" },
+      },
+      {
+        path: "filial/recepciones",
+        name: "filial-receptions",
+        component: () => import("@/views/filial/FilialRecepciones.vue"),
+        meta: { permission: "recepciones.gestionar" },
+      },
+      {
         path: "envios/:id/editar",
         name: "envio-edit",
         component: () => import("@/views/envios/EnvioCreate.vue"),
@@ -53,6 +72,12 @@ const routes = [
         name: "equipo-create",
         component: () => import("@/views/equipos/EquipoCreate.vue"),
         meta: { permission: "equipos.gestionar" },
+      },
+      {
+        path: "equipos/:id",
+        name: "equipo-detail",
+        component: () => import("@/views/equipos/EquipoDetail.vue"),
+        meta: { permission: "envios.consultar" },
       },
       {
         path: "transportacion",
@@ -81,6 +106,20 @@ const routes = [
         component: () =>
           import("@/views/tecnologia/TecnologiaNotificaciones.vue"),
         meta: { permission: "envios.consultar" },
+      },
+      // Una sola pantalla de recepción para las dos direcciones del flujo: el backend ya
+      // distingue por dirección qué estados admiten recibir y verificar.
+      {
+        path: "tecnologia/recepciones/:envioId",
+        name: "tecnologia-reception",
+        component: () => import("@/views/recepciones/RecepcionEnvio.vue"),
+        meta: { permission: "recepciones.gestionar" },
+      },
+      {
+        path: "filial/recepciones/:envioId",
+        name: "filial-reception",
+        component: () => import("@/views/recepciones/RecepcionEnvio.vue"),
+        meta: { permission: "recepciones.gestionar" },
       },
       {
         path: "tecnologia",
@@ -148,17 +187,23 @@ const router = createRouter({
   routes,
   scrollBehavior: () => ({ top: 0 }),
 });
-router.beforeEach((to) => {
+const publicRoutes = ["Callback", "SilentRenew", "Logout", "SignedOut"];
+router.beforeEach(async (to) => {
+  const auth = useAuthStore();
+  if (publicRoutes.includes(to.name)) return true;
+  if (!auth.isAuthenticated) await auth.checkSession();
+  // Los permisos efectivos los resuelve el backend a partir de la posicion: sin el perfil
+  // cargado, auth.can() responderia con los permisos de otra aplicacion que trae el token.
+  if (auth.isAuthenticated && !auth.perfil) await auth.cargarPerfil();
   if (to.name === "login") return true;
-  if (!localStorage.getItem("auth_token")) return { name: "login" };
-  const permission = to.meta.permission;
-  if (!permission) return true;
-  const raw = localStorage.getItem("auth_permissions");
-  if (!raw) return true;
-  try {
-    return JSON.parse(raw).includes(permission) ? true : { name: "dashboard" };
-  } catch {
-    return true;
+  if (!auth.isAuthenticated) {
+    if (userManager) { await auth.forceLogoutAndRedirectToLogin(to.fullPath); return false; }
+    return { name: "login" };
   }
+  if (to.name === "Unauthorized") return true;
+  const permission = to.meta.permission;
+  if (!permission || auth.can(permission)) return true;
+  const first = auth.can("envios.consultar") ? "/dashboard" : auth.can("envios.crear") ? "/tecnologia/envios/nuevo" : auth.can("transportes.gestionar") ? "/transportacion" : auth.can("recepciones.gestionar") ? "/filial/recepciones" : "/unauthorized";
+  return { path: first === to.path ? "/unauthorized" : first };
 });
 export default router;

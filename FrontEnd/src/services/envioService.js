@@ -13,6 +13,8 @@ export const envioService = {
   deliverPrivate: (id, payload = {}) => api.post(`/envios/${id}/entrega-privada`, payload),
   registerTechnologyArrival: (id, payload = {}) => api.post(`/envios/${id}/llegada-tecnologia`, payload),
   confirmTransportArrival: (id, payload = {}) => api.post(`/envios/${id}/confirmar-llegada-transportacion`, payload),
+  dispatchFromTechnology: (id, payload = {}) => api.post(`/envios/${id}/despachar-tecnologia`, payload),
+  registerFilialArrival: (id, payload = {}) => api.post(`/envios/${id}/llegada-filial`, payload),
   equipment: (id) => api.get(`/envio-equipos/por-envio/${id}`),
   ticketAvailable: (ticket, params = {}) => api.get(`/envio-equipos/ticket-disponible/${encodeURIComponent(ticket)}`, { params }),
   addEquipment: (payload) => api.post('/envio-equipos', payload),

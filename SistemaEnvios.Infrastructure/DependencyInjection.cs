@@ -21,8 +21,12 @@ using SistemaEnvios.Application.Validators.Transportes;
 using SistemaEnvios.Application.Validators.Recepciones;
 using SistemaEnvios.Application.Validators.Incidencias;
 using SistemaEnvios.Application.Interfaces.Repositories;
+using SistemaEnvios.Application.Interfaces.Security;
+using SistemaEnvios.Infrastructure.Security;
 using SistemaEnvios.Application.Interfaces.Services;
 using SistemaEnvios.Application.Interfaces.Services.Dashboard;
+using SistemaEnvios.Application.Interfaces.Services.Seguridad;
+using SistemaEnvios.Infrastructure.Services.Seguridad;
 
 namespace SistemaEnvios.Infrastructure;
 
@@ -42,6 +46,7 @@ public static class DependencyInjection
         services.AddScoped<IEnvioEquipoRepository, EnvioEquipoRepository>();
         services.AddScoped<IEnvioService, EnvioService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<IAlcanceEnvios, AlcanceEnvios>();
         services.AddScoped<IEnvioEquipoService, EnvioEquipoService>();
         services.AddScoped<ITransporteService, TransporteService>();
         services.AddScoped<ICatalogoTransporteService, CatalogoTransporteService>();
@@ -55,6 +60,7 @@ public static class DependencyInjection
         services.AddScoped<IUbicacionService, UbicacionService>();
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<INotificacionService, NotificacionService>();
+        services.AddScoped<IPerfilUsuarioService, PerfilUsuarioService>();
         services.AddValidatorsFromAssemblyContaining<CrearEnvioRequestValidator>();
         return services;
     }

@@ -26,8 +26,8 @@ export async function confirmAction({
     cancelButtonText: "Cancelar",
     reverseButtons: true,
     focusCancel: true,
-    confirmButtonColor: "#3267d6",
-    cancelButtonColor: "#68758a",
+    confirmButtonColor: "#3d5f70",
+    cancelButtonColor: "#6b7c87",
   });
   return result.isConfirmed;
 }

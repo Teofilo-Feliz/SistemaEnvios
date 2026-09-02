@@ -1,0 +1,40 @@
+using SistemaEnvios.Application.Common;
+using SistemaEnvios.Domain.Entities;
+
+namespace SistemaEnvios.Application.Interfaces.Security;
+
+/// <summary>Qué subconjunto de envíos le corresponde a un usuario.</summary>
+public enum PerfilAlcance
+{
+    /// <summary>Autenticado pero sin filial ni permisos que le den alcance: no ve nada.</summary>
+    SinAlcance = 0,
+    /// <summary>Rol administrador global, o usuario cuya ubicación es Tecnología.</summary>
+    Global = 1,
+    /// <summary>Ve las etapas que custodia, en todas las filiales, solo del transporte institucional.</summary>
+    Transportacion = 2,
+    /// <summary>Ve los envíos cuyo origen o destino es su filial.</summary>
+    Filial = 3
+}
+
+/// <summary>
+/// Restringe los envíos al alcance del usuario autenticado. Un permiso dice QUÉ puede hacer;
+/// esto dice SOBRE CUÁLES. El claim "affiliate" de AuthManager llega como
+/// "30,SANTO DOMINGO (SEDE)" y se cruza con Ubicacion.FilialExternaId.
+/// </summary>
+public interface IAlcanceEnvios
+{
+    /// <summary>Perfil efectivo del usuario. Requiere consulta porque Tecnología se resuelve por datos.</summary>
+    Task<PerfilAlcance> ResolverPerfilAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Restringe una consulta de envíos al alcance del usuario.</summary>
+    Task<IQueryable<Envio>> FiltrarAsync(IQueryable<Envio> query, CancellationToken cancellationToken = default);
+
+    /// <summary>Verifica que el usuario pueda operar sobre un envío concreto.</summary>
+    Task<Result> VerificarAsync(int envioId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Falla con Conflict si el usuario es de filial y su filial no está mapeada a ninguna
+    /// ubicación, para que el error de configuración no se confunda con "no hay datos".
+    /// </summary>
+    Task<Result> VerificarFilialMapeadaAsync(CancellationToken cancellationToken = default);
+}

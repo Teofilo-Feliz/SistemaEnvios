@@ -5,6 +5,7 @@ using SistemaEnvios.Domain.Constants;
 using SistemaEnvios.Domain.Entities;
 using SistemaEnvios.Domain.Enums;
 using SistemaEnvios.Infrastructure.Persistence;
+using SistemaEnvios.Infrastructure.Security;
 using SistemaEnvios.Infrastructure.Services.Estados;
 using SistemaEnvios.Tests.Security;
 
@@ -15,11 +16,11 @@ public sealed class EstadoEnvioServiceTests
     private static readonly Guid UsuarioId = Guid.Parse("1dd33f3e-f927-48cb-b729-81f04017f65f");
 
     [Fact]
-    public async Task CambiarAConfirmadoPorTransportacion_RequiereServicioEspecializado()
+    public async Task CambiarDeEntregadoATransito_RequiereServicioDeTransporte()
     {
         await using var db = CrearContexto();
-        var origen = CrearEstado(EstadoEnvioCodigos.EnProcesoConfirmacionTransportacion);
-        var destino = CrearEstado(EstadoEnvioCodigos.ConfirmadoPorTransportacion);
+        var origen = CrearEstado(EstadoEnvioCodigos.EntregadoATransportacion);
+        var destino = CrearEstado(EstadoEnvioCodigos.EnTransito);
         var ubicaciones = CrearUbicaciones();
         db.AddRange(origen, destino, ubicaciones.Origen, ubicaciones.Destino);
         await db.SaveChangesAsync();
@@ -144,7 +145,7 @@ public sealed class EstadoEnvioServiceTests
     };
 
     private static EstadoEnvioService CrearServicio(SistemaEnviosDbContext db) =>
-        new(db, new UnitOfWork(db), new FakeUserContext(UsuarioId));
+        new(db, new UnitOfWork(db), FakeUserContext.Global(UsuarioId), new AlcanceEnvios(db, FakeUserContext.Global(UsuarioId)));
 
     private static SistemaEnviosDbContext CrearContexto() => new(
         new DbContextOptionsBuilder<SistemaEnviosDbContext>()

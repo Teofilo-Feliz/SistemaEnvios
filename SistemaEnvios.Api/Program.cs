@@ -1,12 +1,11 @@
-using SistemaEnvios.Infrastructure;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.Authentication;
+using OpenIddict.Validation.AspNetCore;
+using SistemaEnvios.Api.Infrastructure;
 using SistemaEnvios.Api.Security;
 using SistemaEnvios.Application.Interfaces.Security;
-using System.Text.Json.Serialization;
-using System.Text;
-using SistemaEnvios.Api.Infrastructure;
+using SistemaEnvios.Infrastructure;
 using SistemaEnvios.Infrastructure.Persistence;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,42 +25,29 @@ builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("sql-server");
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IUserContext, HttpUserContext>();
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<IClaimsTransformation, PermisosPorPosicionTransformation>();
+builder.Services.AddAuthentication(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme);
+builder.Services.AddOpenIddict()
+    .AddValidation(options =>
     {
-        options.MapInboundClaims = false;
-        if (builder.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("DemoAuth:Enabled"))
-        {
-            options.TokenValidationParameters = new TokenValidationParameters
-            {
-                ValidateIssuerSigningKey = true,
-                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["DemoAuth:SigningKey"]!)),
-                ValidateIssuer = true,
-                ValidIssuer = builder.Configuration["DemoAuth:Issuer"],
-                ValidateAudience = true,
-                ValidAudience = builder.Configuration["DemoAuth:Audience"],
-                RoleClaimType = "roles",
-                NameClaimType = "name"
-            };
-        }
-        else
-        {
-            options.Authority = builder.Configuration["Authentication:Authority"];
-            options.Audience = builder.Configuration["Authentication:Audience"];
-            options.RequireHttpsMetadata = true;
-            options.TokenValidationParameters = new TokenValidationParameters { ValidateIssuer = true, ValidateAudience = true, RoleClaimType = "roles", NameClaimType = "name" };
-        }
+        options.SetIssuer(builder.Configuration["Authentication:Authority"]!);
+        options.UseAspNetCore();
+        options.UseSystemNetHttp();
     });
 builder.Services.AddApplicationAuthorization();
-builder.Services.AddCors(options =>
+// Sin orígenes la política se registra vacía y el navegador rechaza cada llamada, pero el
+// arranque parece exitoso: el fallo aparece recién el día del despliegue. Mejor no arrancar.
+var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+if (corsOrigins.Length == 0)
 {
+    throw new InvalidOperationException(
+        "Debe configurar 'Cors:AllowedOrigins' con los orígenes del frontend. " +
+        "Sin ellos la API responde pero el navegador bloquea todas las peticiones.");
+}
+builder.Services.AddCors(options =>
     options.AddPolicy("Frontend", policy =>
-    {
-        var origins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
-        if (origins.Length > 0)
-            policy.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod();
-    });
-});
+        policy.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod()));
 builder.Services.AddInfrastructure(builder.Configuration);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();

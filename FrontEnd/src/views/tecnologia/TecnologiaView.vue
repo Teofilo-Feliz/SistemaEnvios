@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import { RouterLink, useRouter } from "vue-router";
-import { Bell, CheckCircle2, CircleDashed, RefreshCw } from "lucide-vue-next";
+import { Bell, CheckCircle2, CircleDashed, ClipboardCheck, RefreshCw } from "lucide-vue-next";
 import PageHeader from "@/components/common/PageHeader.vue";
 import StatCard from "@/components/dashboard/StatCard.vue";
 import BaseCard from "@/components/common/BaseCard.vue";
@@ -24,7 +24,10 @@ const columns = [
   { key: "transport", label: "Transporte" },
   { key: "status", label: "Estado" },
 ];
-const waitingId = computed(() => states.value.find((x) => x.codigo === "ESPERA_TECNOLOGIA")?.estadoEnvioId);
+const idDe = (codigo) => states.value.find((x) => x.codigo === codigo)?.estadoEnvioId;
+// El flujo interno llega hasta RECIBIDO_TRANSPORTACION y desde ahí Tecnología hace la
+// recepción. El privado no pasa por Transportación y conserva ESPERA_TECNOLOGIA → EN_REVISION.
+const waitingId = computed(() => idDe("ESPERA_TECNOLOGIA"));
 const queue = computed(() => shipments.value.filter((x) => x.estadoEnvioId === waitingId.value).map((x) => ({
   id: x.envioId,
   number: x.numeroEnvio,
@@ -33,8 +36,33 @@ const queue = computed(() => shipments.value.filter((x) => x.estadoEnvioId === w
   canConfirm: true,
   confirmTitle: "Recibir equipos",
 })));
+// Listos para verificar equipo por equipo y cerrar en Recibido o Recibido con incidencia.
+const listosParaVerificar = computed(() => {
+  const codigos = [idDe("RECIBIDO_TRANSPORTACION"), idDe("EN_REVISION")].filter(Boolean);
+  return shipments.value
+    .filter((x) => codigos.includes(x.estadoEnvioId))
+    .map((x) => ({
+      id: x.envioId,
+      number: x.numeroEnvio,
+      transport: x.nombreTipoTransporte || "Sin indicar",
+      description: x.observaciones || "Sin descripción",
+      status: x.estadoEnvioId === idDe("EN_REVISION") ? "EN_REVISION" : "RECIBIDO_TRANSPORTACION",
+      canConfirm: true,
+      confirmTitle: "Verificar equipos y completar recepción",
+    }));
+});
+const inReview = listosParaVerificar;
+// El ojito significa "ver detalle del envío" en toda la aplicación; la acción propia de
+// esta tabla va en el botón de confirmar, igual que en la cola de retiro.
+const reviewColumns = [
+  { key: "number", label: "Envío" },
+  { key: "description", label: "Descripción" },
+  { key: "transport", label: "Transporte" },
+  { key: "status", label: "Estado" },
+];
 const stats = computed(() => [
   { title: "Esperando Tecnología", value: queue.value.length, icon: CircleDashed, tone: "blue" },
+  { title: "Pendientes de verificar", value: inReview.value.length, icon: ClipboardCheck, tone: "amber" },
   { title: "Disponibles para retirar", value: queue.value.length, icon: CheckCircle2, tone: "green" },
 ]);
 
@@ -95,6 +123,15 @@ onMounted(load);
     <div class="module-stats"><StatCard v-for="item in stats" :key="item.title" v-bind="item" /></div>
     <BaseCard title="Envíos disponibles para retirar de Transportación" :padded="false">
       <BaseTable :columns="columns" :rows="queue" :loading="loading" @confirm="receiveShipment" @view="(row) => router.push(`/envios/${row.id}`)" />
+    </BaseCard>
+    <BaseCard title="Listos para verificar equipos" :padded="false">
+      <BaseTable
+        :columns="reviewColumns"
+        :rows="inReview"
+        :loading="loading"
+        @confirm="(row) => router.push(`/tecnologia/recepciones/${row.id}`)"
+        @view="(row) => router.push(`/envios/${row.id}`)"
+      />
     </BaseCard>
   </div>
 </template>

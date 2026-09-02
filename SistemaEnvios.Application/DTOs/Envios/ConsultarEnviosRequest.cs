@@ -8,5 +8,7 @@ public sealed class ConsultarEnviosRequest
     public int? TipoTransporteId { get; init; }
     public int? UbicacionOrigenId { get; init; }
     public int? UbicacionDestinoId { get; init; }
+    /// <summary>Envíos que tocan esta ubicación en cualquiera de los dos extremos.</summary>
+    public int? UbicacionId { get; init; }
     public int? Direccion { get; init; }
 }

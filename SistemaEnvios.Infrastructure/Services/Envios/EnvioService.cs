@@ -18,7 +18,8 @@ public sealed class EnvioService(
     IUnitOfWork unitOfWork,
     IValidator<CrearEnvioRequest> validator,
     IValidator<ActualizarEnvioRequest> actualizarValidator,
-    IUserContext userContext) : IEnvioService
+    IUserContext userContext,
+    IAlcanceEnvios alcance) : IEnvioService
 {
     public async Task<Result<EnvioResponse>> CrearConEquiposAsync(CrearEnvioConEquiposRequest request, CancellationToken cancellationToken = default)
     {
@@ -29,32 +30,90 @@ public sealed class EnvioService(
             return Result<EnvioResponse>.Failure("Los tickets deben ser numéricos, tener entre 3 y 50 dígitos y no repetirse.", ErrorType.Validation);
         if (userContext.UserId is not Guid usuarioId)
             return Result<EnvioResponse>.Failure("No fue posible identificar al usuario autenticado.", ErrorType.Unauthorized);
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var envioResult = await CrearAsync(new CrearEnvioRequest { UbicacionOrigenId = request.UbicacionOrigenId, UbicacionDestinoId = request.UbicacionDestinoId, Observaciones = request.Observaciones }, cancellationToken);
-        if (envioResult.IsFailure) return envioResult;
+        // Todo se arma en memoria y se guarda con un único SaveChanges, que ya es atómico.
+        // Antes eran dos: el envío se guardaba primero y los equipos después, así que un fallo
+        // en el segundo paso dejaba un envío vacío, y un reintento por error transitorio de SQL
+        // volvía a ejecutar la creación sobre un contexto que aún seguía a la entidad anterior,
+        // duplicando el envío.
+        var envioResult = await ConstruirEnvioAsync(
+            new CrearEnvioRequest
+            {
+                UbicacionOrigenId = request.UbicacionOrigenId,
+                UbicacionDestinoId = request.UbicacionDestinoId,
+                Observaciones = request.Observaciones,
+            },
+            usuarioId, cancellationToken);
+        if (envioResult.IsFailure)
+            return Result<EnvioResponse>.Failure(envioResult.Error!, envioResult.ErrorType);
+
+        var envio = envioResult.Value!;
+        var fechaAsociacion = DateTime.UtcNow;
         foreach (var item in request.Equipos)
         {
             var equipo = await db.Equipos.FindAsync([item.EquipoId], cancellationToken);
             if (equipo is null || equipo.UbicacionActualId != request.UbicacionOrigenId)
                 return Result<EnvioResponse>.Failure("Uno de los equipos no existe o no está en el origen.", ErrorType.Conflict);
-            if (await db.EnvioEquipos.AnyAsync(x => x.NumeroTicket == item.NumeroTicket.Trim(), cancellationToken) || await db.ReservasEquipoEnvio.AnyAsync(x => x.EquipoId == item.EquipoId, cancellationToken))
+            if (await db.EnvioEquipos.AnyAsync(x => x.NumeroTicket == item.NumeroTicket.Trim(), cancellationToken) ||
+                await db.ReservasEquipoEnvio.AnyAsync(x => x.EquipoId == item.EquipoId, cancellationToken))
                 return Result<EnvioResponse>.Failure($"El ticket {item.NumeroTicket} o el equipo ya pertenece a otro envío.", ErrorType.Conflict);
-            db.EnvioEquipos.Add(new Domain.Entities.EnvioEquipo { EnvioId = envioResult.Value!.EnvioId, EquipoId = item.EquipoId, NumeroTicket = item.NumeroTicket.Trim(), Observaciones = item.Observaciones?.Trim() ?? "Equipo asociado al envío.", UsuarioSolicitanteId = usuarioId, FechaCreacion = DateTime.UtcNow, UsuarioCreacionId = usuarioId });
-            db.ReservasEquipoEnvio.Add(new Domain.Entities.ReservaEquipoEnvio { EquipoId = item.EquipoId, EnvioId = envioResult.Value.EnvioId, FechaReserva = DateTime.UtcNow, UsuarioId = usuarioId });
+
+            db.EnvioEquipos.Add(new EnvioEquipo
+            {
+                Envio = envio,
+                EquipoId = item.EquipoId,
+                NumeroTicket = item.NumeroTicket.Trim(),
+                Observaciones = item.Observaciones?.Trim() ?? "Equipo asociado al envío.",
+                UsuarioSolicitanteId = usuarioId,
+                FechaCreacion = fechaAsociacion,
+                UsuarioCreacionId = usuarioId,
+            });
+            db.ReservasEquipoEnvio.Add(new ReservaEquipoEnvio
+            {
+                EquipoId = item.EquipoId,
+                Envio = envio,
+                FechaReserva = fechaAsociacion,
+                UsuarioId = usuarioId,
+            });
         }
-        try { await unitOfWork.SaveChangesAsync(cancellationToken); await transaction.CommitAsync(cancellationToken); return envioResult; }
-        catch (DbUpdateException) { await transaction.RollbackAsync(cancellationToken); return Result<EnvioResponse>.Failure("No fue posible asociar los equipos; el envío no se creó.", ErrorType.Conflict); }
+
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            return Result<EnvioResponse>.Failure(
+                "No fue posible asociar los equipos; el envío no se creó.", ErrorType.Conflict);
+        }
+        return Result<EnvioResponse>.Success(ToResponse(envio));
     }
     public async Task<Result<EnvioResponse>> CrearAsync(
         CrearEnvioRequest request,
         CancellationToken cancellationToken = default)
     {
-        var validation = await validator.ValidateAsync(request, cancellationToken);
-        if (!validation.IsValid)
-            return Result<EnvioResponse>.Failure(validation.ToErrorMessage(), ErrorType.Validation);
-
         if (userContext.UserId is not Guid usuarioId)
             return Result<EnvioResponse>.Failure("No fue posible identificar al usuario autenticado.", ErrorType.Unauthorized);
+
+        var construido = await ConstruirEnvioAsync(request, usuarioId, cancellationToken);
+        if (construido.IsFailure)
+            return Result<EnvioResponse>.Failure(construido.Error!, construido.ErrorType);
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result<EnvioResponse>.Success(ToResponse(construido.Value!));
+    }
+
+    /// <summary>
+    /// Deja el envío y su primer registro de historial en el contexto, sin guardar. Quien llama
+    /// decide cuándo persistir, para que crear un envío con equipos sea un solo SaveChanges.
+    /// </summary>
+    private async Task<Result<Envio>> ConstruirEnvioAsync(
+        CrearEnvioRequest request,
+        Guid usuarioId,
+        CancellationToken cancellationToken)
+    {
+        var validation = await validator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+            return Result<Envio>.Failure(validation.ToErrorMessage(), ErrorType.Validation);
 
         var ubicaciones = await db.Ubicaciones
             .Where(x => (x.UbicacionId == request.UbicacionOrigenId ||
@@ -62,16 +121,28 @@ public sealed class EnvioService(
             .ToDictionaryAsync(x => x.UbicacionId, cancellationToken);
 
         if (ubicaciones.Count != 2)
-            return Result<EnvioResponse>.Failure("La ubicación de origen o destino no existe o está inactiva.", ErrorType.Validation);
+            return Result<Envio>.Failure("La ubicación de origen o destino no existe o está inactiva.", ErrorType.Validation);
 
         var origen = ubicaciones[request.UbicacionOrigenId];
         var destino = ubicaciones[request.UbicacionDestinoId];
         var direccionResult = DeterminarDireccion(origen, destino);
 
         if (direccionResult.IsFailure)
-            return Result<EnvioResponse>.Failure(direccionResult.Error!, direccionResult.ErrorType);
+            return Result<Envio>.Failure(direccionResult.Error!, direccionResult.ErrorType);
 
         var direccion = direccionResult.Value;
+
+        // Un usuario de filial solo crea envíos de su propia filial. Sin esto podría registrar
+        // uno a nombre de otra y después ni verlo, porque el alcance de lectura sí filtra.
+        if (await alcance.ResolverPerfilAsync(cancellationToken) == PerfilAlcance.Filial)
+        {
+            var filialDelEnvio = direccion == DireccionEnvioEnum.HaciaTecnologia ? origen : destino;
+            if (filialDelEnvio.FilialExternaId != userContext.AffiliateId)
+                return Result<Envio>.Failure(
+                    $"Solo puede registrar envíos de su filial ({filialDelEnvio.Nombre} no le corresponde).",
+                    ErrorType.Forbidden);
+        }
+
         var codigoInicial = direccion == DireccionEnvioEnum.HaciaTecnologia
             ? EstadoEnvioCodigos.EnFilial
             : EstadoEnvioCodigos.EnPreparacionTecnologia;
@@ -80,7 +151,7 @@ public sealed class EnvioService(
             cancellationToken);
 
         if (estadoInicial is null)
-            return Result<EnvioResponse>.Failure("El estado inicial del flujo no se encuentra configurado.", ErrorType.Conflict);
+            return Result<Envio>.Failure("El estado inicial del flujo no se encuentra configurado.", ErrorType.Conflict);
 
         var fechaActual = DateTime.UtcNow;
         var envio = new Envio
@@ -109,24 +180,32 @@ public sealed class EnvioService(
             UsuarioCreacionId = usuarioId
         });
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result<EnvioResponse>.Success(ToResponse(envio));
+        return Result<Envio>.Success(envio);
     }
 
     public async Task<Result<EnvioResponse>> ObtenerAsync(
         int envioId,
         CancellationToken cancellationToken = default)
     {
-        var envio = await envios.GetByIdAsync(envioId, cancellationToken);
-        return envio is null
-            ? Result<EnvioResponse>.Failure("El envío no existe.", ErrorType.NotFound)
-            : Result<EnvioResponse>.Success(ToResponse(envio));
+        var envio = await db.Envios.Include(x => x.UbicacionOrigen).Include(x => x.UbicacionDestino).Include(x => x.Transporte!).ThenInclude(x => x.TipoTransporte).FirstOrDefaultAsync(x => x.EnvioId == envioId, cancellationToken);
+        if (envio is null)
+            return Result<EnvioResponse>.Failure("El envío no existe.", ErrorType.NotFound);
+
+        var permitido = await alcance.VerificarAsync(envioId, cancellationToken);
+        if (permitido.IsFailure)
+            return Result<EnvioResponse>.Failure(permitido.Error!, permitido.ErrorType);
+
+        return Result<EnvioResponse>.Success(ToResponse(envio));
     }
 
     public async Task<Result<IReadOnlyCollection<EnvioResponse>>> ListarAsync(
         CancellationToken cancellationToken = default)
     {
-        var resultado = await db.Envios
+        var mapeada = await alcance.VerificarFilialMapeadaAsync(cancellationToken);
+        if (mapeada.IsFailure)
+            return Result<IReadOnlyCollection<EnvioResponse>>.Failure(mapeada.Error!, mapeada.ErrorType);
+
+        var resultado = await (await alcance.FiltrarAsync(db.Envios, cancellationToken))
             .AsNoTracking()
             .OrderByDescending(x => x.FechaCreacion)
             .Select(x => new EnvioResponse(
@@ -148,13 +227,18 @@ public sealed class EnvioService(
 
     public async Task<Result<PaginaEnviosResponse>> ConsultarAsync(ConsultarEnviosRequest request, CancellationToken cancellationToken = default)
     {
+        var mapeada = await alcance.VerificarFilialMapeadaAsync(cancellationToken);
+        if (mapeada.IsFailure)
+            return Result<PaginaEnviosResponse>.Failure(mapeada.Error!, mapeada.ErrorType);
+
         var page = Math.Max(1, request.Page); var pageSize = Math.Clamp(request.PageSize, 1, 100);
-        var query = db.Envios.AsNoTracking().AsQueryable();
+        var query = await alcance.FiltrarAsync(db.Envios.AsNoTracking(), cancellationToken);
         if (!string.IsNullOrWhiteSpace(request.Search)) { var term = request.Search.Trim(); query = query.Where(x => x.NumeroEnvio.Contains(term) || (x.Observaciones != null && x.Observaciones.Contains(term))); }
         if (request.EstadoEnvioId.HasValue) query = query.Where(x => x.EstadoEnvioId == request.EstadoEnvioId);
         if (request.TipoTransporteId.HasValue) query = query.Where(x => x.Transporte != null && x.Transporte.TipoTransporteId == request.TipoTransporteId);
         if (request.UbicacionOrigenId.HasValue) query = query.Where(x => x.UbicacionOrigenId == request.UbicacionOrigenId);
         if (request.UbicacionDestinoId.HasValue) query = query.Where(x => x.UbicacionDestinoId == request.UbicacionDestinoId);
+        if (request.UbicacionId.HasValue) query = query.Where(x => x.UbicacionOrigenId == request.UbicacionId || x.UbicacionDestinoId == request.UbicacionId);
         if (request.Direccion is 1 or 2) query = query.Where(x => (int)x.Direccion == request.Direccion);
         var total = await query.CountAsync(cancellationToken);
         var items = await query.OrderByDescending(x => x.FechaCreacion).ThenByDescending(x => x.EnvioId).Skip((page - 1) * pageSize).Take(pageSize)
@@ -179,16 +263,20 @@ public sealed class EnvioService(
         if (!EsEstadoEditable(envio.EstadoEnvio.Codigo))
             return Result.Failure("El envío ya fue despachado y no admite modificaciones.", ErrorType.Conflict);
 
+        // Se traen también las ubicaciones actuales del envío: sin ellas el historial diría
+        // "Origen: #4 → Azua" en vez de nombrar de dónde venía.
+        int[] involucradas = [
+            request.UbicacionOrigenId, request.UbicacionDestinoId,
+            envio.UbicacionOrigenId, envio.UbicacionDestinoId];
         var ubicaciones = await db.Ubicaciones
-            .Where(x => (x.UbicacionId == request.UbicacionOrigenId ||
-                         x.UbicacionId == request.UbicacionDestinoId) && x.Activo)
+            .Where(x => involucradas.Contains(x.UbicacionId))
             .ToDictionaryAsync(x => x.UbicacionId, cancellationToken);
-        if (ubicaciones.Count != 2)
+
+        if (!ubicaciones.TryGetValue(request.UbicacionOrigenId, out var nuevoOrigen) || !nuevoOrigen.Activo ||
+            !ubicaciones.TryGetValue(request.UbicacionDestinoId, out var nuevoDestino) || !nuevoDestino.Activo)
             return Result.Failure("La ubicación de origen o destino no existe o está inactiva.", ErrorType.Validation);
 
-        var direccionResult = DeterminarDireccion(
-            ubicaciones[request.UbicacionOrigenId],
-            ubicaciones[request.UbicacionDestinoId]);
+        var direccionResult = DeterminarDireccion(nuevoOrigen, nuevoDestino);
         if (direccionResult.IsFailure)
             return Result.Failure(direccionResult.Error!, direccionResult.ErrorType);
 
@@ -212,16 +300,20 @@ public sealed class EnvioService(
                 ErrorType.Conflict);
 
         var fecha = DateTime.UtcNow;
-        var cambioFlujo = envio.Direccion != direccionResult.Value || envio.EstadoEnvioId != estadoInicial.EstadoEnvioId;
+        var observacionesNuevas = NormalizarOpcional(request.Observaciones);
+        // El detalle del cambio se arma antes de mutar el envío: después ya no hay con qué
+        // comparar, y un historial que solo diga "se editó" no sirve para auditar nada.
+        var cambios = DescribirCambios(envio, request, observacionesNuevas, ubicaciones);
+
         envio.UbicacionOrigenId = request.UbicacionOrigenId;
         envio.UbicacionDestinoId = request.UbicacionDestinoId;
         envio.Direccion = direccionResult.Value;
         envio.EstadoEnvioId = estadoInicial.EstadoEnvioId;
-        envio.Observaciones = NormalizarOpcional(request.Observaciones);
+        envio.Observaciones = observacionesNuevas;
         envio.FechaModificacion = fecha;
         envio.UsuarioModificacionId = usuarioId;
 
-        if (cambioFlujo)
+        if (cambios.Count > 0)
         {
             db.HistorialEstadosEnvio.Add(new HistorialEstadoEnvio
             {
@@ -230,7 +322,7 @@ public sealed class EnvioService(
                 UbicacionId = envio.UbicacionOrigenId,
                 UsuarioId = usuarioId,
                 Fecha = fecha,
-                Observaciones = "Dirección del envío actualizada antes del despacho.",
+                Observaciones = $"Envío editado. {string.Join(" ", cambios)}",
                 FechaCreacion = fecha,
                 UsuarioCreacionId = usuarioId
             });
@@ -277,6 +369,30 @@ public sealed class EnvioService(
     private static string? NormalizarOpcional(string? valor) =>
         string.IsNullOrWhiteSpace(valor) ? null : valor.Trim();
 
+    /// <summary>
+    /// Un envío se puede editar mientras no haya empezado a moverse. Cada dirección tiene su
+    /// estado de partida: la filial prepara en EN_FILIAL y Tecnología en PREPARACION_TECNOLOGIA.
+    /// </summary>
     private static bool EsEstadoEditable(string codigo) =>
-        codigo == EstadoEnvioCodigos.EnFilial;
+        codigo is EstadoEnvioCodigos.EnFilial or EstadoEnvioCodigos.EnPreparacionTecnologia;
+
+    /// <summary>Diferencias legibles entre el envío guardado y lo que llega en la edición.</summary>
+    private static List<string> DescribirCambios(
+        Envio envio,
+        ActualizarEnvioRequest request,
+        string? observacionesNuevas,
+        IReadOnlyDictionary<int, Ubicacion> ubicaciones)
+    {
+        var cambios = new List<string>();
+        var nombre = (int id) => ubicaciones.TryGetValue(id, out var u) ? u.Nombre : $"#{id}";
+
+        if (envio.UbicacionOrigenId != request.UbicacionOrigenId)
+            cambios.Add($"Origen: {nombre(envio.UbicacionOrigenId)} → {nombre(request.UbicacionOrigenId)}.");
+        if (envio.UbicacionDestinoId != request.UbicacionDestinoId)
+            cambios.Add($"Destino: {nombre(envio.UbicacionDestinoId)} → {nombre(request.UbicacionDestinoId)}.");
+        if (!string.Equals(envio.Observaciones, observacionesNuevas, StringComparison.Ordinal))
+            cambios.Add("Observaciones actualizadas.");
+
+        return cambios;
+    }
 }

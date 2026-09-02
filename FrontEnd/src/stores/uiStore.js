@@ -10,7 +10,7 @@ export const useUiStore = defineStore('ui', () => {
   function toggleSidebar() { collapsed.value = !collapsed.value }
   function notify(message, type = 'success') {
     if (type === 'warning' || type === 'error') {
-      Swal.fire({ icon: type === 'warning' ? 'warning' : 'error', title: type === 'warning' ? 'Advertencia' : 'No se pudo completar', text: message, confirmButtonText: 'Entendido', confirmButtonColor: '#3267d6' })
+      Swal.fire({ icon: type === 'warning' ? 'warning' : 'error', title: type === 'warning' ? 'Advertencia' : 'No se pudo completar', text: message, confirmButtonText: 'Entendido', confirmButtonColor: '#3d5f70' })
       return
     }
     const id = Date.now() + Math.random()
