@@ -1,27 +1,26 @@
 <script setup>
 import { onMounted } from 'vue'
-import { LogIn } from 'lucide-vue-next'
+import { useRouter } from 'vue-router'
 import { authService, isOidcConfigured } from '@/services/authService'
 import { useAuthStore } from '@/stores/authStore'
-import logo from '@/assets/img/logitrack.webp'
+
+// Destino del post_logout_redirect_uri. No muestra pantalla propia: limpia la sesión local
+// y manda de vuelta al login de AuthManager, que es donde se inicia sesión de verdad.
+// La pantalla /login solo tiene sentido cuando OIDC no está configurado.
+const router = useRouter()
 const auth = useAuthStore()
-onMounted(() => auth.logoutLocal())
-function login(){if(isOidcConfigured) authService.signinRedirect()}
+
+onMounted(async () => {
+  auth.logoutLocal()
+  if (!isOidcConfigured) return router.replace('/login')
+  try {
+    await authService.signinRedirect()
+  } catch {
+    router.replace('/login')
+  }
+})
 </script>
+
 <template>
-  <main class="login-page">
-    <section class="login-card" aria-labelledby="signed-out-title">
-      <div class="login-brand">
-        <div class="login-brand-mark"><img :src="logo" alt="LogiTrack" /></div>
-        <div>
-          <h1 id="signed-out-title">LogiTrack</h1>
-          <p>Rastreo y gestión de envíos</p>
-        </div>
-      </div>
-      <p class="login-welcome">Tu sesión se cerró correctamente.</p>
-      <button class="login-submit" type="button" :disabled="!isOidcConfigured" @click="login">
-        <LogIn :size="17" />Volver a iniciar sesión
-      </button>
-    </section>
-  </main>
+  <div />
 </template>

@@ -2,6 +2,9 @@
 import { LogIn } from 'lucide-vue-next'
 import { authService, isOidcConfigured } from '@/services/authService'
 import logo from '@/assets/img/logitrack.webp'
+// Sin esta importación la pantalla se dibuja sin estilos: el archivo existe pero ningún
+// otro módulo lo carga.
+import '@/assets/styles/login.css'
 function login(){if(isOidcConfigured) authService.signinRedirect()}
 </script>
 <template>
