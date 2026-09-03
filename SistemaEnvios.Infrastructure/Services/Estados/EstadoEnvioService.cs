@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SistemaEnvios.Application.DTOs.Common;
 using SistemaEnvios.Application.Common;
 using SistemaEnvios.Application.DTOs.Estados;
 using SistemaEnvios.Application.Interfaces.Repositories;
@@ -25,14 +26,18 @@ public sealed class EstadoEnvioService(
         return estado is null ? Result<EstadoEnvioResponse>.Failure("El estado no existe.", ErrorType.NotFound) : Result<EstadoEnvioResponse>.Success(estado);
     }
 
-    public async Task<Result<IReadOnlyCollection<EstadoEnvioResponse>>> ListarAsync(bool soloActivos = true, CancellationToken cancellationToken = default)
+    public async Task<Result<PaginaResponse<EstadoEnvioResponse>>> ListarAsync(ConsultarCatalogoRequest request, CancellationToken cancellationToken = default)
     {
         var query = db.EstadosEnvio.AsNoTracking();
-        if (soloActivos) query = query.Where(x => x.Activo);
-        var estados = await query.OrderBy(x => x.Nombre)
-            .Select(x => new EstadoEnvioResponse(x.EstadoEnvioId, x.Codigo, x.Nombre, x.Descripcion, x.EsFinal, x.Activo))
-            .ToListAsync(cancellationToken);
-        return Result<IReadOnlyCollection<EstadoEnvioResponse>>.Success(estados);
+        if (request.SoloActivos) query = query.Where(x => x.Activo);
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var termino = request.Search.Trim();
+            query = query.Where(x => x.Nombre.Contains(termino) || x.Codigo.Contains(termino));
+        }
+        var pagina = await query.OrderBy(x => x.Nombre).ThenBy(x => x.EstadoEnvioId)
+            .PaginarAsync(request, x => new EstadoEnvioResponse(x.EstadoEnvioId, x.Codigo, x.Nombre, x.Descripcion, x.EsFinal, x.Activo), cancellationToken);
+        return Result<PaginaResponse<EstadoEnvioResponse>>.Success(pagina);
     }
 
     public async Task<Result> CambiarAsync(CambiarEstadoEnvioRequest request, CancellationToken cancellationToken = default)

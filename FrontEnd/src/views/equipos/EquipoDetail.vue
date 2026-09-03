@@ -34,14 +34,14 @@ async function load() {
   loading.value = true;
   error.value = "";
   try {
-    const [{ data: item }, { data: ubicaciones }, { data: tipos }] = await Promise.all([
+    const [{ data: item }, ubicaciones, tipos] = await Promise.all([
       equipoService.get(equipoId),
-      catalogoService.locations(),
-      catalogoService.types(),
+      catalogoService.allLocations(),
+      catalogoService.allTypes(),
     ]);
     equipo.value = item;
-    locations.value = ubicaciones || [];
-    types.value = tipos || [];
+    locations.value = ubicaciones;
+    types.value = tipos;
   } catch (exception) {
     error.value = exception.userMessage || "No fue posible cargar el equipo.";
     ui.notify(error.value, "error");

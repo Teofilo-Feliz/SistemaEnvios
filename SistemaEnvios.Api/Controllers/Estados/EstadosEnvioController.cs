@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using SistemaEnvios.Application.DTOs.Common;
 using Microsoft.AspNetCore.Mvc;
 using SistemaEnvios.Api.Extensions;
 using SistemaEnvios.Application.Interfaces.Services;
@@ -15,9 +16,9 @@ public sealed class EstadosEnvioController(
 {
     [HttpGet]
     public async Task<IActionResult> Listar(
-        [FromQuery] bool soloActivos = true,
+        [FromQuery] ConsultarCatalogoRequest request,
         CancellationToken cancellationToken = default) =>
-        (await estadoService.ListarAsync(soloActivos, cancellationToken)).ToActionResult(this);
+        (await estadoService.ListarAsync(request, cancellationToken)).ToActionResult(this);
 
     [HttpGet("{estadoId:int}")]
     public async Task<IActionResult> Obtener(int estadoId, CancellationToken cancellationToken) =>
@@ -25,9 +26,9 @@ public sealed class EstadosEnvioController(
 
     [HttpGet("transiciones")]
     public async Task<IActionResult> ListarTransiciones(
-        [FromQuery] bool soloActivas = true,
+        [FromQuery] ConsultarCatalogoRequest request,
         CancellationToken cancellationToken = default) =>
-        (await transicionService.ListarAsync(soloActivas, cancellationToken)).ToActionResult(this);
+        (await transicionService.ListarAsync(request, cancellationToken)).ToActionResult(this);
 
     [HttpGet("transiciones/{transicionId:int}")]
     public async Task<IActionResult> ObtenerTransicion(int transicionId, CancellationToken cancellationToken) =>

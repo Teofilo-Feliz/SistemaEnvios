@@ -6,9 +6,9 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// El token se pide al store, que renueva si está vencido. Leerlo directo de localStorage
-// mandaba tokens expirados y provocaba un 401 evitable en cada primera petición.
-let obtenerToken = async () => localStorage.getItem('auth_token')
+// El token se pide al store, que lo tiene en memoria y lo renueva si está vencido. No hay
+// copia en localStorage: era una segunda credencial en disco, y además se enviaba vencida.
+let obtenerToken = async () => null
 export function registrarProveedorDeToken(proveedor) {
   obtenerToken = proveedor
 }
@@ -43,7 +43,6 @@ api.interceptors.response.use(
         return api.request(error.config)
       }
     }
-    if (status === 401) localStorage.removeItem('auth_token')
     return Promise.reject(error)
   },
 )

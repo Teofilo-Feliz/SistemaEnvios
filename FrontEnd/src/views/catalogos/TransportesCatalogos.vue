@@ -1,9 +1,11 @@
 <script setup>
-import { onMounted, reactive, ref } from "vue";
+import { onMounted, reactive, ref, watch } from "vue";
 import { Plus, RefreshCw } from "lucide-vue-next";
 import PageHeader from "@/components/common/PageHeader.vue";
 import BaseCard from "@/components/common/BaseCard.vue";
 import { catalogoService } from "@/services/catalogoService";
+import { aPagina, filas } from "@/services/paginacion";
+import Pagination from "@/components/common/Pagination.vue";
 import { useUiStore } from "@/stores/uiStore";
 import { isInternalTransport } from "@/utils/transport";
 import { confirmAction } from "@/utils/confirm";
@@ -14,17 +16,24 @@ const savingType = ref(false);
 const savingDriver = ref(false);
 const types = ref([]);
 const drivers = ref([]);
+const pageSize = 10;
+const typePage = ref(1);
+const typeTotal = ref(0);
+const driverPage = ref(1);
+const driverTotal = ref(0);
 const typeForm = reactive({ codigo: "", nombre: "", estrategia: 1 });
 const driverForm = reactive({ nombreCompleto: "", numeroEmpleado: "" });
 async function load() {
   loading.value = true;
   try {
     const [t, d] = await Promise.all([
-      catalogoService.transportTypes({ soloActivos: false }),
-      catalogoService.internalDrivers({ soloActivos: false }),
+      catalogoService.transportTypes({ soloActivos: false, page: typePage.value, pageSize }),
+      catalogoService.internalDrivers({ soloActivos: false, page: driverPage.value, pageSize }),
     ]);
-    types.value = t.data || [];
-    drivers.value = d.data || [];
+    types.value = filas(t);
+    typeTotal.value = aPagina(t).totalItems;
+    drivers.value = filas(d);
+    driverTotal.value = aPagina(d).totalItems;
   } catch (e) {
     ui.notify(e.userMessage || "No fue posible cargar los catálogos.", "error");
   } finally {
@@ -90,6 +99,7 @@ async function toggleDriver(x) {
   }
 }
 onMounted(load);
+watch([typePage, driverPage], load);
 </script>
 <template>
   <div>
@@ -142,7 +152,8 @@ onMounted(load);
               {{ item.activo ? "Deshabilitar" : "Habilitar" }}
             </button>
           </article>
-        </div></BaseCard
+        </div>
+        <Pagination :page="typePage" :total="typeTotal" :page-size="pageSize" @update:page="typePage = $event" /></BaseCard
       ><BaseCard title="Choferes internos"
         ><form class="form-grid" @submit.prevent="createDriver">
           <label
@@ -171,7 +182,8 @@ onMounted(load);
               {{ item.activo ? "Deshabilitar" : "Habilitar" }}
             </button>
           </article>
-        </div></BaseCard
+        </div>
+        <Pagination :page="driverPage" :total="driverTotal" :page-size="pageSize" @update:page="driverPage = $event" /></BaseCard
       >
     </div>
   </div>

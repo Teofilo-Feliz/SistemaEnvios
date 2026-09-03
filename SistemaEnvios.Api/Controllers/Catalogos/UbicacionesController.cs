@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using SistemaEnvios.Application.DTOs.Common;
 using Microsoft.AspNetCore.Mvc;
 using SistemaEnvios.Api.Contracts.Catalogos;
 using SistemaEnvios.Api.Extensions;
@@ -15,9 +16,9 @@ public sealed class UbicacionesController(IUbicacionService service) : Controlle
     [HttpGet]
     [Authorize(Policy = PermissionNames.EnviosConsultar)]
     public async Task<IActionResult> Listar(
-        [FromQuery] bool soloActivas = true,
+        [FromQuery] ConsultarCatalogoRequest request,
         CancellationToken cancellationToken = default) =>
-        (await service.ListarAsync(soloActivas, cancellationToken)).ToActionResult(this);
+        (await service.ListarAsync(request, cancellationToken)).ToActionResult(this);
 
     [HttpGet("{ubicacionId:int}")]
     [Authorize(Policy = PermissionNames.EnviosConsultar)]

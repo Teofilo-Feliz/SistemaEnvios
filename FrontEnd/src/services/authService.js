@@ -2,7 +2,11 @@ import { UserManager, WebStorageStateStore } from 'oidc-client-ts'
 
 const authority = import.meta.env.VITE_AUTH_AUTHORITY || ''
 const settings = {
-  userStore: new WebStorageStateStore({ store: window.localStorage }),
+  // sessionStorage y no localStorage: el token muere al cerrar la pestaña y no queda escrito
+  // en disco para el siguiente que use la máquina. El SSO de AuthManager vuelve a emitirlo por
+  // cookie, así que abrir otra pestaña no obliga a escribir credenciales de nuevo.
+  userStore: new WebStorageStateStore({ store: window.sessionStorage }),
+  stateStore: new WebStorageStateStore({ store: window.sessionStorage }),
   authority,
   client_id: import.meta.env.VITE_AUTH_CLIENT_ID || '',
   redirect_uri: `${window.location.origin}/callback`,

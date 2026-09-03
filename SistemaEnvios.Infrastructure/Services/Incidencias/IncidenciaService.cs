@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SistemaEnvios.Application.DTOs.Common;
 using FluentValidation;
 using SistemaEnvios.Application.Common;
 using SistemaEnvios.Application.DTOs.Incidencias;
@@ -106,17 +107,45 @@ public sealed class IncidenciaService : IIncidenciaService
         return incidencia is null ? Result<IncidenciaResponse>.Failure("La incidencia no existe.", ErrorType.NotFound) : Result<IncidenciaResponse>.Success(incidencia);
     }
 
-    public async Task<Result<IReadOnlyCollection<IncidenciaResponse>>> ListarPorEnvioAsync(int envioId, CancellationToken cancellationToken = default)
+    public async Task<Result<PaginaResponse<IncidenciaResponse>>> ListarPorEnvioAsync(int envioId, ParametrosPaginaSimple request, CancellationToken cancellationToken = default)
     {
         if (!await _db.Envios.AnyAsync(x => x.EnvioId == envioId, cancellationToken))
-            return Result<IReadOnlyCollection<IncidenciaResponse>>.Failure("El envío no existe.", ErrorType.NotFound);
+            return Result<PaginaResponse<IncidenciaResponse>>.Failure("El envío no existe.", ErrorType.NotFound);
 
         var enAlcance = await _alcance.VerificarAsync(envioId, cancellationToken);
-        if (enAlcance.IsFailure) return Result<IReadOnlyCollection<IncidenciaResponse>>.Failure(enAlcance.Error!, enAlcance.ErrorType);
-        var incidencias = await _db.Incidencias.AsNoTracking().Where(x => x.EnvioId == envioId)
-            .OrderByDescending(x => x.FechaCreacion)
-            .Select(x => new IncidenciaResponse(x.IncidenciaId, x.EnvioId, x.EnvioEquipoId, x.TransporteId,
-                x.Descripcion, x.FechaCreacion, x.UsuarioCreacionId)).ToListAsync(cancellationToken);
-        return Result<IReadOnlyCollection<IncidenciaResponse>>.Success(incidencias);
+        if (enAlcance.IsFailure) return Result<PaginaResponse<IncidenciaResponse>>.Failure(enAlcance.Error!, enAlcance.ErrorType);
+
+        var pagina = await _db.Incidencias.AsNoTracking().Where(x => x.EnvioId == envioId)
+            .OrderByDescending(x => x.FechaCreacion).ThenByDescending(x => x.IncidenciaId)
+            .PaginarAsync(request, x => new IncidenciaResponse(x.IncidenciaId, x.EnvioId, x.EnvioEquipoId, x.TransporteId,
+                x.Descripcion, x.FechaCreacion, x.UsuarioCreacionId), cancellationToken);
+        return Result<PaginaResponse<IncidenciaResponse>>.Success(pagina);
+    }
+
+    /// <summary>
+    /// El alcance se aplica sobre el envío al que cuelga la incidencia: reutiliza el mismo filtro
+    /// de envíos, así una regla de alcance nueva no hay que copiarla aquí.
+    /// </summary>
+    public async Task<Result<PaginaResponse<IncidenciaListadoResponse>>> ListarAsync(ConsultarIncidenciasRequest request, CancellationToken cancellationToken = default)
+    {
+        var mapeada = await _alcance.VerificarFilialMapeadaAsync(cancellationToken);
+        if (mapeada.IsFailure)
+            return Result<PaginaResponse<IncidenciaListadoResponse>>.Failure(mapeada.Error!, mapeada.ErrorType);
+
+        var enviosVisibles = await _alcance.FiltrarAsync(_db.Envios.AsNoTracking(), cancellationToken);
+        var query = _db.Incidencias.AsNoTracking()
+            .Where(x => enviosVisibles.Any(e => e.EnvioId == x.EnvioId));
+
+        if (request.EnvioId.HasValue) query = query.Where(x => x.EnvioId == request.EnvioId);
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var termino = request.Search.Trim();
+            query = query.Where(x => x.Descripcion.Contains(termino) || x.Envio.NumeroEnvio.Contains(termino));
+        }
+
+        var pagina = await query.OrderByDescending(x => x.FechaCreacion).ThenByDescending(x => x.IncidenciaId)
+            .PaginarAsync(request, x => new IncidenciaListadoResponse(x.IncidenciaId, x.EnvioId, x.Envio.NumeroEnvio,
+                x.EnvioEquipoId, x.TransporteId, x.Descripcion, x.FechaCreacion, x.UsuarioCreacionId), cancellationToken);
+        return Result<PaginaResponse<IncidenciaListadoResponse>>.Success(pagina);
     }
 }

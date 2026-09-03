@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SistemaEnvios.Application.DTOs.Common;
 using SistemaEnvios.Application.Common;
 using SistemaEnvios.Application.DTOs.Notificaciones;
 using SistemaEnvios.Application.Interfaces.Repositories;
@@ -10,15 +11,18 @@ namespace SistemaEnvios.Infrastructure.Services.Notificaciones;
 
 public sealed class NotificacionService(SistemaEnviosDbContext db, IUnitOfWork uow, IUserContext users) : INotificacionService
 {
-    public async Task<Result<IReadOnlyCollection<NotificacionResponse>>> ListarAsync(string rol, bool soloNoLeidas = true, CancellationToken ct = default)
+    public async Task<Result<PaginaResponse<NotificacionResponse>>> ListarAsync(ConsultarNotificacionesRequest request, CancellationToken ct = default)
     {
-        var q = db.Notificaciones.AsNoTracking().Where(x => x.DestinatarioRol == rol);
-        if (rol.Equals("FILIAL", StringComparison.OrdinalIgnoreCase) && users.AffiliateId.HasValue)
+        var q = db.Notificaciones.AsNoTracking().Where(x => x.DestinatarioRol == request.Rol);
+        if (request.Rol.Equals("FILIAL", StringComparison.OrdinalIgnoreCase) && users.AffiliateId.HasValue)
             q = q.Where(x => x.Envio.UbicacionDestino.FilialExternaId == users.AffiliateId.Value);
-        if (soloNoLeidas) q = q.Where(x => x.FechaLeida == null);
-        var rows = await q.OrderByDescending(x => x.FechaCreacion).Take(100)
-            .Select(x => new NotificacionResponse(x.NotificacionId, x.EnvioId, x.Envio.NumeroEnvio, x.Tipo, x.Titulo, x.Mensaje, x.DestinatarioRol, x.FechaCreacion, x.FechaLeida)).ToListAsync(ct);
-        return Result<IReadOnlyCollection<NotificacionResponse>>.Success(rows);
+        if (request.SoloNoLeidas) q = q.Where(x => x.FechaLeida == null);
+
+        // Antes se cortaba con Take(100) fijo: el usuario no sabía que había más ni podía llegar
+        // a ellas. Ahora el corte es una página y el total dice cuántas quedan.
+        var pagina = await q.OrderByDescending(x => x.FechaCreacion).ThenByDescending(x => x.NotificacionId)
+            .PaginarAsync(request, x => new NotificacionResponse(x.NotificacionId, x.EnvioId, x.Envio.NumeroEnvio, x.Tipo, x.Titulo, x.Mensaje, x.DestinatarioRol, x.FechaCreacion, x.FechaLeida), ct);
+        return Result<PaginaResponse<NotificacionResponse>>.Success(pagina);
     }
 
     public async Task<Result> MarcarLeidaAsync(long id, CancellationToken ct = default)

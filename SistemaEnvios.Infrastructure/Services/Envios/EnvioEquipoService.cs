@@ -1,4 +1,5 @@
 using FluentValidation;
+using SistemaEnvios.Application.DTOs.Common;
 using Microsoft.EntityFrameworkCore;
 using SistemaEnvios.Application.Common;
 using SistemaEnvios.Application.DTOs.Envios;
@@ -102,24 +103,24 @@ public sealed class EnvioEquipoService(
         return Result<int>.Success(envioEquipo.EnvioEquipoId);
     }
 
-    public async Task<Result<IReadOnlyCollection<EnvioEquipoResponse>>> ListarPorEnvioAsync(
+    public async Task<Result<PaginaResponse<EnvioEquipoResponse>>> ListarPorEnvioAsync(
         int envioId,
+        ParametrosPaginaSimple request,
         CancellationToken cancellationToken = default)
     {
         if (!await db.Envios.AnyAsync(x => x.EnvioId == envioId, cancellationToken))
-            return Result<IReadOnlyCollection<EnvioEquipoResponse>>.Failure("El envío no existe.", ErrorType.NotFound);
+            return Result<PaginaResponse<EnvioEquipoResponse>>.Failure("El envío no existe.", ErrorType.NotFound);
 
         var enAlcance = await alcance.VerificarAsync(envioId, cancellationToken);
-        if (enAlcance.IsFailure) return Result<IReadOnlyCollection<EnvioEquipoResponse>>.Failure(enAlcance.Error!, enAlcance.ErrorType);
+        if (enAlcance.IsFailure) return Result<PaginaResponse<EnvioEquipoResponse>>.Failure(enAlcance.Error!, enAlcance.ErrorType);
 
-        var equipos = await db.EnvioEquipos
+        var pagina = await db.EnvioEquipos
             .AsNoTracking()
             .Where(x => x.EnvioId == envioId)
             .OrderBy(x => x.EnvioEquipoId)
-            .Select(x => new EnvioEquipoResponse(x.EnvioEquipoId, x.EnvioId, x.EquipoId, x.NumeroTicket, x.UsuarioSolicitanteId, x.Observaciones))
-            .ToListAsync(cancellationToken);
+            .PaginarAsync(request, x => new EnvioEquipoResponse(x.EnvioEquipoId, x.EnvioId, x.EquipoId, x.NumeroTicket, x.UsuarioSolicitanteId, x.Observaciones), cancellationToken);
 
-        return Result<IReadOnlyCollection<EnvioEquipoResponse>>.Success(equipos);
+        return Result<PaginaResponse<EnvioEquipoResponse>>.Success(pagina);
     }
 
     public async Task<Result<bool>> TicketDisponibleAsync(string numeroTicket, int? excluirEnvioEquipoId = null, CancellationToken cancellationToken = default)

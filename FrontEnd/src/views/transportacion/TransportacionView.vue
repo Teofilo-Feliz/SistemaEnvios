@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import {
   CheckCircle2,
   Clock3,
@@ -9,6 +9,7 @@ import {
 } from "lucide-vue-next";
 import { useRouter, useRoute } from "vue-router";
 import PageHeader from "@/components/common/PageHeader.vue";
+import { aPagina, filas } from "@/services/paginacion";
 import BaseCard from "@/components/common/BaseCard.vue";
 import BaseTable from "@/components/common/BaseTable.vue";
 import AdvancedFilter from "@/components/filters/AdvancedFilter.vue";
@@ -28,6 +29,7 @@ const router = useRouter(), route = useRoute(),
   states = ref([]),
   filters = ref({ logic: "AND", rules: [] });
 const page = ref(1), pageSize = 10;
+const totalItems = ref(0);
 const columns = [
   { key: "number", label: "Envío" },
   { key: "origin", label: "Origen" },
@@ -108,20 +110,32 @@ const filtered = computed(() =>
     ? rows.value.filter((x) => match(x, filters.value))
     : rows.value,
 );
-const pagedRows = computed(() => filtered.value.slice((page.value - 1) * pageSize, page.value * pageSize));
-const assignmentRows = computed(() => pagedRows.value.filter(x => x.status === "TRANSPORTE_ASIGNADO"));
-const otherRows = computed(() => pagedRows.value.filter(x => x.status !== "TRANSPORTE_ASIGNADO"));
+// La página ya viene cortada del servidor; aquí solo se separan las dos tablas.
+const assignmentRows = computed(() => filtered.value.filter(x => x.status === "TRANSPORTE_ASIGNADO"));
+const otherRows = computed(() => filtered.value.filter(x => x.status !== "TRANSPORTE_ASIGNADO"));
+const ETAPAS_TRANSPORTACION = [
+  "ENTREGADO_TRANSPORTACION", "EN_TRANSITO", "RECIBIDO_TRANSPORTACION",
+  "INCIDENCIA_TRANSPORTACION", "DESPACHADO_TECNOLOGIA", "EN_TRANSPORTACION",
+  "TRANSPORTE_ASIGNADO", "DESPACHADO_TRANSPORTACION",
+];
 async function load() {
   loading.value = true;
   try {
+    // Solo las etapas que custodia Transportación, paginadas en el servidor.
     const [e, l, s] = await Promise.all([
-      envioService.list(),
-      catalogoService.locations(),
-      catalogoService.states(),
+      envioService.paged({
+        page: page.value,
+        pageSize,
+        estadoCodigos: ETAPAS_TRANSPORTACION,
+        estadoEnvioId: undefined,
+      }),
+      catalogoService.allLocations(),
+      catalogoService.allStates(),
     ]);
-    locations.value = l.data || [];
-    states.value = s.data || [];
-    rows.value = (e.data || []).map((x) => ({
+    locations.value = l;
+    states.value = s;
+    totalItems.value = aPagina(e).totalItems;
+    rows.value = filas(e).map((x) => ({
       id: x.envioId,
       number: x.numeroEnvio,
       origin:
@@ -154,6 +168,7 @@ async function load() {
 function search(x) {
   filters.value = x;
   page.value = 1;
+  load();
 }
 function clear() {
   filters.value = { logic: "AND", rules: [] };
@@ -173,6 +188,8 @@ async function confirmArrival(row) {
   catch (e) { ui.notify(e.userMessage || "No fue posible confirmar la llegada.", "error"); }
 }
 onMounted(load);
+// Cambiar de página vuelve a consultar: el corte lo hace el servidor, no el navegador.
+watch(page, load);
 </script>
 <template>
   <div>
@@ -200,6 +217,6 @@ onMounted(load);
         @confirm="confirmArrival"
         @view="(row) => router.push(`/envios/${row.id}`)"
     /><div class="transport-section-hint">Los envíos con chofer asignado aparecen aquí. Usa el botón de acción para marcarlos como despachados.</div></BaseCard>
-    <BaseCard title="Seguimiento y confirmaciones" :padded="false"><BaseTable :columns="columns" :rows="otherRows" :loading="loading" @confirm="confirmArrival" @view="(row) => router.push(`/envios/${row.id}`)" /><Pagination v-if="filtered.length" v-model:page="page" :total="filtered.length" :page-size="pageSize" /></BaseCard>
+    <BaseCard title="Seguimiento y confirmaciones" :padded="false"><BaseTable :columns="columns" :rows="otherRows" :loading="loading" @confirm="confirmArrival" @view="(row) => router.push(`/envios/${row.id}`)" /><Pagination :page="page" :total="totalItems" :page-size="pageSize" @update:page="page = $event" /></BaseCard>
   </div>
 </template>

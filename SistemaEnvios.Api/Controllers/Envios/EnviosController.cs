@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using SistemaEnvios.Application.DTOs.Common;
 using Microsoft.AspNetCore.Mvc;
 using SistemaEnvios.Api.Extensions;
 using SistemaEnvios.Api.Contracts.Envios;
@@ -17,10 +18,6 @@ public sealed class EnviosController(
     IHistorialEstadoEnvioService historialService) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Policy = PermissionNames.EnviosConsultar)]
-    public async Task<IActionResult> Listar(CancellationToken cancellationToken) =>
-        (await envioService.ListarAsync(cancellationToken)).ToActionResult(this);
-
     [HttpGet("paginado")]
     [Authorize(Policy = PermissionNames.EnviosConsultar)]
     public async Task<IActionResult> Consultar([FromQuery] ConsultarEnviosRequest request, CancellationToken cancellationToken) =>
@@ -117,6 +114,6 @@ public sealed class EnviosController(
 
     [HttpGet("{envioId:int}/historial")]
     [Authorize(Policy = PermissionNames.EnviosConsultar)]
-    public async Task<IActionResult> ListarHistorial(int envioId, CancellationToken cancellationToken) =>
-        (await historialService.ListarPorEnvioAsync(envioId, cancellationToken)).ToActionResult(this);
+    public async Task<IActionResult> ListarHistorial(int envioId, [FromQuery] ParametrosPaginaSimple request, CancellationToken cancellationToken) =>
+        (await historialService.ListarPorEnvioAsync(envioId, request, cancellationToken)).ToActionResult(this);
 }

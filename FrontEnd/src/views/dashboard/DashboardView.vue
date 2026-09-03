@@ -11,6 +11,7 @@ import DashboardKpiCard from '@/components/dashboard/DashboardKpiCard.vue'
 import DashboardWidget from '@/components/dashboard/DashboardWidget.vue'
 import { useDashboard } from '@/composables/useDashboard'
 import { envioService } from '@/services/envioService'
+import { filas } from '@/services/paginacion'
 import { catalogoService } from '@/services/catalogoService'
 
 const router = useRouter(); const root = ref(null); const tab = ref('dashboard'); const selected = ref('general'); const latest = ref([]); const { data, summary, loading, error, load } = useDashboard()
@@ -23,7 +24,10 @@ const originChart = computed(() => ({ labels: (data.value?.shipmentsByOrigin || 
 const typeChart = computed(() => ({ labels: (data.value?.equipmentByType || []).map((x) => x.label), datasets: [{ label: 'Equipos', data: (data.value?.equipmentByType || []).map((x) => x.total), backgroundColor: colors, borderWidth: 0 }] }))
 const columns = [{ key: 'number', label: 'Número' }, { key: 'status', label: 'Estado' }, { key: 'date', label: 'Fecha' }]
 function go(path) { router.push(path) }
-async function loadDashboard() { await load(); try { const result = await envioService.list(); latest.value = (result.data || []).slice(-5).reverse().map((x) => ({ id: x.envioId, number: x.numeroEnvio, status: x.estadoEnvioId, date: '—' })) } catch { latest.value = [] } }
+// El listado viene ordenado por fecha descendente, así que la primera página de cinco son
+// los más recientes. Antes se hacía slice(-5) sobre la lista completa, que devolvía los cinco
+// más antiguos.
+async function loadDashboard() { await load(); try { latest.value = filas(await envioService.paged({ pageSize: 5 })).map((x) => ({ id: x.envioId, number: x.numeroEnvio, status: x.estadoEnvioId, date: '—' })) } catch { latest.value = [] } }
 function fullscreen() { if (document.fullscreenElement) document.exitFullscreen(); else root.value?.requestFullscreen?.() }
 onMounted(loadDashboard)
 </script>

@@ -6,6 +6,7 @@ import PageHeader from "@/components/common/PageHeader.vue";
 import ShipmentSection from "@/components/shipments/ShipmentSection.vue";
 import ShipmentTransportSection from "@/components/shipments/ShipmentTransportSection.vue";
 import { envioService } from "@/services/envioService";
+import { filas } from "@/services/paginacion";
 import { transporteService } from "@/services/transporteService";
 import { catalogoService } from "@/services/catalogoService";
 import { useUiStore } from "@/stores/uiStore";
@@ -43,19 +44,17 @@ const form = reactive({
 });
 async function load() {
   try {
-    const [e, t, d] = await Promise.all([
-      envioService.list(),
-      catalogoService.transportTypes(),
-      catalogoService.internalDrivers(),
+    // La etapa se pide al servidor; aquí solo queda descartar los que ya tienen transporte.
+    const [e, t, d, states] = await Promise.all([
+      envioService.paged({ pageSize: 100, estadoCodigos: ["EN_TRANSPORTACION"] }),
+      catalogoService.allTransportTypes(),
+      catalogoService.allInternalDrivers(),
+      catalogoService.allStates(),
     ]);
-    const all = e.data || [];
-    const states = await catalogoService.states();
-    const byId = Object.fromEntries((states.data || []).map(x => [x.estadoEnvioId, x.codigo]));
-    shipmentStates.value = byId;
-    // Esta pantalla solo recibe envíos entregados por Tecnología que aún no tienen transporte.
-    shipments.value = all.filter(x => byId[x.estadoEnvioId] === "EN_TRANSPORTACION" && !x.tipoTransporteId);
-    transportTypes.value = t.data || [];
-    drivers.value = d.data || [];
+    shipmentStates.value = Object.fromEntries(states.map(x => [x.estadoEnvioId, x.codigo]));
+    shipments.value = filas(e).filter(x => !x.tipoTransporteId);
+    transportTypes.value = t;
+    drivers.value = d;
     const internal = transportTypes.value.find(x => isInternalTransport(x.estrategia));
     if (internal) form.transportTypeId = internal.tipoTransporteId;
   } catch (e) {

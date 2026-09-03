@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SistemaEnvios.Application.DTOs.Common;
 using SistemaEnvios.Application.Common;
 using SistemaEnvios.Application.DTOs.Estados;
 using SistemaEnvios.Application.Interfaces.Services;
@@ -17,13 +18,13 @@ public sealed class TransicionEstadoEnvioService(
         return transicion is null ? Result<TransicionEstadoResponse>.Failure("La transición no existe.", ErrorType.NotFound) : Result<TransicionEstadoResponse>.Success(transicion);
     }
 
-    public async Task<Result<IReadOnlyCollection<TransicionEstadoResponse>>> ListarAsync(bool soloActivas = true, CancellationToken cancellationToken = default)
+    public async Task<Result<PaginaResponse<TransicionEstadoResponse>>> ListarAsync(ConsultarCatalogoRequest request, CancellationToken cancellationToken = default)
     {
         var query = db.TransicionesEstadoEnvio.AsNoTracking();
-        if (soloActivas) query = query.Where(x => x.Activo);
-        var transiciones = await query.OrderBy(x => x.EstadoOrigenId).ThenBy(x => x.EstadoDestinoId)
-            .Select(x => new TransicionEstadoResponse(x.TransicionEstadoEnvioId, x.EstadoOrigenId, x.EstadoDestinoId, x.Activo)).ToListAsync(cancellationToken);
-        return Result<IReadOnlyCollection<TransicionEstadoResponse>>.Success(transiciones);
+        if (request.SoloActivos) query = query.Where(x => x.Activo);
+        var pagina = await query.OrderBy(x => x.EstadoOrigenId).ThenBy(x => x.EstadoDestinoId)
+            .PaginarAsync(request, x => new TransicionEstadoResponse(x.TransicionEstadoEnvioId, x.EstadoOrigenId, x.EstadoDestinoId, x.Activo), cancellationToken);
+        return Result<PaginaResponse<TransicionEstadoResponse>>.Success(pagina);
     }
 
 }

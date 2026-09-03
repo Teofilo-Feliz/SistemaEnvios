@@ -1,3 +1,4 @@
+using SistemaEnvios.Application.DTOs.Common;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using SistemaEnvios.Application.Common;
@@ -94,7 +95,7 @@ public sealed class AlcanceServiciosTests
                 new AgregarEquipoEnvioRequestValidator(),
                 new ActualizarEnvioEquipoRequestValidator(),
                 db, usuario, alcance)
-            .ListarPorEnvioAsync(envio.EnvioId);
+            .ListarPorEnvioAsync(envio.EnvioId, new ParametrosPaginaSimple());
 
         AssertFueraDeAlcance(resultado);
     }
@@ -125,7 +126,7 @@ public sealed class AlcanceServiciosTests
 
         var resultado = await new IncidenciaService(
                 db, new UnitOfWork(db), new CrearIncidenciaRequestValidator(), usuario, alcance)
-            .ListarPorEnvioAsync(envio.EnvioId);
+            .ListarPorEnvioAsync(envio.EnvioId, new ParametrosPaginaSimple());
 
         AssertFueraDeAlcance(resultado);
     }
@@ -151,7 +152,7 @@ public sealed class AlcanceServiciosTests
         var (_, alcance) = Contexto(db);
 
         var resultado = await new HistorialEstadoEnvioService(db, alcance)
-            .ListarPorEnvioAsync(envio.EnvioId);
+            .ListarPorEnvioAsync(envio.EnvioId, new ParametrosPaginaSimple());
 
         AssertFueraDeAlcance(resultado);
     }

@@ -1,4 +1,5 @@
 using FluentValidation;
+using SistemaEnvios.Application.DTOs.Common;
 using Microsoft.EntityFrameworkCore;
 using SistemaEnvios.Application.Common;
 using SistemaEnvios.Application.DTOs.Ubicaciones;
@@ -27,14 +28,18 @@ public sealed class UbicacionService(
             : Result<UbicacionResponse>.Success(ubicacion);
     }
 
-    public async Task<Result<IReadOnlyCollection<UbicacionResponse>>> ListarAsync(bool soloActivas = true, CancellationToken cancellationToken = default)
+    public async Task<Result<PaginaResponse<UbicacionResponse>>> ListarAsync(ConsultarCatalogoRequest request, CancellationToken cancellationToken = default)
     {
         var query = db.Ubicaciones.AsNoTracking();
-        if (soloActivas) query = query.Where(x => x.Activo);
-        var ubicaciones = await query.OrderBy(x => x.Nombre)
-            .Select(x => new UbicacionResponse(x.UbicacionId, x.Nombre, x.CodigoCentro, x.Tipo, x.Activo))
-            .ToListAsync(cancellationToken);
-        return Result<IReadOnlyCollection<UbicacionResponse>>.Success(ubicaciones);
+        if (request.SoloActivos) query = query.Where(x => x.Activo);
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var termino = request.Search.Trim();
+            query = query.Where(x => x.Nombre.Contains(termino) || x.CodigoCentro.Contains(termino));
+        }
+        var pagina = await query.OrderBy(x => x.Nombre).ThenBy(x => x.UbicacionId)
+            .PaginarAsync(request, x => new UbicacionResponse(x.UbicacionId, x.Nombre, x.CodigoCentro, x.Tipo, x.Activo), cancellationToken);
+        return Result<PaginaResponse<UbicacionResponse>>.Success(pagina);
     }
 
     public async Task<Result<int>> CrearAsync(GuardarUbicacionRequest request, CancellationToken cancellationToken = default)

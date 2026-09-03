@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using SistemaEnvios.Application.DTOs.Common;
 using Microsoft.AspNetCore.Mvc;
 using SistemaEnvios.Api.Contracts.Catalogos;
 using SistemaEnvios.Api.Extensions;
@@ -13,7 +14,7 @@ namespace SistemaEnvios.Api.Controllers.Catalogos;
 public sealed class TransportesCatalogosController(ICatalogoTransporteService service) : ControllerBase
 {
     [HttpGet("api/tipos-transporte")]
-    public async Task<IActionResult> Tipos([FromQuery] bool soloActivos=true,CancellationToken ct=default)=>(await service.ListarTiposAsync(soloActivos,ct)).ToActionResult(this);
+    public async Task<IActionResult> Tipos([FromQuery] ConsultarCatalogoRequest request,CancellationToken ct=default)=>(await service.ListarTiposAsync(request,ct)).ToActionResult(this);
     [HttpPost("api/tipos-transporte")][Authorize(Policy=PermissionNames.CatalogosAdministrar)]
     public async Task<IActionResult> CrearTipo([FromBody] GuardarTipoTransporteRequest r,CancellationToken ct){var x=await service.CrearTipoAsync(r,ct);return x.IsSuccess?StatusCode(201,x.Value):x.ToActionResult(this);}
     [HttpPut("api/tipos-transporte/{id:int}")][Authorize(Policy=PermissionNames.CatalogosAdministrar)]
@@ -21,7 +22,7 @@ public sealed class TransportesCatalogosController(ICatalogoTransporteService se
     [HttpPatch("api/tipos-transporte/{id:int}/activo")][Authorize(Policy=PermissionNames.CatalogosAdministrar)]
     public async Task<IActionResult> TipoActivo(int id,[FromBody] CambiarActivoRequest r,CancellationToken ct)=>(await service.CambiarTipoActivoAsync(id,r.Activo,ct)).ToActionResult(this);
     [HttpGet("api/choferes-internos")]
-    public async Task<IActionResult> Choferes([FromQuery] bool soloActivos=true,CancellationToken ct=default)=>(await service.ListarChoferesAsync(soloActivos,ct)).ToActionResult(this);
+    public async Task<IActionResult> Choferes([FromQuery] ConsultarCatalogoRequest request,CancellationToken ct=default)=>(await service.ListarChoferesAsync(request,ct)).ToActionResult(this);
     [HttpPost("api/choferes-internos")][Authorize(Policy=PermissionNames.CatalogosAdministrar)]
     public async Task<IActionResult> CrearChofer([FromBody] GuardarChoferInternoRequest r,CancellationToken ct){var x=await service.CrearChoferAsync(r,ct);return x.IsSuccess?StatusCode(201,x.Value):x.ToActionResult(this);}
     [HttpPut("api/choferes-internos/{id:int}")][Authorize(Policy=PermissionNames.CatalogosAdministrar)]

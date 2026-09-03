@@ -10,6 +10,27 @@ namespace SistemaEnvios.Infrastructure.Services.Dashboard;
 
 public sealed class DashboardService(SistemaEnviosDbContext db, IAlcanceEnvios alcance) : IDashboardService
 {
+    public async Task<Result<DashboardTransportacionResponse>> ObtenerTransportacionAsync(CancellationToken cancellationToken = default)
+    {
+        var envios = await alcance.FiltrarAsync(db.Envios.AsNoTracking(), cancellationToken);
+        var enEtapas = envios.Where(x => EstadoEnvioCodigos.EtapasTransportacion.Contains(x.EstadoEnvio.Codigo));
+
+        var porEtapa = await enEtapas
+            .GroupBy(x => new { x.EstadoEnvio.Codigo, x.EstadoEnvio.Nombre, x.Direccion })
+            .Select(g => new DashboardEtapaPoint(g.Key.Codigo, g.Key.Nombre, (int)g.Key.Direccion, g.Count()))
+            .ToListAsync(cancellationToken);
+
+        var porTipo = await enEtapas
+            .GroupBy(x => x.Transporte == null ? "Sin transporte" : x.Transporte.TipoTransporte.Nombre)
+            .Select(g => new DashboardLabelValue(g.Key, g.Count()))
+            .ToListAsync(cancellationToken);
+
+        return Result<DashboardTransportacionResponse>.Success(new(
+            [.. porEtapa.OrderByDescending(x => x.Total)],
+            [.. porTipo.OrderByDescending(x => x.Total)],
+            porEtapa.Sum(x => x.Total)));
+    }
+
     public async Task<Result<DashboardResponse>> ObtenerAsync(int meses = 12, CancellationToken cancellationToken = default)
     {
         meses = Math.Clamp(meses, 1, 24);

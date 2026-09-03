@@ -1,8 +1,10 @@
 <script setup>
-import { onMounted, ref } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { RefreshCw } from "lucide-vue-next";
 import PageHeader from "@/components/common/PageHeader.vue";
+import Pagination from "@/components/common/Pagination.vue";
+import { aPagina, filas } from "@/services/paginacion";
 import BaseCard from "@/components/common/BaseCard.vue";
 import BaseTable from "@/components/common/BaseTable.vue";
 import { notificacionService } from "@/services/notificacionService";
@@ -13,6 +15,9 @@ const router = useRouter();
 const ui = useUiStore();
 const loading = ref(true);
 const rows = ref([]);
+const page = ref(1);
+const pageSize = 10;
+const totalItems = ref(0);
 const columns = [
   { key: "title", label: "Notificación" },
   { key: "shipment", label: "Envío" },
@@ -22,8 +27,9 @@ const columns = [
 async function load() {
   loading.value = true;
   try {
-    const { data } = await notificacionService.listTechnology();
-    rows.value = (data || []).map((item) => ({
+    const pagina = await notificacionService.listTechnology({ page: page.value, pageSize });
+    totalItems.value = aPagina(pagina).totalItems;
+    rows.value = filas(pagina).map((item) => ({
       id: item.notificacionId,
       envioId: item.envioId,
       title: item.titulo,
@@ -52,6 +58,7 @@ async function markRead(row) {
 }
 
 onMounted(load);
+watch(page, load);
 </script>
 
 <template>
@@ -61,6 +68,7 @@ onMounted(load);
     </PageHeader>
     <BaseCard title="Notificaciones pendientes" :padded="false">
       <BaseTable :columns="columns" :rows="rows" :loading="loading" @confirm="markRead" @view="(row) => router.push(`/envios/${row.envioId}`)" />
+      <Pagination :page="page" :total="totalItems" :page-size="pageSize" @update:page="page = $event" />
     </BaseCard>
   </div>
 </template>

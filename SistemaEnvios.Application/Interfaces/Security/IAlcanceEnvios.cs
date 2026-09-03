@@ -33,6 +33,16 @@ public interface IAlcanceEnvios
     Task<Result> VerificarAsync(int envioId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Ubicaciones sobre las que el usuario puede operar. Un perfil de filial alcanza solo la
+    /// suya; el inventario de equipos se acota por aquí, ya que un equipo pertenece a un lugar
+    /// y no a un envío.
+    /// </summary>
+    Task<Result> VerificarUbicacionAsync(int ubicacionId, CancellationToken cancellationToken = default);
+
+    /// <summary>Restringe una consulta de equipos a las ubicaciones que el usuario alcanza.</summary>
+    Task<IQueryable<Equipo>> FiltrarEquiposAsync(IQueryable<Equipo> query, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Falla con Conflict si el usuario es de filial y su filial no está mapeada a ninguna
     /// ubicación, para que el error de configuración no se confunda con "no hay datos".
     /// </summary>

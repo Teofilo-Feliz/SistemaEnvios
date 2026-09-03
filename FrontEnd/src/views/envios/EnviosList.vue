@@ -9,6 +9,7 @@ import Pagination from "@/components/common/Pagination.vue";
 import AdvancedFilter from "@/components/filters/AdvancedFilter.vue";
 import { filterFields } from "@/config/filterFields";
 import { envioService } from "@/services/envioService";
+import { aPagina, filas } from "@/services/paginacion";
 import { catalogoService } from "@/services/catalogoService";
 import { useUiStore } from "@/stores/uiStore";
 import { useAuthStore } from "@/stores/authStore";
@@ -153,17 +154,19 @@ async function load() {
       if (rule.field === "numeroEnvio") params.search = rule.value;
     }
     if (auth.puedeFiltrarPorFilial && filialSeleccionada.value) params.ubicacionId = filialSeleccionada.value;
-    const [shipments, locationResponse, stateResponse, transportResponse] = await Promise.all([
+    // Los catálogos alimentan selectores, así que se recorren completos; los envíos vienen
+    // de a página desde el servidor.
+    const [shipments, ubicaciones, estados, tiposTransporte] = await Promise.all([
       envioService.paged(params),
-      catalogoService.locations(),
-      catalogoService.states(),
-      catalogoService.transportTypes(),
+      catalogoService.allLocations(),
+      catalogoService.allStates(),
+      catalogoService.allTransportTypes(),
     ]);
-    locations.value = locationResponse.data || [];
-    states.value = stateResponse.data || [];
-    transportTypes.value = transportResponse.data || [];
-    rows.value = (shipments.data?.items || []).map(mapRow);
-    totalItems.value = shipments.data?.totalItems || 0;
+    locations.value = ubicaciones;
+    states.value = estados;
+    transportTypes.value = tiposTransporte;
+    rows.value = filas(shipments).map(mapRow);
+    totalItems.value = aPagina(shipments).totalItems;
   } catch (exception) {
     error.value = exception.userMessage || "No fue posible cargar los envíos.";
     ui.notify(error.value, "error");

@@ -5,6 +5,7 @@ using SistemaEnvios.Application.Validators.Equipos;
 using SistemaEnvios.Domain.Entities;
 using SistemaEnvios.Domain.Enums;
 using SistemaEnvios.Infrastructure.Persistence;
+using SistemaEnvios.Infrastructure.Security;
 using SistemaEnvios.Infrastructure.Services.Equipos;
 using SistemaEnvios.Tests.Security;
 
@@ -54,7 +55,8 @@ public sealed class EquipoServiceTests
             new UnitOfWork(db),
             new CrearEquipoRequestValidator(),
             new ActualizarEquipoRequestValidator(),
-            new FakeUserContext(usuarioId));
+            FakeUserContext.Global(usuarioId),
+            new AlcanceEnvios(db, FakeUserContext.Global(usuarioId)));
 
         var resultado = await service.ActualizarAsync(new ActualizarEquipoRequest
         {

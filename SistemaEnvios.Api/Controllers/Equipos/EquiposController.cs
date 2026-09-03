@@ -13,8 +13,8 @@ public sealed class EquiposController(IEquipoService service) : ControllerBase
 {
     [HttpGet]
     [Authorize(Policy = PermissionNames.EnviosConsultar)]
-    public async Task<IActionResult> Listar(CancellationToken cancellationToken) =>
-        (await service.ListarAsync(cancellationToken)).ToActionResult(this);
+    public async Task<IActionResult> Listar([FromQuery] ConsultarEquiposRequest request, CancellationToken cancellationToken) =>
+        (await service.ListarAsync(request, cancellationToken)).ToActionResult(this);
 
     [HttpGet("{equipoId:int}")]
     [Authorize(Policy = PermissionNames.EnviosConsultar)]

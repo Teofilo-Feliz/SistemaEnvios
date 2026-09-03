@@ -30,10 +30,10 @@ public sealed class AlcanceEnviosTests
         await using var db = CrearContexto();
         var (filial, _) = await SembrarEnvioDesdeFilialAsync(db, filialExternaId: 30);
 
-        var resultado = await CrearServicio(db, ClaimSantoDomingo).ListarAsync();
+        var resultado = await CrearServicio(db, ClaimSantoDomingo).ConsultarAsync(new ConsultarEnviosRequest());
 
         Assert.True(resultado.IsSuccess);
-        var envio = Assert.Single(resultado.Value!);
+        var envio = Assert.Single(resultado.Value!.Items);
         Assert.Equal(filial.UbicacionId, envio.UbicacionOrigenId);
     }
 
@@ -53,10 +53,10 @@ public sealed class AlcanceEnviosTests
         });
         await db.SaveChangesAsync();
 
-        var resultado = await CrearServicio(db, ClaimSantiago).ListarAsync();
+        var resultado = await CrearServicio(db, ClaimSantiago).ConsultarAsync(new ConsultarEnviosRequest());
 
         Assert.True(resultado.IsSuccess);
-        Assert.Empty(resultado.Value!);
+        Assert.Empty(resultado.Value!.Items);
     }
 
     [Fact]
@@ -90,10 +90,10 @@ public sealed class AlcanceEnviosTests
         await using var db = CrearContexto();
         await SembrarEnvioDesdeFilialAsync(db, filialExternaId: 30);
 
-        var resultado = await CrearServicio(db, ClaimSantiago, ["AdministradorGlobal"]).ListarAsync();
+        var resultado = await CrearServicio(db, ClaimSantiago, ["AdministradorGlobal"]).ConsultarAsync(new ConsultarEnviosRequest());
 
         Assert.True(resultado.IsSuccess);
-        Assert.Single(resultado.Value!);
+        Assert.Single(resultado.Value!.Items);
     }
 
     private static async Task<(Ubicacion Filial, Envio Envio)> SembrarEnvioDesdeFilialAsync(

@@ -1,20 +1,25 @@
 <script setup>
-import { onMounted, ref } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import PageHeader from "@/components/common/PageHeader.vue";
 import BaseCard from "@/components/common/BaseCard.vue";
 import BaseTable from "@/components/common/BaseTable.vue";
+import Pagination from "@/components/common/Pagination.vue";
 import { envioService } from "@/services/envioService";
 import { transporteService } from "@/services/transporteService";
 import { catalogoService } from "@/services/catalogoService";
 import { useUiStore } from "@/stores/uiStore";
 import { isInternalTransport } from "@/utils/transport";
 import { confirmAction, notifyNotificationsChanged } from "@/utils/confirm";
+import { aPagina, filas } from "@/services/paginacion";
 
 const router = useRouter();
 const ui = useUiStore();
 const loading = ref(true);
 const rows = ref([]);
+const page = ref(1);
+const pageSize = 10;
+const totalItems = ref(0);
 const columns = [
   { key: "number", label: "Envío" },
   { key: "stage", label: "Confirmación pendiente" },
@@ -25,14 +30,16 @@ const columns = [
 async function load() {
   loading.value = true;
   try {
-    const [{ data: envios }, { data: estados }] = await Promise.all([
-      envioService.list(),
-      catalogoService.states(),
+    const [enviosPagina, estados] = await Promise.all([
+      envioService.paged({ page: page.value, pageSize, estadoCodigos: ["ENTREGADO_TRANSPORTACION", "EN_TRANSITO"] }),
+      catalogoService.allStates(),
     ]);
+    const envios = filas(enviosPagina);
+    totalItems.value = aPagina(enviosPagina).totalItems;
     const pendingId = estados.find((x) => x.codigo === "ENTREGADO_TRANSPORTACION")?.estadoEnvioId;
     const transitId = estados.find((x) => x.codigo === "EN_TRANSITO")?.estadoEnvioId;
     const items = [];
-    for (const envio of envios || []) {
+    for (const envio of envios) {
       if (![pendingId, transitId].includes(envio.estadoEnvioId)) continue;
       try {
         const { data: transport } = await transporteService.getByEnvio(envio.envioId);
@@ -93,6 +100,7 @@ async function requestConfirmation(row) {
 }
 
 onMounted(load);
+watch(page, load);
 </script>
 
 <template>
@@ -102,6 +110,7 @@ onMounted(load);
     </PageHeader>
     <BaseCard title="Confirmaciones pendientes de Transportación" :padded="false">
       <BaseTable :columns="columns" :rows="rows" :loading="loading" @confirm="requestConfirmation" @view="(row) => router.push(`/envios/${row.envioId}`)" />
+      <Pagination :page="page" :total="totalItems" :page-size="pageSize" @update:page="page = $event" />
     </BaseCard>
   </div>
 </template>

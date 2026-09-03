@@ -5,7 +5,8 @@ import { useRouter } from "vue-router";
 import PageHeader from "@/components/common/PageHeader.vue";
 import BaseCard from "@/components/common/BaseCard.vue";
 import { envioService } from "@/services/envioService";
-import { catalogoService } from "@/services/catalogoService";
+import { dashboardService } from "@/services/dashboardService";
+import { filas } from "@/services/paginacion";
 import { useUiStore } from "@/stores/uiStore";
 import "@/assets/styles/transport-dashboard.css";
 import TransportationStageCard from "@/components/transportation/TransportationStageCard.vue";
@@ -13,39 +14,37 @@ import TransportationStageCard from "@/components/transportation/TransportationS
 const router = useRouter();
 const ui = useUiStore();
 const loading = ref(true);
+// Los totales los cuenta la base y llegan ya sumados: la pantalla no recibe envíos para
+// contarlos por su cuenta, que era lo que obligaba a descargar la tabla completa.
+const totales = ref({ porEtapa: [], porTipoTransporte: [], totalEnEtapas: 0 });
 const shipments = ref([]);
-const states = ref([]);
 
-const codeOf = (x) => states.value.find((s) => s.estadoEnvioId === x.estadoEnvioId)?.codigo;
-// La dirección viaja como texto ("HaciaTecnologia") o como número según el serializador.
-const haciaTecnologia = (x) =>
-  x.direccion === 1 || String(x.direccion).toLowerCase() === "haciatecnologia";
-
-function contar(codigo, filtroDireccion) {
-  return shipments.value.filter(
-    (x) => codeOf(x) === codigo && (!filtroDireccion || filtroDireccion(x)),
-  ).length;
+const HACIA_TECNOLOGIA = 1;
+function contar(codigo, direccion) {
+  return totales.value.porEtapa
+    .filter((x) => x.codigo === codigo && (direccion === undefined || x.direccion === direccion))
+    .reduce((total, x) => total + x.total, 0);
 }
 
 // Solo etapas que Transportación custodia. RECIBIDO_FILIAL quedó fuera a propósito: ese
 // estado ya no está en su alcance, así que la tarjeta marcaba cero siempre.
 const flujoDesdeFilial = computed(() => [
   { code: "ENTREGADO_TRANSPORTACION", title: "Entregados por la filial", icon: PackageCheck, value: contar("ENTREGADO_TRANSPORTACION") },
-  { code: "EN_TRANSITO", title: "En tránsito a Tecnología", icon: Truck, value: contar("EN_TRANSITO", haciaTecnologia) },
+  { code: "EN_TRANSITO", title: "En tránsito a Tecnología", icon: Truck, value: contar("EN_TRANSITO", HACIA_TECNOLOGIA) },
   { code: "RECIBIDO_TRANSPORTACION", title: "En punto logístico", icon: Warehouse, value: contar("RECIBIDO_TRANSPORTACION") },
 ]);
 
 const flujoDesdeTecnologia = computed(() => [
   { code: "EN_TRANSPORTACION", title: "Recibidos de Tecnología", icon: PackageCheck, value: contar("EN_TRANSPORTACION") },
   { code: "TRANSPORTE_ASIGNADO", title: "Chofer asignado", icon: UserRound, value: contar("TRANSPORTE_ASIGNADO") },
-  { code: "EN_TRANSITO", title: "En tránsito a la filial", icon: Send, value: contar("EN_TRANSITO", (x) => !haciaTecnologia(x)) },
+  { code: "EN_TRANSITO", title: "En tránsito a la filial", icon: Send, value: contar("EN_TRANSITO", 2) },
 ]);
 
 // El listado llega ordenado por fecha de creación descendente: los primeros son los recientes.
 const recientes = computed(() =>
-  shipments.value.slice(0, 5).map((x) => ({
+  shipments.value.map((x) => ({
     number: x.numeroEnvio,
-    status: codeOf(x),
+    status: x.estadoCodigo,
     transport: x.nombreTipoTransporte || "Sin transporte",
   })),
 );
@@ -59,21 +58,25 @@ const pendientes = computed(() =>
   ),
 );
 
-const porTipoTransporte = computed(() => {
-  const conteo = new Map();
-  for (const envio of shipments.value) {
-    const nombre = envio.nombreTipoTransporte || "Sin transporte";
-    conteo.set(nombre, (conteo.get(nombre) || 0) + 1);
-  }
-  return [...conteo.entries()].sort((a, b) => b[1] - a[1]);
-});
+const porTipoTransporte = computed(() =>
+  totales.value.porTipoTransporte.map((x) => [x.label, x.total]),
+);
 
+const ETAPAS_TRANSPORTACION = [
+  "ENTREGADO_TRANSPORTACION", "EN_TRANSITO", "RECIBIDO_TRANSPORTACION",
+  "INCIDENCIA_TRANSPORTACION", "DESPACHADO_TECNOLOGIA", "EN_TRANSPORTACION",
+  "TRANSPORTE_ASIGNADO", "DESPACHADO_TRANSPORTACION",
+];
 async function load() {
   loading.value = true;
   try {
-    const [envios, estados] = await Promise.all([envioService.list(), catalogoService.states()]);
-    shipments.value = envios.data || [];
-    states.value = estados.data || [];
+    // Un agregado para los totales y una página de cinco para la lista de recientes.
+    const [resumen, recientesPagina] = await Promise.all([
+      dashboardService.transportacion(),
+      envioService.paged({ pageSize: 5, estadoCodigos: ETAPAS_TRANSPORTACION }),
+    ]);
+    totales.value = resumen.data || { porEtapa: [], porTipoTransporte: [], totalEnEtapas: 0 };
+    shipments.value = filas(recientesPagina);
   } catch (error) {
     ui.notify(error.userMessage || "No fue posible cargar el dashboard.", "error");
   } finally {

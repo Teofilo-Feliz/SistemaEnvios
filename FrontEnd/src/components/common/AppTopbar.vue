@@ -4,6 +4,7 @@ import { Bell, Menu, PanelLeftClose, Search } from "lucide-vue-next";
 import { useUiStore } from "@/stores/uiStore";
 import { useAuthStore } from "@/stores/authStore";
 import { notificacionService } from "@/services/notificacionService";
+import { filas } from "@/services/paginacion";
 import AppBreadcrumb from "./AppBreadcrumb.vue";
 import NotificationDropdown from "./NotificationDropdown.vue";
 import UserMenu from "./UserMenu.vue";
@@ -26,8 +27,8 @@ function search() {
 }
 async function loadNotifications() {
   try {
-    const { data } = await notificacionService.listTechnology();
-    notifications.value = data || [];
+    // La campana muestra un puñado: se pide una página, no el historial completo.
+    notifications.value = filas(await notificacionService.listTechnology({ pageSize: 10 }));
   } catch {
     notifications.value = [];
   }

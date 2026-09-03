@@ -7,6 +7,7 @@ import BaseCard from "@/components/common/BaseCard.vue";
 import LoadingSpinner from "@/components/common/LoadingSpinner.vue";
 import { envioService } from "@/services/envioService";
 import { catalogoService } from "@/services/catalogoService";
+import { filas } from '@/services/paginacion'
 import { equipoService } from "@/services/equipoService";
 import { recepcionService } from "@/services/recepcionService";
 import { useUiStore } from "@/stores/uiStore";
@@ -54,15 +55,15 @@ async function load() {
   loading.value = true;
   error.value = "";
   try {
-    const [{ data: envio }, { data: asociaciones }, { data: ubicaciones }] = await Promise.all([
+    const [{ data: envio }, asociacionesPagina, ubicaciones] = await Promise.all([
       envioService.get(envioId),
-      envioService.equipment(envioId),
-      catalogoService.locations(),
+      envioService.equipment(envioId, { pageSize: 100 }),
+      catalogoService.allLocations(),
     ]);
     shipment.value = envio;
-    locations.value = ubicaciones || [];
+    locations.value = ubicaciones;
     items.value = await Promise.all(
-      (asociaciones || []).map(async (asociacion) => {
+      filas(asociacionesPagina).map(async (asociacion) => {
         const { data: equipo } = await equipoService.get(asociacion.equipoId);
         return {
           envioEquipoId: asociacion.envioEquipoId,

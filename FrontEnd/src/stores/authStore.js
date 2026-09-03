@@ -59,10 +59,8 @@ export const useAuthStore = defineStore('auth', () => {
   function setIdentity(identity) {
     user.value = identity
     permissions.value = toList(identity?.profile?.permissions)
-    // El token vive en localStorage porque el interceptor de axios (services/api.js) lo lee de ahi.
-    if (identity?.access_token) localStorage.setItem('auth_token', identity.access_token)
   }
-  function logoutLocal() { localStorage.removeItem('auth_token'); localStorage.removeItem('auth_permissions'); user.value = null; permissions.value = []; perfil.value = null }
+  function logoutLocal() { localStorage.removeItem('auth_permissions'); user.value = null; permissions.value = []; perfil.value = null }
 
   async function handleRedirectCallback() { const result = await authService.signinCallback(); if (result) setIdentity(result); return result }
   async function handleSilentRenewCallback() { return authService.signinSilentCallback() }

@@ -1,4 +1,5 @@
 using FluentValidation;
+using SistemaEnvios.Application.DTOs.Common;
 using Microsoft.EntityFrameworkCore;
 using SistemaEnvios.Application.Common;
 using SistemaEnvios.Application.DTOs.Envios;
@@ -198,40 +199,12 @@ public sealed class EnvioService(
         return Result<EnvioResponse>.Success(ToResponse(envio));
     }
 
-    public async Task<Result<IReadOnlyCollection<EnvioResponse>>> ListarAsync(
-        CancellationToken cancellationToken = default)
+    public async Task<Result<PaginaResponse<EnvioResponse>>> ConsultarAsync(ConsultarEnviosRequest request, CancellationToken cancellationToken = default)
     {
         var mapeada = await alcance.VerificarFilialMapeadaAsync(cancellationToken);
         if (mapeada.IsFailure)
-            return Result<IReadOnlyCollection<EnvioResponse>>.Failure(mapeada.Error!, mapeada.ErrorType);
+            return Result<PaginaResponse<EnvioResponse>>.Failure(mapeada.Error!, mapeada.ErrorType);
 
-        var resultado = await (await alcance.FiltrarAsync(db.Envios, cancellationToken))
-            .AsNoTracking()
-            .OrderByDescending(x => x.FechaCreacion)
-            .Select(x => new EnvioResponse(
-                x.EnvioId,
-                x.NumeroEnvio,
-                x.UbicacionOrigenId,
-                x.UbicacionDestinoId,
-                x.EstadoEnvioId,
-                x.Direccion,
-                x.UsuarioSolicitanteId,
-                x.Observaciones,
-                x.Transporte == null ? null : x.Transporte.TipoTransporteId,
-                x.Transporte == null ? null : x.Transporte.TipoTransporte.Estrategia,
-                x.Transporte == null ? null : x.Transporte.TipoTransporte.Nombre))
-            .ToListAsync(cancellationToken);
-
-        return Result<IReadOnlyCollection<EnvioResponse>>.Success(resultado);
-    }
-
-    public async Task<Result<PaginaEnviosResponse>> ConsultarAsync(ConsultarEnviosRequest request, CancellationToken cancellationToken = default)
-    {
-        var mapeada = await alcance.VerificarFilialMapeadaAsync(cancellationToken);
-        if (mapeada.IsFailure)
-            return Result<PaginaEnviosResponse>.Failure(mapeada.Error!, mapeada.ErrorType);
-
-        var page = Math.Max(1, request.Page); var pageSize = Math.Clamp(request.PageSize, 1, 100);
         var query = await alcance.FiltrarAsync(db.Envios.AsNoTracking(), cancellationToken);
         if (!string.IsNullOrWhiteSpace(request.Search)) { var term = request.Search.Trim(); query = query.Where(x => x.NumeroEnvio.Contains(term) || (x.Observaciones != null && x.Observaciones.Contains(term))); }
         if (request.EstadoEnvioId.HasValue) query = query.Where(x => x.EstadoEnvioId == request.EstadoEnvioId);
@@ -240,10 +213,10 @@ public sealed class EnvioService(
         if (request.UbicacionDestinoId.HasValue) query = query.Where(x => x.UbicacionDestinoId == request.UbicacionDestinoId);
         if (request.UbicacionId.HasValue) query = query.Where(x => x.UbicacionOrigenId == request.UbicacionId || x.UbicacionDestinoId == request.UbicacionId);
         if (request.Direccion is 1 or 2) query = query.Where(x => (int)x.Direccion == request.Direccion);
-        var total = await query.CountAsync(cancellationToken);
-        var items = await query.OrderByDescending(x => x.FechaCreacion).ThenByDescending(x => x.EnvioId).Skip((page - 1) * pageSize).Take(pageSize)
-            .Select(x => new EnvioResponse(x.EnvioId,x.NumeroEnvio,x.UbicacionOrigenId,x.UbicacionDestinoId,x.EstadoEnvioId,x.Direccion,x.UsuarioSolicitanteId,x.Observaciones,x.Transporte == null ? null : x.Transporte.TipoTransporteId,x.Transporte == null ? null : x.Transporte.TipoTransporte.Estrategia,x.Transporte == null ? null : x.Transporte.TipoTransporte.Nombre)).ToListAsync(cancellationToken);
-        return Result<PaginaEnviosResponse>.Success(new(items,page,pageSize,total,(int)Math.Ceiling(total/(double)pageSize)));
+        if (request.EstadoCodigos is { Length: > 0 } codigos) query = query.Where(x => codigos.Contains(x.EstadoEnvio.Codigo));
+        var pagina = await query.OrderByDescending(x => x.FechaCreacion).ThenByDescending(x => x.EnvioId)
+            .PaginarAsync(request, x => new EnvioResponse(x.EnvioId,x.NumeroEnvio,x.UbicacionOrigenId,x.UbicacionDestinoId,x.EstadoEnvioId,x.Direccion,x.UsuarioSolicitanteId,x.Observaciones,x.Transporte == null ? null : x.Transporte.TipoTransporteId,x.Transporte == null ? null : x.Transporte.TipoTransporte.Estrategia,x.Transporte == null ? null : x.Transporte.TipoTransporte.Nombre), cancellationToken);
+        return Result<PaginaResponse<EnvioResponse>>.Success(pagina);
     }
 
     public async Task<Result> ActualizarAsync(

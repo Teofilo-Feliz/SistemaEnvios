@@ -66,6 +66,45 @@ public sealed class AlcanceEnvios(SistemaEnviosDbContext db, IUserContext usuari
         };
     }
 
+    /// <summary>
+    /// Un equipo pertenece a una ubicacion, no a un envio, asi que se acota por ahi.
+    /// Transportacion ve los equipos que viajan en los envios bajo su custodia.
+    /// </summary>
+    public async Task<IQueryable<Equipo>> FiltrarEquiposAsync(
+        IQueryable<Equipo> query,
+        CancellationToken cancellationToken = default)
+    {
+        var perfil = await ResolverPerfilAsync(cancellationToken);
+        var filialId = usuario.AffiliateId;
+
+        return perfil switch
+        {
+            PerfilAlcance.Global => query,
+            PerfilAlcance.Transportacion => query.Where(x => db.EnvioEquipos.Any(ee =>
+                ee.EquipoId == x.EquipoId &&
+                EstadoEnvioCodigos.EtapasTransportacion.Contains(ee.Envio.EstadoEnvio.Codigo))),
+            PerfilAlcance.Filial => query.Where(x => x.UbicacionActual.FilialExternaId == filialId),
+            _ => query.Where(_ => false),
+        };
+    }
+
+    public async Task<Result> VerificarUbicacionAsync(int ubicacionId, CancellationToken cancellationToken = default)
+    {
+        var perfil = await ResolverPerfilAsync(cancellationToken);
+        if (perfil == PerfilAlcance.Global) return Result.Success();
+
+        var mapeada = await VerificarFilialMapeadaAsync(cancellationToken);
+        if (mapeada.IsFailure) return mapeada;
+
+        var filialId = usuario.AffiliateId;
+        var alcanza = await db.Ubicaciones.AnyAsync(
+            x => x.UbicacionId == ubicacionId && x.FilialExternaId == filialId, cancellationToken);
+
+        return alcanza
+            ? Result.Success()
+            : Result.Failure("La ubicación no pertenece a su filial.", ErrorType.Forbidden);
+    }
+
     public async Task<Result> VerificarFilialMapeadaAsync(CancellationToken cancellationToken = default)
     {
         var perfil = await ResolverPerfilAsync(cancellationToken);

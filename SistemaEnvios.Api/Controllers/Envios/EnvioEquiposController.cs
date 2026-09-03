@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using SistemaEnvios.Application.DTOs.Common;
 using Microsoft.AspNetCore.Mvc;
 using SistemaEnvios.Api.Extensions;
 using SistemaEnvios.Application.DTOs.Envios;
@@ -18,8 +19,8 @@ public sealed class EnvioEquiposController(IEnvioEquipoService service) : Contro
 
     [HttpGet("por-envio/{envioId:int}")]
     [Authorize(Policy = PermissionNames.EnviosConsultar)]
-    public async Task<IActionResult> ListarPorEnvio(int envioId, CancellationToken cancellationToken) =>
-        (await service.ListarPorEnvioAsync(envioId, cancellationToken)).ToActionResult(this);
+    public async Task<IActionResult> ListarPorEnvio(int envioId, [FromQuery] ParametrosPaginaSimple request, CancellationToken cancellationToken) =>
+        (await service.ListarPorEnvioAsync(envioId, request, cancellationToken)).ToActionResult(this);
 
     [HttpPost]
     [Authorize(Policy = PermissionNames.EnviosEditar)]

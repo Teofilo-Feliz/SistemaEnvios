@@ -1,4 +1,5 @@
 using FluentValidation;
+using SistemaEnvios.Application.DTOs.Common;
 using Microsoft.EntityFrameworkCore;
 using SistemaEnvios.Application.Common;
 using SistemaEnvios.Application.DTOs.Equipos;
@@ -15,10 +16,18 @@ public sealed class EquipoService(
     IUnitOfWork unitOfWork,
     IValidator<CrearEquipoRequest> crearValidator,
     IValidator<ActualizarEquipoRequest> actualizarValidator,
-    IUserContext userContext) : IEquipoService
+    IUserContext userContext,
+    IAlcanceEnvios alcance) : IEquipoService
 {
     public async Task<Result<EquipoResponse>> ObtenerAsync(int equipoId, CancellationToken cancellationToken = default)
     {
+        var alcanzable = await (await alcance.FiltrarEquiposAsync(db.Equipos.AsNoTracking(), cancellationToken))
+            .AnyAsync(x => x.EquipoId == equipoId, cancellationToken);
+        if (!alcanzable)
+            return await db.Equipos.AnyAsync(x => x.EquipoId == equipoId, cancellationToken)
+                ? Result<EquipoResponse>.Failure("El equipo no pertenece a su filial.", ErrorType.Forbidden)
+                : Result<EquipoResponse>.Failure("El equipo no existe.", ErrorType.NotFound);
+
         var equipo = await db.Equipos.AsNoTracking()
             .Where(x => x.EquipoId == equipoId)
             .Select(x => new EquipoResponse(x.EquipoId, x.CodigoActivo, x.NumeroSerie, x.TipoEquipoId,
@@ -30,16 +39,26 @@ public sealed class EquipoService(
             : Result<EquipoResponse>.Success(equipo);
     }
 
-    public async Task<Result<IReadOnlyCollection<EquipoResponse>>> ListarAsync(CancellationToken cancellationToken = default)
+    public async Task<Result<PaginaResponse<EquipoResponse>>> ListarAsync(ConsultarEquiposRequest request, CancellationToken cancellationToken = default)
     {
-        var equipos = await db.Equipos.AsNoTracking()
-            .OrderBy(x => x.Marca)
-            .ThenBy(x => x.Modelo)
-            .Select(x => new EquipoResponse(x.EquipoId, x.CodigoActivo, x.NumeroSerie, x.TipoEquipoId,
-                x.UbicacionActualId, x.Marca, x.Modelo, x.Observaciones))
-            .ToListAsync(cancellationToken);
+        var query = await alcance.FiltrarEquiposAsync(db.Equipos.AsNoTracking(), cancellationToken);
 
-        return Result<IReadOnlyCollection<EquipoResponse>>.Success(equipos);
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var termino = request.Search.Trim();
+            query = query.Where(x =>
+                (x.NumeroSerie != null && x.NumeroSerie.Contains(termino)) ||
+                (x.CodigoActivo != null && x.CodigoActivo.Contains(termino)) ||
+                x.Marca.Contains(termino) || x.Modelo.Contains(termino));
+        }
+        if (request.TipoEquipoId.HasValue) query = query.Where(x => x.TipoEquipoId == request.TipoEquipoId);
+        if (request.UbicacionActualId.HasValue) query = query.Where(x => x.UbicacionActualId == request.UbicacionActualId);
+
+        var pagina = await query.OrderBy(x => x.Marca).ThenBy(x => x.Modelo).ThenBy(x => x.EquipoId)
+            .PaginarAsync(request, x => new EquipoResponse(x.EquipoId, x.CodigoActivo, x.NumeroSerie, x.TipoEquipoId,
+                x.UbicacionActualId, x.Marca, x.Modelo, x.Observaciones), cancellationToken);
+
+        return Result<PaginaResponse<EquipoResponse>>.Success(pagina);
     }
 
     public async Task<Result<int>> CrearAsync(CrearEquipoRequest request, CancellationToken cancellationToken = default)
@@ -54,6 +73,10 @@ public sealed class EquipoService(
         var referenciasValidas = await ReferenciasValidasAsync(request.TipoEquipoId, request.UbicacionActualId, cancellationToken);
         if (referenciasValidas.IsFailure)
             return Result<int>.Failure(referenciasValidas.Error!, referenciasValidas.ErrorType);
+
+        var destinoPermitido = await alcance.VerificarUbicacionAsync(request.UbicacionActualId, cancellationToken);
+        if (destinoPermitido.IsFailure)
+            return Result<int>.Failure(destinoPermitido.Error!, destinoPermitido.ErrorType);
 
         var codigoActivo = NormalizarOpcional(request.CodigoActivo);
         var numeroSerie = NormalizarOpcional(request.NumeroSerie);
@@ -91,6 +114,14 @@ public sealed class EquipoService(
         var equipo = await db.Equipos.FindAsync([request.EquipoId], cancellationToken);
         if (equipo is null)
             return Result.Failure("El equipo no existe.", ErrorType.NotFound);
+
+        var origenPermitido = await alcance.VerificarUbicacionAsync(equipo.UbicacionActualId, cancellationToken);
+        if (origenPermitido.IsFailure)
+            return Result.Failure("El equipo no pertenece a su filial.", origenPermitido.ErrorType);
+
+        var destinoPermitido = await alcance.VerificarUbicacionAsync(request.UbicacionActualId, cancellationToken);
+        if (destinoPermitido.IsFailure)
+            return destinoPermitido;
 
         var referenciasValidas = await ReferenciasValidasAsync(request.TipoEquipoId, request.UbicacionActualId, cancellationToken);
         if (referenciasValidas.IsFailure)

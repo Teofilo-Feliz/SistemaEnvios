@@ -9,6 +9,7 @@ import ShipmentTransportSection from "@/components/shipments/ShipmentTransportSe
 import ShipmentEquipmentSection from "@/components/shipments/ShipmentEquipmentSection.vue";
 import ShipmentSummary from "@/components/shipments/ShipmentSummary.vue";
 import { catalogoService } from "@/services/catalogoService";
+import { filas } from '@/services/paginacion';
 import { equipoService } from "@/services/equipoService";
 import { envioService } from "@/services/envioService";
 import { transporteService } from "@/services/transporteService";
@@ -285,28 +286,29 @@ function editEquipment(e) {
 async function load() {
   try {
     const [l, t, e, tt, d] = await Promise.all([
-      catalogoService.locations(),
-      catalogoService.types(),
-      equipoService.list(),
-      catalogoService.transportTypes(),
-      catalogoService.internalDrivers(),
+      catalogoService.allLocations(),
+      catalogoService.allTypes(),
+      // El selector de equipos se llena por búsqueda, no descargando el inventario completo.
+      equipoService.list({ pageSize: 100 }),
+      catalogoService.allTransportTypes(),
+      catalogoService.allInternalDrivers(),
     ]);
-    locations.value = l.data || [];
-    types.value = t.data || [];
-    registeredEquipment.value = e.data || [];
-    transportTypes.value = tt.data || [];
-    drivers.value = d.data || [];
+    locations.value = l;
+    types.value = t;
+    registeredEquipment.value = filas(e);
+    transportTypes.value = tt;
+    drivers.value = d;
     if (editing.value) {
       const [r, asociaciones, estados] = await Promise.all([
         envioService.get(route.params.id),
-        envioService.equipment(route.params.id),
-        catalogoService.states(),
+        envioService.equipment(route.params.id, { pageSize: 100 }),
+        catalogoService.allStates(),
       ]);
 
       // Una vez entregado a Transportación el envío ya no se toca. Sin esta comprobación se
       // podía volver al formulario por URL o con el botón atrás del navegador, editarlo y
       // recién enterarse del rechazo al guardar.
-      const codigo = (estados.data || []).find(
+      const codigo = estados.find(
         (x) => x.estadoEnvioId === r.data.estadoEnvioId,
       )?.codigo;
       if (!["EN_FILIAL", "PREPARACION_TECNOLOGIA"].includes(codigo)) {
@@ -321,7 +323,7 @@ async function load() {
 
       // Los equipos ya asociados se cargan al formulario. Se guarda envioEquipoId para poder
       // distinguir después qué se agregó, qué cambió y qué se quitó.
-      form.equipment = (asociaciones.data || []).map((asociacion) => {
+      form.equipment = filas(asociaciones).map((asociacion) => {
         const equipo = registeredEquipment.value.find((x) => x.equipoId === asociacion.equipoId) || {};
         return {
           id: `existente-${asociacion.envioEquipoId}`,

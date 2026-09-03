@@ -1,7 +1,9 @@
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import PageHeader from "@/components/common/PageHeader.vue";
+import Pagination from "@/components/common/Pagination.vue";
+import { aPagina, filas } from "@/services/paginacion";
 import BaseCard from "@/components/common/BaseCard.vue";
 import BaseTable from "@/components/common/BaseTable.vue";
 import { envioService } from "@/services/envioService";
@@ -15,6 +17,9 @@ const auth = useAuthStore();
 const loading = ref(true);
 const shipments = ref([]);
 const states = ref([]);
+const page = ref(1);
+const pageSize = 10;
+const totalItems = ref(0);
 
 const columns = [
   { key: "numeroEnvio", label: "Envío" },
@@ -55,12 +60,17 @@ const subtitulo = computed(() =>
 async function load() {
   loading.value = true;
   try {
-    const [envios, estados] = await Promise.all([
-      envioService.list(),
-      catalogoService.states(),
+    const [enviosPagina, estados] = await Promise.all([
+      envioService.paged({
+        page: page.value,
+        pageSize,
+        estadoCodigos: ['EN_TRANSITO', 'PENDIENTE_RECEPCION_FILIAL', 'RECIBIDO_FILIAL'],
+      }),
+      catalogoService.allStates(),
     ]);
-    shipments.value = envios.data || [];
-    states.value = estados.data || [];
+    shipments.value = filas(enviosPagina);
+    totalItems.value = aPagina(enviosPagina).totalItems;
+    states.value = estados;
   } catch (error) {
     ui.notify(error.userMessage || "No fue posible cargar recepciones.", "error");
   } finally {
@@ -83,6 +93,7 @@ async function recibir(row) {
 }
 
 onMounted(load);
+watch(page, load);
 </script>
 
 <template>
@@ -98,6 +109,7 @@ onMounted(load);
         @confirm="recibir"
         @view="(row) => router.push(`/envios/${row.envioId}`)"
       />
+      <Pagination :page="page" :total="totalItems" :page-size="pageSize" @update:page="page = $event" />
     </BaseCard>
   </div>
 </template>

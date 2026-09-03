@@ -1,4 +1,5 @@
 using FluentValidation;
+using SistemaEnvios.Application.DTOs.Common;
 using Microsoft.EntityFrameworkCore;
 using SistemaEnvios.Application.Common;
 using SistemaEnvios.Application.DTOs.TiposEquipos;
@@ -23,12 +24,18 @@ public sealed class TipoEquipoService(
         return tipo is null ? Result<TipoEquipoResponse>.Failure("El tipo de equipo no existe.", ErrorType.NotFound) : Result<TipoEquipoResponse>.Success(tipo);
     }
 
-    public async Task<Result<IReadOnlyCollection<TipoEquipoResponse>>> ListarAsync(bool soloActivos = true, CancellationToken cancellationToken = default)
+    public async Task<Result<PaginaResponse<TipoEquipoResponse>>> ListarAsync(ConsultarCatalogoRequest request, CancellationToken cancellationToken = default)
     {
         var query = db.TiposEquipo.AsNoTracking();
-        if (soloActivos) query = query.Where(x => x.Activo);
-        var tipos = await query.OrderBy(x => x.Nombre).Select(x => new TipoEquipoResponse(x.TipoEquipoId, x.Nombre, x.Activo)).ToListAsync(cancellationToken);
-        return Result<IReadOnlyCollection<TipoEquipoResponse>>.Success(tipos);
+        if (request.SoloActivos) query = query.Where(x => x.Activo);
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var termino = request.Search.Trim();
+            query = query.Where(x => x.Nombre.Contains(termino));
+        }
+        var pagina = await query.OrderBy(x => x.Nombre).ThenBy(x => x.TipoEquipoId)
+            .PaginarAsync(request, x => new TipoEquipoResponse(x.TipoEquipoId, x.Nombre, x.Activo), cancellationToken);
+        return Result<PaginaResponse<TipoEquipoResponse>>.Success(pagina);
     }
 
     public async Task<Result<int>> CrearAsync(GuardarTipoEquipoRequest request, CancellationToken cancellationToken = default)

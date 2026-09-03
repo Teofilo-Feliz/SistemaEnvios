@@ -20,6 +20,7 @@ import { envioService } from "@/services/envioService";
 import { equipoService } from "@/services/equipoService";
 import { transporteService } from "@/services/transporteService";
 import { catalogoService } from "@/services/catalogoService";
+import { filas } from '@/services/paginacion';
 import { useUiStore } from "@/stores/uiStore";
 import { useAuthStore } from "@/stores/authStore";
 import { isInternalTransport, isPrivateTransport } from "@/utils/transport";
@@ -138,12 +139,12 @@ async function cargarEquipos() {
   }
   const [detalles, tipos] = await Promise.all([
     Promise.all(ids.map((id) => equipoService.get(id).catch(() => null))),
-    catalogoService.types().catch(() => ({ data: [] })),
+    catalogoService.allTypes().catch(() => []),
   ]);
   equipoDetails.value = Object.fromEntries(
     detalles.filter(Boolean).map((respuesta) => [respuesta.data.equipoId, respuesta.data]),
   );
-  equipoTypes.value = tipos.data || [];
+  equipoTypes.value = tipos;
 }
 
 async function load() {
@@ -151,13 +152,13 @@ async function load() {
   try {
     const requests = [
       envioService.get(route.params.id),
-      catalogoService.locations(),
-      catalogoService.states(),
-      envioService.equipment(route.params.id),
-      envioService.history(route.params.id),
+      catalogoService.locations({ pageSize: 100 }),
+      catalogoService.states({ pageSize: 100 }),
+      envioService.equipment(route.params.id, { pageSize: 100 }),
+      envioService.history(route.params.id, { pageSize: 100 }),
       transporteService.getByEnvio(route.params.id),
       envioService.reception(route.params.id),
-      envioService.incidents(route.params.id),
+      envioService.incidents(route.params.id, { pageSize: 100 }),
     ];
     const [
       detail,
@@ -172,14 +173,14 @@ async function load() {
       requests.map((request) => request.catch(() => ({ data: null }))),
     );
     shipment.value = detail.data;
-    locations.value = locationResult.data || [];
-    states.value = stateResult.data || [];
-    equipment.value = equipmentResult.data || [];
+    locations.value = filas(locationResult);
+    states.value = filas(stateResult);
+    equipment.value = filas(equipmentResult);
     await cargarEquipos();
-    history.value = historyResult.data || [];
+    history.value = filas(historyResult);
     transport.value = transportResult.data;
     reception.value = receptionResult.data;
-    incidents.value = incidentsResult.data || [];
+    incidents.value = filas(incidentsResult);
   } catch (error) {
     ui.showToast(
       error.userMessage || "No fue posible cargar el envío.",

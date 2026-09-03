@@ -1,8 +1,10 @@
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { Bell, CheckCircle2, CircleDashed, ClipboardCheck, RefreshCw } from "lucide-vue-next";
 import PageHeader from "@/components/common/PageHeader.vue";
+import Pagination from "@/components/common/Pagination.vue";
+import { aPagina, filas } from "@/services/paginacion";
 import StatCard from "@/components/dashboard/StatCard.vue";
 import BaseCard from "@/components/common/BaseCard.vue";
 import BaseTable from "@/components/common/BaseTable.vue";
@@ -19,6 +21,9 @@ const loading = ref(true);
 const shipments = ref([]);
 const states = ref([]);
 const notificationCount = ref(0);
+const page = ref(1);
+const pageSize = 10;
+const totalItems = ref(0);
 const columns = [
   { key: "number", label: "Envío" },
   { key: "transport", label: "Transporte" },
@@ -69,14 +74,21 @@ const stats = computed(() => [
 async function load() {
   loading.value = true;
   try {
-    const [{ data: envios }, { data: estados }, { data: notifications }] = await Promise.all([
-      envioService.list(),
-      catalogoService.states(),
-      notificacionService.listTechnology(),
+    // Solo las etapas que Tecnología atiende, paginadas en el servidor.
+    const [enviosPagina, estados, notificaciones] = await Promise.all([
+      envioService.paged({
+        page: page.value,
+        pageSize,
+        estadoCodigos: ['ESPERA_TECNOLOGIA', 'RECIBIDO_TRANSPORTACION', 'EN_REVISION'],
+      }),
+      catalogoService.allStates(),
+      notificacionService.listTechnology({ pageSize: 1 }),
     ]);
-    shipments.value = envios || [];
-    states.value = estados || [];
-    notificationCount.value = (notifications || []).length;
+    shipments.value = filas(enviosPagina);
+    totalItems.value = aPagina(enviosPagina).totalItems;
+    states.value = estados;
+    // Solo interesa cuántas hay: se pide una página de uno y se lee el total.
+    notificationCount.value = aPagina(notificaciones).totalItems;
   } catch (error) {
     ui.notify(error.userMessage || "No fue posible cargar Tecnología.", "error");
   } finally {
@@ -86,8 +98,8 @@ async function load() {
 
 async function receiveShipment(row) {
   try {
-    const { data: associations } = await envioService.equipment(row.id);
-    const equipment = await Promise.all((associations || []).map(async (association) => {
+    const associations = filas(await envioService.equipment(row.id, { pageSize: 100 }));
+    const equipment = await Promise.all(associations.map(async (association) => {
       const { data } = await equipoService.get(association.equipoId);
       return { ...data, ticket: association.numeroTicket, observations: association.observaciones };
     }));
@@ -112,6 +124,7 @@ async function receiveShipment(row) {
 }
 
 onMounted(load);
+watch(page, load);
 </script>
 
 <template>
@@ -133,5 +146,6 @@ onMounted(load);
         @view="(row) => router.push(`/envios/${row.id}`)"
       />
     </BaseCard>
+    <Pagination :page="page" :total="totalItems" :page-size="pageSize" @update:page="page = $event" />
   </div>
 </template>
