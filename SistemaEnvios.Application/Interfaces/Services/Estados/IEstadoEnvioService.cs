@@ -13,5 +13,4 @@ public interface IEstadoEnvioService
     Task<Result> RegistrarLlegadaTecnologiaAsync(int envioId, string? observaciones = null, CancellationToken cancellationToken = default);
     Task<Result> ConfirmarLlegadaTransportacionAsync(int envioId, string? observaciones = null, CancellationToken cancellationToken = default);
     Task<Result> DespacharDesdeTecnologiaAsync(int envioId, string? observaciones = null, CancellationToken cancellationToken = default);
-    Task<Result> RegistrarLlegadaFilialAsync(int envioId, string? observaciones = null, CancellationToken cancellationToken = default);
 }

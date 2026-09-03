@@ -16,6 +16,7 @@ using SistemaEnvios.Domain.Constants;
 using SistemaEnvios.Domain.Entities;
 using SistemaEnvios.Domain.Enums;
 using SistemaEnvios.Infrastructure.Persistence;
+using SistemaEnvios.Infrastructure.Services.Casos;
 using SistemaEnvios.Infrastructure.Repositories.Envios;
 using SistemaEnvios.Infrastructure.Security;
 using SistemaEnvios.Infrastructure.Services.Envios;
@@ -94,7 +95,8 @@ public sealed class AlcanceServiciosTests
                 new EnvioEquipoRepository(db), new UnitOfWork(db),
                 new AgregarEquipoEnvioRequestValidator(),
                 new ActualizarEnvioEquipoRequestValidator(),
-                db, usuario, alcance)
+                db, usuario, alcance,
+                new CasoEquipoService(db, new UnitOfWork(db), usuario, alcance))
             .ListarPorEnvioAsync(envio.EnvioId, new ParametrosPaginaSimple());
 
         AssertFueraDeAlcance(resultado);
@@ -136,9 +138,9 @@ public sealed class AlcanceServiciosTests
     {
         await using var db = CrearContexto();
         await SembrarAsync(db);
-        var (_, alcance) = Contexto(db);
+        var (usuario, alcance) = Contexto(db);
 
-        var resultado = await new DashboardService(db, alcance).ObtenerAsync();
+        var resultado = await new DashboardService(db, alcance, usuario).ObtenerAsync();
 
         Assert.True(resultado.IsSuccess);
         Assert.Equal(0, resultado.Value!.Summary.TotalEnvios);

@@ -107,11 +107,6 @@ public sealed class EnviosController(
     public async Task<IActionResult> DespacharDesdeTecnologia(int envioId, [FromBody] EntregaTransportacionRequest? request, CancellationToken cancellationToken) =>
         (await estadoService.DespacharDesdeTecnologiaAsync(envioId, request?.Observaciones, cancellationToken)).ToActionResult(this);
 
-    [HttpPost("{envioId:int}/llegada-filial")]
-    [Authorize(Policy = PermissionNames.RecepcionesGestionar)]
-    public async Task<IActionResult> RegistrarLlegadaFilial(int envioId, [FromBody] EntregaTransportacionRequest? request, CancellationToken cancellationToken) =>
-        (await estadoService.RegistrarLlegadaFilialAsync(envioId, request?.Observaciones, cancellationToken)).ToActionResult(this);
-
     [HttpGet("{envioId:int}/historial")]
     [Authorize(Policy = PermissionNames.EnviosConsultar)]
     public async Task<IActionResult> ListarHistorial(int envioId, [FromQuery] ParametrosPaginaSimple request, CancellationToken cancellationToken) =>

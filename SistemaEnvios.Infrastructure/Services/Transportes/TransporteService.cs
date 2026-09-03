@@ -28,7 +28,7 @@ public sealed class TransporteService(
         if (envio is null) return Result<int>.Failure("El envío no existe.", ErrorType.NotFound);
         var enAlcanceEnvio = await alcance.VerificarAsync(envio.EnvioId, cancellationToken);
         if (enAlcanceEnvio.IsFailure) return Result<int>.Failure(enAlcanceEnvio.Error!, enAlcanceEnvio.ErrorType);
-        if (!EsEstadoEditable(envio.EstadoEnvio.Codigo)) return Result<int>.Failure("El envío ya fue despachado y no admite cambios en el transporte.", ErrorType.Conflict);
+        if (!PuedeAsignarTransporte(envio.EstadoEnvio.Codigo)) return Result<int>.Failure("El envío ya salió a ruta y no admite asignar transporte.", ErrorType.Conflict);
         if (await db.Transportes.AnyAsync(x => x.EnvioId == request.EnvioId, cancellationToken)) return Result<int>.Failure("El envío ya tiene transporte registrado.", ErrorType.Conflict);
         var tipo = await db.TiposTransporte.FirstOrDefaultAsync(x => x.TipoTransporteId == request.TipoTransporteId && x.Activo, cancellationToken);
         if (tipo is null) return Result<int>.Failure("El tipo de transporte no existe o está inactivo.", ErrorType.Validation);
@@ -49,12 +49,14 @@ public sealed class TransporteService(
             transporte.Privado = new TransportePrivado { NombreResponsable = request.NombreResponsable!.Trim(), Parentesco = request.Parentesco!.Trim(), CedulaResponsable = SoloDigitos(request.CedulaResponsable!), PlacaVehiculo = NormalizarMayuscula(request.PlacaVehiculo)! };
         }
         MarcarEnvioModificado(envio, usuarioId);
+        // Asignar el chofer ES la salida a ruta: no hay decision intermedia entre nombrar al
+        // chofer y que el envio arranque, asi que el envio pasa a EN_TRANSITO en el mismo acto.
         if (envio.Direccion == DireccionEnvioEnum.HaciaFilial && envio.EstadoEnvio.Codigo == EstadoEnvioCodigos.EnTransportacion)
         {
-            var asignado = await db.EstadosEnvio.FirstOrDefaultAsync(x => x.Codigo == EstadoEnvioCodigos.TransporteAsignado && x.Activo, cancellationToken);
-            if (asignado is null || !await db.TransicionesEstadoEnvio.AnyAsync(x => x.EstadoOrigenId == envio.EstadoEnvioId && x.EstadoDestinoId == asignado.EstadoEnvioId && x.Activo, cancellationToken)) return Result<int>.Failure("El estado de transporte asignado no está configurado.", ErrorType.Conflict);
-            envio.EstadoEnvioId = asignado.EstadoEnvioId;
-            db.HistorialEstadosEnvio.Add(new HistorialEstadoEnvio { EnvioId = envio.EnvioId, EstadoEnvioId = asignado.EstadoEnvioId, UbicacionId = envio.UbicacionOrigenId, UsuarioId = usuarioId, Fecha = DateTime.UtcNow, Observaciones = "Chofer asignado por Transportación.", FechaCreacion = DateTime.UtcNow, UsuarioCreacionId = usuarioId });
+            var transito = await db.EstadosEnvio.FirstOrDefaultAsync(x => x.Codigo == EstadoEnvioCodigos.EnTransito && x.Activo, cancellationToken);
+            if (transito is null || !await db.TransicionesEstadoEnvio.AnyAsync(x => x.EstadoOrigenId == envio.EstadoEnvioId && x.EstadoDestinoId == transito.EstadoEnvioId && x.Activo, cancellationToken)) return Result<int>.Failure("La salida a ruta hacia la filial no está configurada.", ErrorType.Conflict);
+            envio.EstadoEnvioId = transito.EstadoEnvioId;
+            db.HistorialEstadosEnvio.Add(new HistorialEstadoEnvio { EnvioId = envio.EnvioId, EstadoEnvioId = transito.EstadoEnvioId, UbicacionId = envio.UbicacionOrigenId, UsuarioId = usuarioId, Fecha = fecha, Observaciones = "Chofer asignado; el envío salió en tránsito hacia la filial.", FechaCreacion = fecha, UsuarioCreacionId = usuarioId });
         }
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result<int>.Success(transporte.TransporteId);
@@ -101,7 +103,7 @@ public sealed class TransporteService(
         if (transporte is null) return Result.Failure("El transporte no existe.", ErrorType.NotFound);
         var enAlcance = await alcance.VerificarAsync(transporte.EnvioId, cancellationToken);
         if (enAlcance.IsFailure) return enAlcance;
-        if (!EsEstadoEditable(transporte.Envio.EstadoEnvio.Codigo)) return Result.Failure("El envío ya fue despachado y no admite cambios en el transporte.", ErrorType.Conflict);
+        if (!PuedeModificarTransporte(transporte.Envio.EstadoEnvio.Codigo)) return Result.Failure("El envío ya salió a ruta y no admite cambios en el transporte.", ErrorType.Conflict);
         var tipo = await db.TiposTransporte.FirstOrDefaultAsync(x => x.TipoTransporteId == request.TipoTransporteId && x.Activo, cancellationToken);
         if (tipo is null) return Result.Failure("El tipo de transporte no existe o está inactivo.", ErrorType.Validation);
         if (tipo.Estrategia == EstrategiaTransporteEnum.EntregaDirectaTecnologia && transporte.Envio.Direccion != DireccionEnvioEnum.HaciaTecnologia) return Result.Failure("Los envíos de Tecnología a filial solo utilizan transporte interno.", ErrorType.Validation);
@@ -137,7 +139,22 @@ public sealed class TransporteService(
     private Task<bool> TransicionExiste(int origen, int destino, CancellationToken ct) => db.TransicionesEstadoEnvio.AnyAsync(x => x.EstadoOrigenId == origen && x.EstadoDestinoId == destino && x.Activo, ct);
     private void AgregarHistorial(Envio envio, int estadoId, Guid usuario, DateTime fecha, string obs) => db.HistorialEstadosEnvio.Add(new HistorialEstadoEnvio { EnvioId = envio.EnvioId, EstadoEnvioId = estadoId, UbicacionId = envio.UbicacionOrigenId, UsuarioId = usuario, Fecha = fecha, Observaciones = obs, FechaCreacion = fecha, UsuarioCreacionId = usuario });
     private static TransporteResponse Mapear(Transporte x) => new(x.TransporteId, x.EnvioId, x.TipoTransporteId, x.TipoTransporte.Codigo, x.TipoTransporte.Nombre, x.TipoTransporte.Estrategia, x.Interno?.ChoferInternoId, x.Interno?.NombreChoferAlMomento, x.Interno?.NumeroEmpleadoAlMomento, x.Privado?.NombreResponsable, x.Privado?.Parentesco, x.Privado is null ? null : $"*******{x.Privado.CedulaResponsable[^4..]}", x.Privado?.PlacaVehiculo, x.Interno?.FechaEntregaTransportacion ?? x.Privado?.FechaEntrega, x.Observaciones, x.Interno?.EntregaConfirmada ?? false, x.Interno?.FechaConfirmacionEntrega, x.Interno?.UsuarioConfirmacionId);
-    private static bool EsEstadoEditable(string codigo) => codigo is EstadoEnvioCodigos.EnFilial or EstadoEnvioCodigos.EnPreparacionTecnologia or EstadoEnvioCodigos.DespachadoPorTecnologia;
+    /// <summary>
+    /// Estados en los que todavía se puede asignar transporte. EN_TRANSPORTACION es el envío
+    /// que Tecnología ya despachó y espera chofer: es el estado que lista la pantalla de
+    /// asignación, y dejarlo fuera hacía que cada asignación fallara con "ya fue despachado".
+    /// </summary>
+    private static bool PuedeAsignarTransporte(string codigo) =>
+        codigo is EstadoEnvioCodigos.EnFilial
+            or EstadoEnvioCodigos.EnPreparacionTecnologia
+            or EstadoEnvioCodigos.DespachadoPorTecnologia
+            or EstadoEnvioCodigos.EnTransportacion;
+
+    /// <summary>
+    /// Asignar el chofer manda el envío a ruta, así que después ya no hay margen de corrección:
+    /// modificar el transporte se permite exactamente donde se permite asignarlo.
+    /// </summary>
+    private static bool PuedeModificarTransporte(string codigo) => PuedeAsignarTransporte(codigo);
     private static string? NormalizarOpcional(string? valor) => string.IsNullOrWhiteSpace(valor) ? null : valor.Trim();
     private static string? NormalizarMayuscula(string? valor) => string.IsNullOrWhiteSpace(valor) ? null : valor.Trim().ToUpperInvariant();
     private static string SoloDigitos(string valor) => new(valor.Where(char.IsDigit).ToArray());

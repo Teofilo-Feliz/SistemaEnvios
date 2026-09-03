@@ -110,13 +110,12 @@ const filtered = computed(() =>
     ? rows.value.filter((x) => match(x, filters.value))
     : rows.value,
 );
-// La página ya viene cortada del servidor; aquí solo se separan las dos tablas.
-const assignmentRows = computed(() => filtered.value.filter(x => x.status === "TRANSPORTE_ASIGNADO"));
-const otherRows = computed(() => filtered.value.filter(x => x.status !== "TRANSPORTE_ASIGNADO"));
+// La página ya viene cortada del servidor. Asignar el chofer manda el envío a ruta, así que
+// ya no hay una bandeja de "chofer asignado" esperando un despacho aparte.
+const otherRows = computed(() => filtered.value);
 const ETAPAS_TRANSPORTACION = [
   "ENTREGADO_TRANSPORTACION", "EN_TRANSITO", "RECIBIDO_TRANSPORTACION",
   "INCIDENCIA_TRANSPORTACION", "DESPACHADO_TECNOLOGIA", "EN_TRANSPORTACION",
-  "TRANSPORTE_ASIGNADO", "DESPACHADO_TRANSPORTACION",
 ];
 async function load() {
   loading.value = true;
@@ -152,8 +151,8 @@ async function load() {
       ubicacionDestinoId: x.ubicacionDestinoId,
       numeroEnvio: x.numeroEnvio,
       direccion: String(x.direccion),
-      canConfirm: ["TRANSPORTE_ASIGNADO", "EN_TRANSITO"].includes(states.value.find((y) => y.estadoEnvioId === x.estadoEnvioId)?.codigo) && Boolean(x.estrategiaTransporte),
-      confirmTitle: states.value.find((y) => y.estadoEnvioId === x.estadoEnvioId)?.codigo === "TRANSPORTE_ASIGNADO" ? "Despachado por transportación" : "Confirmar llegada a Tecnología",
+      canConfirm: states.value.find((y) => y.estadoEnvioId === x.estadoEnvioId)?.codigo === "EN_TRANSITO" && Boolean(x.estrategiaTransporte),
+      confirmTitle: "Confirmar llegada a Tecnología",
     }));
     if (route.query.estado) filters.value = { logic: "AND", rules: [{ field: "status", operator: "equals", value: String(route.query.estado) }] };
   } catch (e) {
@@ -176,15 +175,9 @@ function clear() {
   load();
 }
 async function confirmArrival(row) {
-  if (row.status === "TRANSPORTE_ASIGNADO") {
-    const accepted = await confirmAction({ title: "Despachar envío a filial", text: `¿Confirmas el despacho del envío ${row.number}?`, confirmText: "Despachar" });
-    if (!accepted) return;
-    try { await envioService.dispatchFromTechnology(row.id); ui.notify("Envío despachado y notificado a la filial.", "success"); await load(); } catch (e) { ui.notify(e.userMessage || "No fue posible despachar el envío.", "error"); }
-    return;
-  }
   const accepted = await confirmAction({ title: "Confirmar llegada a Transportación", text: `¿Confirmas que el envío ${row.number} llegó a Transportación? Pasará a espera de Tecnología.`, confirmText: "Confirmar llegada" });
   if (!accepted) return;
-  try { await envioService.confirmTransportArrival(row.id); notifyNotificationsChanged(); ui.notify("Llegada confirmada. Tecnología fue notificada."); await load(); }
+  try { await envioService.confirmTransportArrival(row.id); notifyNotificationsChanged(); ui.notify("Llegada confirmada. Tecnología recibió el aviso."); await load(); }
   catch (e) { ui.notify(e.userMessage || "No fue posible confirmar la llegada.", "error"); }
 }
 onMounted(load);
@@ -209,14 +202,7 @@ watch(page, load);
       :loading="loading"
       @search="search"
       @clear="clear"
-    /><BaseCard title="Despacho por Transportación — listos para salir" :padded="false"
-      ><BaseTable
-        :columns="columns"
-        :rows="assignmentRows"
-        :loading="loading"
-        @confirm="confirmArrival"
-        @view="(row) => router.push(`/envios/${row.id}`)"
-    /><div class="transport-section-hint">Los envíos con chofer asignado aparecen aquí. Usa el botón de acción para marcarlos como despachados.</div></BaseCard>
+    />
     <BaseCard title="Seguimiento y confirmaciones" :padded="false"><BaseTable :columns="columns" :rows="otherRows" :loading="loading" @confirm="confirmArrival" @view="(row) => router.push(`/envios/${row.id}`)" /><Pagination :page="page" :total="totalItems" :page-size="pageSize" @update:page="page = $event" /></BaseCard>
   </div>
 </template>

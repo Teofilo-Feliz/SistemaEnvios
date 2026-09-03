@@ -9,6 +9,7 @@ import ShipmentTransportSection from "@/components/shipments/ShipmentTransportSe
 import ShipmentEquipmentSection from "@/components/shipments/ShipmentEquipmentSection.vue";
 import ShipmentSummary from "@/components/shipments/ShipmentSummary.vue";
 import { catalogoService } from "@/services/catalogoService";
+import { casoService } from "@/services/casoService";
 import { filas } from '@/services/paginacion';
 import { equipoService } from "@/services/equipoService";
 import { envioService } from "@/services/envioService";
@@ -70,8 +71,15 @@ const item = reactive({
   serial: "",
   assetCode: "",
   ticket: "",
+  // Cuando el equipo arrastra un caso abierto el ticket viene dado y no se escribe.
+  ticketHeredado: false,
+  ticketFilial: "",
+  casoFilialId: null,
   notes: "",
 });
+
+// Cubre tanto elegir del combo como escribir un serial que coincide con un equipo existente.
+watch(() => item.existingId, (equipoId) => heredarTicket(equipoId ? Number(equipoId) : null));
 const itemErrors = reactive({
   typeId: "",
   brand: "",
@@ -98,13 +106,28 @@ const destinationLocations = computed(() =>
       : locations.value.filter(isTechnology)
     : locations.value,
 );
+// Doble red: el servidor ya devuelve solo los del origen, y esto descarta cualquiera que
+// quede en memoria de una selección anterior.
 const availableEquipment = computed(() =>
   form.originId
     ? registeredEquipment.value.filter(
         (x) => Number(x.ubicacionActualId) === Number(form.originId),
       )
-    : registeredEquipment.value,
+    : [],
 );
+
+/** Recarga el inventario disponible cuando cambia el origen del envío. */
+async function cargarEquiposDelOrigen(ubicacionId) {
+  if (!ubicacionId) { registeredEquipment.value = []; return; }
+  try {
+    registeredEquipment.value = filas(
+      await equipoService.list({ pageSize: 100, ubicacionActualId: Number(ubicacionId) }),
+    );
+  } catch (error) {
+    ui.notify(error.userMessage || "No fue posible cargar los equipos del origen.", "error");
+  }
+}
+watch(() => form.originId, cargarEquiposDelOrigen);
 const flowLabel = computed(() =>
   !origin.value || !destination.value
     ? ""
@@ -115,9 +138,44 @@ const flowLabel = computed(() =>
 function resetItem() {
   Object.keys(item).forEach((k) => (item[k] = ""));
   item.envioEquipoId = null;
+  item.ticketHeredado = false;
+  item.ticketFilial = "";
+  item.casoFilialId = null;
+}
+
+// Filial a la que obliga el caso del primer equipo con caso abierto del envío. Solo aplica
+// saliendo de Tecnología: en el otro sentido el destino es Tecnología y no hay nada que elegir.
+const destinoFijado = computed(() => {
+  if (!isTechnology(origin.value)) return "";
+  const conCaso = form.equipment.find((x) => x.ticketHeredado && x.casoFilialId);
+  return conCaso ? locations.value.find((x) => x.ubicacionId === conCaso.casoFilialId)?.nombre || "" : "";
+});
+
+/**
+ * El ticket pertenece al caso, no al viaje: si el equipo trae un caso abierto, el número ya
+ * está decidido y el usuario no lo escribe. Solo un equipo sin caso estrena ticket.
+ */
+async function heredarTicket(equipoId) {
+  item.ticketHeredado = false;
+  item.ticketFilial = "";
+  item.casoFilialId = null;
+  if (!equipoId) return;
+  try {
+    const { data: caso } = await casoService.byEquipment(equipoId);
+    if (!caso) return;
+    item.ticket = caso.numeroTicket;
+    item.ticketHeredado = true;
+    item.casoFilialId = caso.filialId;
+    item.ticketFilial = locations.value.find((x) => x.ubicacionId === caso.filialId)?.nombre || "";
+    // La devolución solo puede ir a la filial del caso: se selecciona sola y queda fijada.
+    if (isTechnology(origin.value)) form.destinationId = caso.filialId;
+  } catch {
+    // Si la consulta falla el campo sigue editable: es preferible a bloquearlo sin dato.
+  }
 }
 function fill(e) {
   item.existingId = e.equipoId;
+  heredarTicket(e.equipoId);
   item.typeId = e.tipoEquipoId;
   item.brand = e.marca || "";
   item.model = e.modelo || "";
@@ -159,6 +217,8 @@ function ensure() {
     .then((r) => {
       registeredEquipment.value.push({
         equipoId: r.data,
+        // Sin la ubicación el equipo recién creado no pasaría el filtro por origen.
+        ubicacionActualId: Number(form.originId),
         tipoEquipoId: Number(item.typeId),
         codigoActivo: item.assetCode,
         numeroSerie: item.serial,
@@ -181,6 +241,18 @@ async function addEquipment() {
       : "";
   if (!form.originId) {
     ui.notify("Selecciona el origen antes de agregar un equipo.", "warning");
+    return;
+  }
+  // Cada equipo con caso abierto vuelve a SU filial, así que un envío no puede mezclar casos
+  // de filiales distintas. Se avisa al agregarlo y no al guardar, cuando ya se perdió el rato.
+  const otraFilial = form.equipment.find(
+    (x) => x.casoFilialId && item.casoFilialId && x.casoFilialId !== item.casoFilialId,
+  );
+  if (otraFilial) {
+    ui.notify(
+      `Este equipo debe volver a ${item.ticketFilial || "su filial"} y el envío ya lleva equipos que van a ${otraFilial.ticketFilial || "otra filial"}. Haz un envío por filial.`,
+      "warning",
+    );
     return;
   }
   const duplicate =
@@ -214,6 +286,9 @@ async function addEquipment() {
       serial: item.serial,
       assetCode: item.assetCode,
       ticket: item.ticket,
+      ticketHeredado: item.ticketHeredado,
+      ticketFilial: item.ticketFilial,
+      casoFilialId: item.casoFilialId,
       notes: item.notes,
       typeName:
         types.value.find((x) => x.tipoEquipoId === Number(item.typeId))
@@ -285,17 +360,15 @@ function editEquipment(e) {
 }
 async function load() {
   try {
-    const [l, t, e, tt, d] = await Promise.all([
+    // El inventario no se descarga al abrir: se pide el del origen cuando ya se conoce.
+    const [l, t, tt, d] = await Promise.all([
       catalogoService.allLocations(),
       catalogoService.allTypes(),
-      // El selector de equipos se llena por búsqueda, no descargando el inventario completo.
-      equipoService.list({ pageSize: 100 }),
       catalogoService.allTransportTypes(),
       catalogoService.allInternalDrivers(),
     ]);
     locations.value = l;
     types.value = t;
-    registeredEquipment.value = filas(e);
     transportTypes.value = tt;
     drivers.value = d;
     if (editing.value) {
@@ -320,6 +393,7 @@ async function load() {
       form.originId = r.data.ubicacionOrigenId;
       form.destinationId = r.data.ubicacionDestinoId;
       form.notes = r.data.observaciones || "";
+      await cargarEquiposDelOrigen(r.data.ubicacionOrigenId);
 
       // Los equipos ya asociados se cargan al formulario. Se guarda envioEquipoId para poder
       // distinguir después qué se agregó, qué cambió y qué se quitó.
@@ -335,6 +409,10 @@ async function load() {
           serial: equipo.numeroSerie || "",
           assetCode: equipo.codigoActivo || "",
           ticket: asociacion.numeroTicket || "",
+          // Si el movimiento cuelga de una apertura, su ticket viene del caso: ni se valida
+          // ni se edita, igual que al crearlo.
+          ticketHeredado: Boolean(asociacion.envioEquipoOrigenId),
+          ticketFilial: "",
           notes: asociacion.observaciones || "",
           typeName:
             types.value.find((x) => x.tipoEquipoId === equipo.tipoEquipoId)?.nombre ||
@@ -424,10 +502,13 @@ function validate() {
 }
 async function submit() {
   if (!validate()) return;
+  // Solo se comprueban los tickets que se estrenan. Un ticket heredado ya está usado por la
+  // apertura de su caso a propósito, así que preguntar si está libre siempre diría que no.
   // Al editar hay que excluir la propia asociación: si no, el ticket que ya tiene el equipo
   // en este mismo envío se reportaría como ocupado y no se podría guardar nada.
+  const porVerificar = form.equipment.filter((equipment) => !equipment.ticketHeredado);
   const availability = await Promise.all(
-    form.equipment.map((equipment) =>
+    porVerificar.map((equipment) =>
       envioService.ticketAvailable(
         equipment.ticket,
         equipment.envioEquipoId ? { excluirEnvioEquipoId: equipment.envioEquipoId } : {},
@@ -436,7 +517,7 @@ async function submit() {
   );
   const duplicateIndex = availability.findIndex((response) => response.data !== true);
   if (duplicateIndex >= 0) {
-    ui.notify(`El ticket ${form.equipment[duplicateIndex].ticket} ya está asociado a otro equipo o envío.`, "error");
+    ui.notify(`El ticket ${porVerificar[duplicateIndex].ticket} ya está asociado a otro equipo o envío.`, "error");
     return;
   }
   const transportLabel = selectedTransportType.value?.nombre || "Sin indicar";
@@ -559,6 +640,7 @@ onMounted(load);
             :locations="locations"
             :destination-locations="destinationLocations"
             :flow-label="flowLabel"
+            :destino-fijado="destinoFijado"
             :readonly-origin="technologyMode" /></ShipmentSection
         ><ShipmentSection v-if="!technologyMode" title="Transportación"
           ><ShipmentTransportSection
@@ -571,7 +653,7 @@ onMounted(load);
             :item="item"
             :equipments="form.equipment"
             :types="types"
-            :registered-equipment="registeredEquipment"
+            :registered-equipment="availableEquipment"
             :registering="registering"
             @add="addEquipment"
             @remove="removeEquipment"

@@ -9,7 +9,5 @@ public sealed class Notificacion
     public string DestinatarioRol { get; set; } = null!;
     public Guid? DestinatarioUsuarioId { get; set; }
     public DateTime FechaCreacion { get; set; }
-    public DateTime? FechaLeida { get; set; }
-    public Guid? UsuarioLecturaId { get; set; }
     public Envio Envio { get; set; } = null!;
 }

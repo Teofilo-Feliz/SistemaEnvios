@@ -101,6 +101,14 @@ const routes = [
         meta: { permission: "transportes.gestionar" },
       },
       {
+        // Descartar es lo que cierra un caso que no va a terminar con el equipo de vuelta en
+        // su filial; exige gestionar equipos, no solo consultarlos.
+        path: "tecnologia/descartes",
+        name: "tecnologia-descartes",
+        component: () => import("@/views/tecnologia/TecnologiaDescartes.vue"),
+        meta: { permission: "equipos.gestionar" },
+      },
+      {
         path: "tecnologia/notificaciones",
         name: "tecnologia-notifications",
         component: () =>
@@ -114,6 +122,14 @@ const routes = [
         name: "tecnologia-reception",
         component: () => import("@/views/recepciones/RecepcionEnvio.vue"),
         meta: { permission: "recepciones.gestionar" },
+      },
+      {
+        // Tablero propio de la filial. Consultar envíos basta: el resto del módulo son las
+        // pantallas que ya existen, acotadas por el alcance del backend.
+        path: "filial",
+        name: "filial",
+        component: () => import("@/views/filial/FilialDashboard.vue"),
+        meta: { permission: "envios.consultar" },
       },
       {
         path: "filial/recepciones/:envioId",

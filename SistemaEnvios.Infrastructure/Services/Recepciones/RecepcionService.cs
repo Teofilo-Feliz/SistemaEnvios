@@ -225,9 +225,11 @@ public sealed class RecepcionService(
             x => x.RecepcionId == recepcionId &&
                  x.EstadoRecepcionEquipo == EstadoRecepcionEquipoEnum.VerificadoConIncidencia,
             cancellationToken);
+        // Simétrico a Tecnología: la recepción termina en "recibido", y la incidencia queda
+        // marcada en la recepción, no en un estado aparte del envío.
         var codigoFinal = recepcion.Envio.Direccion == DireccionEnvioEnum.HaciaTecnologia
             ? EstadoEnvioCodigos.RecibidoPorTecnologia
-            : EstadoEnvioCodigos.RecepcionValidadaEnFilial;
+            : EstadoEnvioCodigos.RecibidoEnFilial;
         var estadoFinal = await db.EstadosEnvio.FirstOrDefaultAsync(
             x => x.Codigo == codigoFinal && x.Activo && x.EsFinal,
             cancellationToken);
@@ -308,8 +310,10 @@ public sealed class RecepcionService(
                 codigoEstado is EstadoEnvioCodigos.RecibidoPorTransportacion
                     or EstadoEnvioCodigos.EnEsperaDeTecnologia
                     or EstadoEnvioCodigos.EnProcesoDeRevision,
+            // La filial recibe directo desde EN_TRANSITO: no hay un "llegó" separado del
+            // "lo recibí", los hacía la misma persona en el mismo momento.
             DireccionEnvioEnum.HaciaFilial =>
-                codigoEstado is EstadoEnvioCodigos.PendienteRecepcionFilial or EstadoEnvioCodigos.RecibidoEnFilial,
+                codigoEstado is EstadoEnvioCodigos.EnTransito or EstadoEnvioCodigos.RecibidoEnFilial,
             _ => false
         };
 
@@ -319,7 +323,7 @@ public sealed class RecepcionService(
             DireccionEnvioEnum.HaciaTecnologia =>
                 codigoEstado is EstadoEnvioCodigos.RecibidoPorTransportacion
                     or EstadoEnvioCodigos.EnProcesoDeRevision,
-            DireccionEnvioEnum.HaciaFilial => codigoEstado is EstadoEnvioCodigos.PendienteRecepcionFilial or EstadoEnvioCodigos.RecibidoEnFilial,
+            DireccionEnvioEnum.HaciaFilial => codigoEstado is EstadoEnvioCodigos.EnTransito or EstadoEnvioCodigos.RecibidoEnFilial,
             _ => false
         };
 

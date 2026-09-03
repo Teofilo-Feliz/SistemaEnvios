@@ -14,7 +14,6 @@ export const envioService = {
   registerTechnologyArrival: (id, payload = {}) => api.post(`/envios/${id}/llegada-tecnologia`, payload),
   confirmTransportArrival: (id, payload = {}) => api.post(`/envios/${id}/confirmar-llegada-transportacion`, payload),
   dispatchFromTechnology: (id, payload = {}) => api.post(`/envios/${id}/despachar-tecnologia`, payload),
-  registerFilialArrival: (id, payload = {}) => api.post(`/envios/${id}/llegada-filial`, payload),
   equipment: (id, params) => api.get(`/envio-equipos/por-envio/${id}`, { params }),
   ticketAvailable: (ticket, params = {}) => api.get(`/envio-equipos/ticket-disponible/${encodeURIComponent(ticket)}`, { params }),
   addEquipment: (payload) => api.post('/envio-equipos', payload),

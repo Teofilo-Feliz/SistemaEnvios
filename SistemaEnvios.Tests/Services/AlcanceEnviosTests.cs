@@ -6,6 +6,7 @@ using SistemaEnvios.Domain.Constants;
 using SistemaEnvios.Domain.Entities;
 using SistemaEnvios.Domain.Enums;
 using SistemaEnvios.Infrastructure.Persistence;
+using SistemaEnvios.Infrastructure.Services.Casos;
 using SistemaEnvios.Infrastructure.Repositories;
 using SistemaEnvios.Infrastructure.Security;
 using SistemaEnvios.Infrastructure.Services.Envios;
@@ -147,7 +148,7 @@ public sealed class AlcanceEnviosTests
             new CrearEnvioRequestValidator(),
             new ActualizarEnvioRequestValidator(),
             userContext,
-            new AlcanceEnvios(db, userContext));
+            new AlcanceEnvios(db, userContext), new CasoEquipoService(db, new UnitOfWork(db), userContext, new AlcanceEnvios(db, userContext)));
     }
 
     private static SistemaEnviosDbContext CrearContexto()

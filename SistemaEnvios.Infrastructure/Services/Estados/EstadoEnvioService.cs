@@ -186,6 +186,10 @@ public sealed class EstadoEnvioService(
         return await RegistrarLlegadaTecnologiaAsync(envioId,observaciones,cancellationToken);
     }
 
+    /// <summary>
+    /// Tecnología confirma la entrega a Transportación. Deja el envío en EN_TRANSPORTACION, que
+    /// es de donde Transportación lo toma para asignarle chofer.
+    /// </summary>
     public async Task<Result> DespacharDesdeTecnologiaAsync(int envioId, string? observaciones = null, CancellationToken cancellationToken = default)
     {
         if (userContext.UserId is not Guid usuarioId) return Result.Failure("No fue posible identificar al usuario autenticado.", ErrorType.Unauthorized);
@@ -193,44 +197,26 @@ public sealed class EstadoEnvioService(
         if (envio is null) return Result.Failure("El envío no existe.", ErrorType.NotFound);
         var enAlcance = await alcance.VerificarAsync(envio.EnvioId, cancellationToken);
         if (enAlcance.IsFailure) return enAlcance;
-        if (envio.Direccion != DireccionEnvioEnum.HaciaFilial || envio.EstadoEnvio.Codigo is not (EstadoEnvioCodigos.EnPreparacionTecnologia or EstadoEnvioCodigos.TransporteAsignado))
+        if (envio.Direccion != DireccionEnvioEnum.HaciaFilial || envio.EstadoEnvio.Codigo != EstadoEnvioCodigos.EnPreparacionTecnologia)
             return Result.Failure("El envío no está preparado para esta operación.", ErrorType.Conflict);
         if (!await db.EnvioEquipos.AnyAsync(x => x.EnvioId == envioId, cancellationToken)) return Result.Failure("No se puede despachar un envío sin equipos.", ErrorType.Conflict);
-        var estados = await db.EstadosEnvio.Where(x => x.Activo && (x.Codigo == EstadoEnvioCodigos.DespachadoPorTecnologia || x.Codigo == EstadoEnvioCodigos.EnTransportacion || x.Codigo == EstadoEnvioCodigos.EnTransito)).ToDictionaryAsync(x => x.Codigo, cancellationToken);
-        if (!estados.TryGetValue(EstadoEnvioCodigos.DespachadoPorTecnologia, out var despachado) || !estados.TryGetValue(EstadoEnvioCodigos.EnTransito, out var transito)) return Result.Failure("El flujo de despacho no está configurado.", ErrorType.Conflict);
-        var fecha = DateTime.UtcNow;
-        if (envio.EstadoEnvio.Codigo == EstadoEnvioCodigos.EnPreparacionTecnologia)
-        {
-            if (!await db.TransicionesEstadoEnvio.AnyAsync(x => x.EstadoOrigenId == envio.EstadoEnvioId && x.EstadoDestinoId == despachado.EstadoEnvioId && x.Activo, cancellationToken)) return Result.Failure("La transición de entrega a Transportación no está configurada.", ErrorType.Conflict);
-            AplicarCambio(envio, despachado, usuarioId, observaciones ?? "Tecnología entregó el envío a Transportación.");
-            if (estados.TryGetValue(EstadoEnvioCodigos.EnTransportacion, out var enTransportacion) && await db.TransicionesEstadoEnvio.AnyAsync(x => x.EstadoOrigenId == envio.EstadoEnvioId && x.EstadoDestinoId == enTransportacion.EstadoEnvioId && x.Activo, cancellationToken))
-                AplicarCambio(envio, enTransportacion, usuarioId, "Envio recibido por Transportacion.");
-        }
-        else
-        {
-            if (!await db.Transportes.AnyAsync(x => x.EnvioId == envioId, cancellationToken)) return Result.Failure("Transportación debe asignar un transporte antes del despacho.", ErrorType.Conflict);
-            var despachadoTransportacion = await db.EstadosEnvio.FirstOrDefaultAsync(x => x.Codigo == EstadoEnvioCodigos.DespachadoPorTransportacion && x.Activo, cancellationToken);
-            if (despachadoTransportacion is null || !await db.TransicionesEstadoEnvio.AnyAsync(x => x.EstadoOrigenId == envio.EstadoEnvioId && x.EstadoDestinoId == despachadoTransportacion.EstadoEnvioId && x.Activo, cancellationToken) || !await db.TransicionesEstadoEnvio.AnyAsync(x => x.EstadoOrigenId == despachadoTransportacion.EstadoEnvioId && x.EstadoDestinoId == transito.EstadoEnvioId && x.Activo, cancellationToken)) return Result.Failure("La transición a despacho y tránsito no está configurada.", ErrorType.Conflict);
-            AplicarCambio(envio, despachadoTransportacion, usuarioId, observaciones ?? "Despachado por Transportación hacia la filial.");
-            AplicarCambio(envio, transito, usuarioId, "Envío en tránsito hacia la filial destino.");
-            db.Notificaciones.Add(new Notificacion { EnvioId = envio.EnvioId, Tipo = "ENVIO_EN_TRANSITO_FILIAL", Titulo = "Envío en tránsito", Mensaje = $"El envío {envio.NumeroEnvio} está en tránsito hacia su filial.", DestinatarioRol = "FILIAL", FechaCreacion = fecha });
-        }
-        await unitOfWork.SaveChangesAsync(cancellationToken); return Result.Success();
-    }
 
-    public async Task<Result> RegistrarLlegadaFilialAsync(int envioId, string? observaciones = null, CancellationToken cancellationToken = default)
-    {
-        if (userContext.UserId is not Guid usuarioId) return Result.Failure("No fue posible identificar al usuario autenticado.", ErrorType.Unauthorized);
-        var envio = await db.Envios.Include(x => x.EstadoEnvio).FirstOrDefaultAsync(x => x.EnvioId == envioId, cancellationToken);
-        if (envio is null) return Result.Failure("El envío no existe.", ErrorType.NotFound);
-        var enAlcance = await alcance.VerificarAsync(envio.EnvioId, cancellationToken);
-        if (enAlcance.IsFailure) return enAlcance;
-        if (envio.Direccion != DireccionEnvioEnum.HaciaFilial || envio.EstadoEnvio.Codigo != EstadoEnvioCodigos.EnTransito) return Result.Failure("El envío no está en tránsito hacia una filial.", ErrorType.Conflict);
-        var pendiente = await db.EstadosEnvio.FirstOrDefaultAsync(x => x.Codigo == EstadoEnvioCodigos.PendienteRecepcionFilial && x.Activo, cancellationToken);
-        if (pendiente is null || !await db.TransicionesEstadoEnvio.AnyAsync(x => x.EstadoOrigenId == envio.EstadoEnvioId && x.EstadoDestinoId == pendiente.EstadoEnvioId && x.Activo, cancellationToken)) return Result.Failure("El flujo de recepción en filial no está configurado.", ErrorType.Conflict);
-        AplicarCambio(envio, pendiente, usuarioId, observaciones ?? "La filial confirmó la llegada del envío.");
-        db.Notificaciones.Add(new Notificacion { EnvioId = envio.EnvioId, Tipo = "ENVIO_PENDIENTE_RECEPCION_FILIAL", Titulo = "Recepción pendiente en filial", Mensaje = $"El envío {envio.NumeroEnvio} llegó a la filial y debe ser recibido.", DestinatarioRol = "FILIAL", FechaCreacion = DateTime.UtcNow });
-        await unitOfWork.SaveChangesAsync(cancellationToken); return Result.Success();
+        var estados = await db.EstadosEnvio
+            .Where(x => x.Activo && (x.Codigo == EstadoEnvioCodigos.DespachadoPorTecnologia || x.Codigo == EstadoEnvioCodigos.EnTransportacion))
+            .ToDictionaryAsync(x => x.Codigo, cancellationToken);
+        if (!estados.TryGetValue(EstadoEnvioCodigos.DespachadoPorTecnologia, out var despachado) ||
+            !estados.TryGetValue(EstadoEnvioCodigos.EnTransportacion, out var enTransportacion))
+            return Result.Failure("El flujo de despacho no está configurado.", ErrorType.Conflict);
+        if (!await db.TransicionesEstadoEnvio.AnyAsync(x => x.EstadoOrigenId == envio.EstadoEnvioId && x.EstadoDestinoId == despachado.EstadoEnvioId && x.Activo, cancellationToken))
+            return Result.Failure("La transición de entrega a Transportación no está configurada.", ErrorType.Conflict);
+
+        AplicarCambio(envio, despachado, usuarioId, observaciones ?? "Tecnología entregó el envío a Transportación.");
+        if (!await db.TransicionesEstadoEnvio.AnyAsync(x => x.EstadoOrigenId == envio.EstadoEnvioId && x.EstadoDestinoId == enTransportacion.EstadoEnvioId && x.Activo, cancellationToken))
+            return Result.Failure("La transición de recepción en Transportación no está configurada.", ErrorType.Conflict);
+        AplicarCambio(envio, enTransportacion, usuarioId, "Transportación recibió el envío y debe asignarle chofer.");
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success();
     }
 
     private void AplicarCambio(Envio envio, EstadoEnvio destino, Guid usuarioId, string? observaciones)
@@ -282,7 +268,7 @@ public sealed class EstadoEnvioService(
     private static bool PerteneceAlFlujo(DireccionEnvioEnum direccion, string codigo) => direccion switch
     {
         DireccionEnvioEnum.HaciaTecnologia => codigo is EstadoEnvioCodigos.EnFilial or EstadoEnvioCodigos.EntregadoATransportacion or EstadoEnvioCodigos.DespachadoTransportePrivado or EstadoEnvioCodigos.EnTransito or EstadoEnvioCodigos.RecibidoPorTransportacion or EstadoEnvioCodigos.EnEsperaDeTecnologia or EstadoEnvioCodigos.EnProcesoDeRevision or EstadoEnvioCodigos.RecibidoPorTecnologia or EstadoEnvioCodigos.IncidenciaEnTransportacion,
-        DireccionEnvioEnum.HaciaFilial => codigo is EstadoEnvioCodigos.EnPreparacionTecnologia or EstadoEnvioCodigos.DespachadoPorTecnologia or EstadoEnvioCodigos.TransporteAsignado or EstadoEnvioCodigos.DespachadoPorTransportacion or EstadoEnvioCodigos.EnTransito or EstadoEnvioCodigos.PendienteRecepcionFilial or EstadoEnvioCodigos.RecibidoEnFilial or EstadoEnvioCodigos.RecepcionValidadaEnFilial or EstadoEnvioCodigos.IncidenciaEnTransportacion,
+        DireccionEnvioEnum.HaciaFilial => codigo is EstadoEnvioCodigos.EnPreparacionTecnologia or EstadoEnvioCodigos.DespachadoPorTecnologia or EstadoEnvioCodigos.EnTransportacion or EstadoEnvioCodigos.EnTransito or EstadoEnvioCodigos.RecibidoEnFilial or EstadoEnvioCodigos.IncidenciaEnTransportacion,
         _ => false
     };
 

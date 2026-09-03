@@ -5,6 +5,7 @@ using SistemaEnvios.Domain.Constants;
 using SistemaEnvios.Domain.Entities;
 using SistemaEnvios.Domain.Enums;
 using SistemaEnvios.Infrastructure.Persistence;
+using SistemaEnvios.Infrastructure.Services.Casos;
 using SistemaEnvios.Infrastructure.Repositories;
 using SistemaEnvios.Infrastructure.Security;
 using SistemaEnvios.Infrastructure.Services.Envios;
@@ -67,7 +68,8 @@ public sealed class FiltroPorFilialTests
         return new EnvioService(
             new GenericRepository<Envio>(db), db, new UnitOfWork(db),
             new CrearEnvioRequestValidator(), new ActualizarEnvioRequestValidator(),
-            usuario, new AlcanceEnvios(db, usuario));
+            usuario, new AlcanceEnvios(db, usuario),
+            new CasoEquipoService(db, new UnitOfWork(db), usuario, new AlcanceEnvios(db, usuario)));
     }
 
     private static async Task<(Ubicacion Santiago, Ubicacion Tecnologia)> SembrarAsync(SistemaEnviosDbContext db)

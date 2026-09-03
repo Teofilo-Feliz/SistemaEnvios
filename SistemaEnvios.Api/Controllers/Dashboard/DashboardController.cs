@@ -15,6 +15,10 @@ public sealed class DashboardController(IDashboardService service) : ControllerB
     public async Task<IActionResult> Obtener([FromQuery] int meses = 12, CancellationToken cancellationToken = default) =>
         (await service.ObtenerAsync(meses, cancellationToken)).ToActionResult(this);
 
+    [HttpGet("filial")]
+    public async Task<IActionResult> Filial(CancellationToken cancellationToken) =>
+        (await service.ObtenerFilialAsync(cancellationToken)).ToActionResult(this);
+
     [HttpGet("transportacion")]
     public async Task<IActionResult> Transportacion(CancellationToken cancellationToken) =>
         (await service.ObtenerTransportacionAsync(cancellationToken)).ToActionResult(this);

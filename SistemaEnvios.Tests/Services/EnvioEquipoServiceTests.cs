@@ -4,6 +4,7 @@ using SistemaEnvios.Application.DTOs.Envios;
 using SistemaEnvios.Application.Validators.Envios;
 using SistemaEnvios.Domain.Entities;
 using SistemaEnvios.Infrastructure.Persistence;
+using SistemaEnvios.Infrastructure.Services.Casos;
 using SistemaEnvios.Infrastructure.Security;
 using SistemaEnvios.Infrastructure.Repositories.Envios;
 using SistemaEnvios.Infrastructure.Services.Envios;
@@ -94,7 +95,8 @@ public sealed class EnvioEquipoServiceTests
         new AgregarEquipoEnvioRequestValidator(),
         new ActualizarEnvioEquipoRequestValidator(),
         db,
-        FakeUserContext.Global(usuarioId), new AlcanceEnvios(db, FakeUserContext.Global(usuarioId)));
+        FakeUserContext.Global(usuarioId), new AlcanceEnvios(db, FakeUserContext.Global(usuarioId)),
+        new CasoEquipoService(db, new UnitOfWork(db), FakeUserContext.Global(usuarioId), new AlcanceEnvios(db, FakeUserContext.Global(usuarioId))));
 
     private static Envio CrearEnvio(int estadoId, int ubicacionId, Guid usuarioId) => new()
     {

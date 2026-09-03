@@ -13,25 +13,31 @@ async function validateAndAdd() {
   errors.brand = props.item.brand ? '' : 'La marca es obligatoria.'
   errors.model = props.item.model ? '' : 'El modelo es obligatorio.'
   errors.serial = props.item.serial ? '' : 'El número de serie es obligatorio.'
-  errors.ticket = !props.item.ticket
-    ? 'El número de ticket es obligatorio.'
-    : !/^\d+$/.test(props.item.ticket)
-      ? 'El número de ticket solo permite caracteres numéricos.'
-      : props.item.ticket.length < 3
-        ? 'El número de ticket debe tener al menos 3 dígitos.'
-        : props.equipments.some((equipment) => equipment.ticket === props.item.ticket && equipment.id !== props.item.id)
-          ? 'Este número de ticket ya fue agregado.'
-          : ''
+  // Un ticket heredado no se valida ni se comprueba contra los ya usados: repetirlo es
+  // exactamente lo que se busca, porque pertenece al caso y no a este viaje.
+  errors.ticket = props.item.ticketHeredado
+    ? ''
+    : !props.item.ticket
+      ? 'El número de ticket es obligatorio.'
+      : !/^\d+$/.test(props.item.ticket)
+        ? 'El número de ticket solo permite caracteres numéricos.'
+        : props.item.ticket.length < 3
+          ? 'El número de ticket debe tener al menos 3 dígitos.'
+          : props.equipments.some((equipment) => equipment.ticket === props.item.ticket && equipment.id !== props.item.id)
+            ? 'Este número de ticket ya fue agregado.'
+            : ''
   if (Object.values(errors).some(Boolean)) return
-  try {
-    const response = await envioService.ticketAvailable(props.item.ticket)
-    if (response.data !== true) {
-      errors.ticket = 'Este número de ticket ya está registrado en otro equipo o envío.'
+  if (!props.item.ticketHeredado) {
+    try {
+      const response = await envioService.ticketAvailable(props.item.ticket)
+      if (response.data !== true) {
+        errors.ticket = 'Este número de ticket ya está registrado en otro equipo o envío.'
+        return
+      }
+    } catch (error) {
+      errors.ticket = error.userMessage || 'No se pudo validar el número de ticket.'
       return
     }
-  } catch (error) {
-    errors.ticket = error.userMessage || 'No se pudo validar el número de ticket.'
-    return
   }
   emit('add')
 }
@@ -46,7 +52,7 @@ async function validateAndAdd() {
     <label>Modelo *<input v-model.trim="item.model" class="form-control" placeholder="Modelo" /><small v-if="errors.model" class="field-error">{{ errors.model }}</small></label>
     <label>Serial *<input v-model.trim="item.serial" class="form-control" placeholder="Serial" /><small v-if="errors.serial" class="field-error">{{ errors.serial }}</small></label>
     <label>Código activo<input v-model.trim="item.assetCode" class="form-control" placeholder="Opcional" /></label>
-    <label>Ticket *<input v-model.trim="item.ticket" class="form-control" inputmode="numeric" pattern="[0-9]*" placeholder="Solo números" @input="item.ticket=item.ticket.replace(/\D/g, ''); errors.ticket=''" /><small v-if="errors.ticket" class="field-error">{{ errors.ticket }}</small></label>
+    <label>Ticket *<input v-model.trim="item.ticket" class="form-control" :readonly="item.ticketHeredado" :class="{ 'input-heredado': item.ticketHeredado }" inputmode="numeric" pattern="[0-9]*" placeholder="Solo números" @input="item.ticket=item.ticket.replace(/\D/g, ''); errors.ticket=''" /><small v-if="item.ticketHeredado" class="field-hint">Heredado del caso abierto{{ item.ticketFilial ? ` de ${item.ticketFilial}` : '' }}. No se modifica.</small><small v-else-if="errors.ticket" class="field-error">{{ errors.ticket }}</small></label>
     <label class="equipment-notes">Observación<input v-model.trim="item.notes" class="form-control" placeholder="Observación" /></label>
     <button class="btn btn-secondary equipment-add-button" type="button" :disabled="registering" @click="validateAndAdd"><Plus :size="15" /> {{ registering ? 'Registrando…' : 'Agregar' }}</button>
   </div>

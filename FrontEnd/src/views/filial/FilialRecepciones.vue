@@ -35,7 +35,7 @@ const pending = computed(() => {
   return shipments.value
     .filter(
       (x) =>
-        ["EN_TRANSITO", "PENDIENTE_RECEPCION_FILIAL", "RECIBIDO_FILIAL"].includes(
+        ["EN_TRANSITO", "RECIBIDO_FILIAL"].includes(
           porId[x.estadoEnvioId]?.codigo,
         ) && esHaciaFilial(x),
     )
@@ -64,7 +64,7 @@ async function load() {
       envioService.paged({
         page: page.value,
         pageSize,
-        estadoCodigos: ['EN_TRANSITO', 'PENDIENTE_RECEPCION_FILIAL', 'RECIBIDO_FILIAL'],
+        estadoCodigos: ['EN_TRANSITO', 'RECIBIDO_FILIAL'],
       }),
       catalogoService.allStates(),
     ]);
@@ -81,15 +81,10 @@ async function load() {
 // La llegada se registra aquí; la verificación equipo por equipo ocurre en la pantalla de
 // recepción, la misma que usa Tecnología. Antes esta vista marcaba todo como conforme, así
 // que la filial nunca podía reportar un equipo dañado.
-async function recibir(row) {
-  try {
-    if (row.estadoEnvioCodigo === "EN_TRANSITO") {
-      await envioService.registerFilialArrival(row.envioId);
-    }
-    router.push(`/filial/recepciones/${row.envioId}`);
-  } catch (error) {
-    ui.notify(error.userMessage || "No fue posible registrar la llegada.", "error");
-  }
+// Se entra directo a la pantalla de recepción: la llegada y la recepción son el mismo acto,
+// y es ahí donde se marca cada equipo como conforme o con incidencia.
+function recibir(row) {
+  router.push(`/filial/recepciones/${row.envioId}`);
 }
 
 onMounted(load);

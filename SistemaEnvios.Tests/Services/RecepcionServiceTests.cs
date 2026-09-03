@@ -19,8 +19,9 @@ public sealed class RecepcionServiceTests
         var usuarioId = Guid.NewGuid();
         var origen = new Ubicacion { Nombre = "Tecnología", CodigoCentro = "TEC", Tipo = TipoUbicacionEnum.Tecnologia, Activo = true };
         var destino = new Ubicacion { Nombre = "Filial", CodigoCentro = "FIL", Tipo = TipoUbicacionEnum.Filial, Activo = true };
-        var estadoActual = new EstadoEnvio { Codigo = EstadoEnvioCodigos.RecibidoEnFilial, Nombre = "Recibido", Activo = true };
-        var estadoFinal = new EstadoEnvio { Codigo = EstadoEnvioCodigos.RecepcionValidadaEnFilial, Nombre = "Validado", Activo = true, EsFinal = true };
+        // La filial recibe desde EN_TRANSITO y termina en RECIBIDO_FILIAL, que ahora es final.
+        var estadoActual = new EstadoEnvio { Codigo = EstadoEnvioCodigos.EnTransito, Nombre = "En tránsito", Activo = true };
+        var estadoFinal = new EstadoEnvio { Codigo = EstadoEnvioCodigos.RecibidoEnFilial, Nombre = "Recibido en filial", Activo = true, EsFinal = true };
         var tipo = new TipoEquipo { Nombre = "Laptop", Activo = true };
         db.AddRange(origen, destino, estadoActual, estadoFinal, tipo);
         await db.SaveChangesAsync();

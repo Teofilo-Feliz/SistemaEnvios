@@ -4,12 +4,67 @@ using SistemaEnvios.Application.DTOs.Dashboard;
 using SistemaEnvios.Application.Interfaces.Security;
 using SistemaEnvios.Application.Interfaces.Services.Dashboard;
 using SistemaEnvios.Domain.Constants;
+using SistemaEnvios.Domain.Enums;
 using SistemaEnvios.Infrastructure.Persistence;
 
 namespace SistemaEnvios.Infrastructure.Services.Dashboard;
 
-public sealed class DashboardService(SistemaEnviosDbContext db, IAlcanceEnvios alcance) : IDashboardService
+public sealed class DashboardService(
+    SistemaEnviosDbContext db,
+    IAlcanceEnvios alcance,
+    IUserContext usuario) : IDashboardService
 {
+    /// <summary>
+    /// Todo sale del filtro de alcance, así que una filial cuenta solo lo suyo sin que este
+    /// método sepa nada de filiales: la regla vive en un único sitio.
+    /// </summary>
+    public async Task<Result<DashboardFilialResponse>> ObtenerFilialAsync(CancellationToken cancellationToken = default)
+    {
+        if (await alcance.ResolverPerfilAsync(cancellationToken) != PerfilAlcance.Filial)
+            return Result<DashboardFilialResponse>.Failure(
+                "Este tablero es de las filiales; su usuario no pertenece a una.", ErrorType.Forbidden);
+
+        var mapeada = await alcance.VerificarFilialMapeadaAsync(cancellationToken);
+        if (mapeada.IsFailure)
+            return Result<DashboardFilialResponse>.Failure(mapeada.Error!, mapeada.ErrorType);
+
+        var filialId = usuario.AffiliateId!.Value;
+        var filial = await db.Ubicaciones.AsNoTracking()
+            .Where(x => x.FilialExternaId == filialId)
+            .Select(x => new { x.UbicacionId, x.Nombre })
+            .FirstAsync(cancellationToken);
+
+        var envios = await alcance.FiltrarAsync(db.Envios.AsNoTracking(), cancellationToken);
+        var porEtapa = await envios
+            .GroupBy(x => new { x.EstadoEnvio.Codigo, x.EstadoEnvio.Nombre, x.Direccion })
+            .Select(g => new DashboardEtapaPoint(g.Key.Codigo, g.Key.Nombre, (int)g.Key.Direccion, g.Count()))
+            .ToListAsync(cancellationToken);
+
+        var equiposEnFilial = await db.Equipos.AsNoTracking()
+            .CountAsync(x => x.UbicacionActualId == filial.UbicacionId, cancellationToken);
+
+        // Casos abiertos de la filial: equipos que salieron y todavía no han vuelto.
+        var abiertos = db.EnvioEquipos.AsNoTracking().Where(x =>
+            x.EnvioEquipoOrigenId == null &&
+            x.FechaCierreCaso == null &&
+            (x.Envio.Direccion == DireccionEnvioEnum.HaciaTecnologia
+                ? x.Envio.UbicacionOrigenId
+                : x.Envio.UbicacionDestinoId) == filial.UbicacionId);
+
+        var equiposFuera = await abiertos.CountAsync(cancellationToken);
+        var masAntiguo = await abiertos
+            .OrderBy(x => x.FechaCreacion)
+            .Select(x => (DateTime?)x.FechaCreacion)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return Result<DashboardFilialResponse>.Success(new(
+            filial.Nombre,
+            [.. porEtapa.OrderByDescending(x => x.Total)],
+            equiposEnFilial,
+            equiposFuera,
+            masAntiguo is null ? 0 : (int)(DateTime.UtcNow - masAntiguo.Value).TotalDays));
+    }
+
     public async Task<Result<DashboardTransportacionResponse>> ObtenerTransportacionAsync(CancellationToken cancellationToken = default)
     {
         var envios = await alcance.FiltrarAsync(db.Envios.AsNoTracking(), cancellationToken);

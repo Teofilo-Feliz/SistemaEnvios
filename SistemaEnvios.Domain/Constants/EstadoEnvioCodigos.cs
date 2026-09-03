@@ -34,8 +34,6 @@ public static class EstadoEnvioCodigos
         RecibidoPorTransportacion,
         IncidenciaEnTransportacion,
         DespachadoPorTecnologia,
-        EnTransportacion,
-        TransporteAsignado,
-        DespachadoPorTransportacion
+        EnTransportacion
     ];
 }

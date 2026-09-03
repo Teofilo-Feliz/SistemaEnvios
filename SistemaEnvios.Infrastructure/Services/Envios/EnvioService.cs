@@ -2,6 +2,7 @@ using FluentValidation;
 using SistemaEnvios.Application.DTOs.Common;
 using Microsoft.EntityFrameworkCore;
 using SistemaEnvios.Application.Common;
+using SistemaEnvios.Application.DTOs.Casos;
 using SistemaEnvios.Application.DTOs.Envios;
 using SistemaEnvios.Application.Interfaces.Repositories;
 using SistemaEnvios.Application.Interfaces.Security;
@@ -20,14 +21,25 @@ public sealed class EnvioService(
     IValidator<CrearEnvioRequest> validator,
     IValidator<ActualizarEnvioRequest> actualizarValidator,
     IUserContext userContext,
-    IAlcanceEnvios alcance) : IEnvioService
+    IAlcanceEnvios alcance,
+    ICasoEquipoService casos) : IEnvioService
 {
     public async Task<Result<EnvioResponse>> CrearConEquiposAsync(CrearEnvioConEquiposRequest request, CancellationToken cancellationToken = default)
     {
         if (request.Equipos is null || request.Equipos.Count == 0)
             return Result<EnvioResponse>.Failure("El envío debe incluir al menos un equipo.", ErrorType.Validation);
-        var tickets = request.Equipos.Select(x => x.NumeroTicket?.Trim()).ToList();
-        if (tickets.Any(x => string.IsNullOrWhiteSpace(x) || x.Length is < 3 or > 50 || !x.All(char.IsDigit)) || tickets.Distinct(StringComparer.Ordinal).Count() != tickets.Count)
+        // Los equipos que arrastran un caso abierto heredan su ticket, así que lo que venga
+        // en la solicitud para ellos no se valida ni se usa: el ticket es del caso, no del viaje.
+        var casosPorEquipo = new Dictionary<int, CasoAbiertoResponse?>();
+        foreach (var item in request.Equipos)
+            casosPorEquipo[item.EquipoId] = await casos.BuscarAbiertoAsync(item.EquipoId, cancellationToken);
+
+        var ticketsNuevos = request.Equipos
+            .Where(x => casosPorEquipo[x.EquipoId] is null)
+            .Select(x => x.NumeroTicket?.Trim())
+            .ToList();
+        if (ticketsNuevos.Any(x => string.IsNullOrWhiteSpace(x) || x!.Length is < 3 or > 50 || !x.All(char.IsDigit)) ||
+            ticketsNuevos.Distinct(StringComparer.Ordinal).Count() != ticketsNuevos.Count)
             return Result<EnvioResponse>.Failure("Los tickets deben ser numéricos, tener entre 3 y 50 dígitos y no repetirse.", ErrorType.Validation);
         if (userContext.UserId is not Guid usuarioId)
             return Result<EnvioResponse>.Failure("No fue posible identificar al usuario autenticado.", ErrorType.Unauthorized);
@@ -54,15 +66,28 @@ public sealed class EnvioService(
             var equipo = await db.Equipos.FindAsync([item.EquipoId], cancellationToken);
             if (equipo is null || equipo.UbicacionActualId != request.UbicacionOrigenId)
                 return Result<EnvioResponse>.Failure("Uno de los equipos no existe o no está en el origen.", ErrorType.Conflict);
-            if (await db.EnvioEquipos.AnyAsync(x => x.NumeroTicket == item.NumeroTicket.Trim(), cancellationToken) ||
-                await db.ReservasEquipoEnvio.AnyAsync(x => x.EquipoId == item.EquipoId, cancellationToken))
-                return Result<EnvioResponse>.Failure($"El ticket {item.NumeroTicket} o el equipo ya pertenece a otro envío.", ErrorType.Conflict);
+            if (await db.ReservasEquipoEnvio.AnyAsync(x => x.EquipoId == item.EquipoId, cancellationToken))
+                return Result<EnvioResponse>.Failure($"El equipo ya pertenece a otro envío activo.", ErrorType.Conflict);
+
+            var caso = casosPorEquipo[item.EquipoId];
+            if (caso is not null && request.UbicacionDestinoId != caso.FilialId && envio.Direccion == DireccionEnvioEnum.HaciaFilial)
+                return Result<EnvioResponse>.Failure(
+                    "El equipo tiene un caso abierto con otra filial y debe volver a ella. Descártelo de esa filial para poder reasignarlo.",
+                    ErrorType.Conflict);
+
+            // Un ticket solo puede estrenarse una vez: se compara contra las aperturas, que son
+            // las únicas filas que lo estrenan. Las continuaciones repiten el ticket a propósito.
+            var ticket = caso?.NumeroTicket ?? item.NumeroTicket.Trim();
+            if (caso is null && await db.EnvioEquipos.AnyAsync(
+                    x => x.EnvioEquipoOrigenId == null && x.NumeroTicket == ticket, cancellationToken))
+                return Result<EnvioResponse>.Failure($"El ticket {ticket} ya fue utilizado para abrir otro caso.", ErrorType.Conflict);
 
             db.EnvioEquipos.Add(new EnvioEquipo
             {
                 Envio = envio,
                 EquipoId = item.EquipoId,
-                NumeroTicket = item.NumeroTicket.Trim(),
+                NumeroTicket = ticket,
+                EnvioEquipoOrigenId = caso?.EnvioEquipoAperturaId,
                 Observaciones = item.Observaciones?.Trim() ?? "Equipo asociado al envío.",
                 UsuarioSolicitanteId = usuarioId,
                 FechaCreacion = fechaAsociacion,

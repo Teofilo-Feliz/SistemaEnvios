@@ -5,5 +5,4 @@ namespace SistemaEnvios.Application.Interfaces.Services;
 public interface INotificacionService
 {
     Task<Result<PaginaResponse<NotificacionResponse>>> ListarAsync(ConsultarNotificacionesRequest request,CancellationToken ct=default);
-    Task<Result> MarcarLeidaAsync(long id,CancellationToken ct=default);
 }

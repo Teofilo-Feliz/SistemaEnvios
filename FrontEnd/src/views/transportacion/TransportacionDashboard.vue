@@ -36,7 +36,6 @@ const flujoDesdeFilial = computed(() => [
 
 const flujoDesdeTecnologia = computed(() => [
   { code: "EN_TRANSPORTACION", title: "Recibidos de Tecnología", icon: PackageCheck, value: contar("EN_TRANSPORTACION") },
-  { code: "TRANSPORTE_ASIGNADO", title: "Chofer asignado", icon: UserRound, value: contar("TRANSPORTE_ASIGNADO") },
   { code: "EN_TRANSITO", title: "En tránsito a la filial", icon: Send, value: contar("EN_TRANSITO", 2) },
 ]);
 
@@ -52,7 +51,7 @@ const recientes = computed(() =>
 // Envíos detenidos esperando una acción de Transportación. Sin fechas en el listado no se
 // puede medir demora real, así que se nombra por lo que es: pendientes, no "críticos".
 const pendientes = computed(() =>
-  ["ENTREGADO_TRANSPORTACION", "EN_TRANSPORTACION", "TRANSPORTE_ASIGNADO"].reduce(
+  ["ENTREGADO_TRANSPORTACION", "EN_TRANSPORTACION"].reduce(
     (total, codigo) => total + contar(codigo),
     0,
   ),
@@ -65,7 +64,6 @@ const porTipoTransporte = computed(() =>
 const ETAPAS_TRANSPORTACION = [
   "ENTREGADO_TRANSPORTACION", "EN_TRANSITO", "RECIBIDO_TRANSPORTACION",
   "INCIDENCIA_TRANSPORTACION", "DESPACHADO_TECNOLOGIA", "EN_TRANSPORTACION",
-  "TRANSPORTE_ASIGNADO", "DESPACHADO_TRANSPORTACION",
 ];
 async function load() {
   loading.value = true;

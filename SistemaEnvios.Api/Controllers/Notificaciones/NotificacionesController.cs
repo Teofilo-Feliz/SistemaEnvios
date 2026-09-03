@@ -9,5 +9,4 @@ namespace SistemaEnvios.Api.Controllers.Notificaciones;
 public sealed class NotificacionesController(INotificacionService service):ControllerBase
 {
     [HttpGet][Authorize(Policy=PermissionNames.EnviosConsultar)] public async Task<IActionResult> Listar([FromQuery]ConsultarNotificacionesRequest request,CancellationToken ct=default)=>(await service.ListarAsync(request,ct)).ToActionResult(this);
-    [HttpPatch("{id:long}/leida")][Authorize(Policy=PermissionNames.RecepcionesGestionar)] public async Task<IActionResult> MarcarLeida(long id,CancellationToken ct)=>(await service.MarcarLeidaAsync(id,ct)).ToActionResult(this);
 }

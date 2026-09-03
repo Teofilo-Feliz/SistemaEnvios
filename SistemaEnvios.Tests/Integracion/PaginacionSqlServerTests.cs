@@ -42,6 +42,41 @@ public sealed class PaginacionSqlServerTests
         Assert.True(pagina.TotalItems >= pagina.Items.Count);
     }
 
+    /// <summary>
+    /// Cada entidad se consulta de verdad contra SQL Server. InMemory no valida nombres de
+    /// columna: si el modelo mapea una que la base no tiene —o EF inventa una clave foránea por
+    /// convención— todo pasa en verde y revienta en la primera pantalla. Ya ocurrió dos veces.
+    /// </summary>
+    [SkippableFact]
+    public async Task ElModeloCoincideConElEsquemaReal()
+    {
+        Skip.If(string.IsNullOrWhiteSpace(Cadena), "Defina SISTEMAENVIOS_TEST_SQL para ejecutar contra SQL Server.");
+
+        await using var db = new SistemaEnviosDbContext(
+            new DbContextOptionsBuilder<SistemaEnviosDbContext>().UseSqlServer(Cadena).Options);
+
+        var fallos = new List<string>();
+        foreach (var entidad in db.Model.GetEntityTypes().Where(x => !x.IsOwned()))
+        {
+            try
+            {
+                // Trae una fila proyectando todas las columnas mapeadas: basta para que SQL
+                // Server rechace cualquiera que no exista.
+                var consulta = (IQueryable<object>)typeof(DbContext)
+                    .GetMethod(nameof(DbContext.Set), 1, [])!
+                    .MakeGenericMethod(entidad.ClrType)
+                    .Invoke(db, null)!;
+                await consulta.Take(1).ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                fallos.Add($"{entidad.ClrType.Name}: {ex.GetBaseException().Message}");
+            }
+        }
+
+        Assert.True(fallos.Count == 0, "El modelo no coincide con el esquema:\n" + string.Join("\n", fallos));
+    }
+
     private static Task<PaginaResponse<int>> ConsultarAsync(SistemaEnviosDbContext db, string tabla, ParametrosPagina p) => tabla switch
     {
         "Ubicaciones" => db.Ubicaciones.AsNoTracking().OrderBy(x => x.Nombre).ThenBy(x => x.UbicacionId).PaginarAsync(p, x => x.UbicacionId, default),

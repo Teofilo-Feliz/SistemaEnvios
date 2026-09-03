@@ -78,6 +78,7 @@ const groups = [
       { label: "Equipos pendientes", to: "/tecnologia?view=pending" },
       { label: "En revisión", to: "/tecnologia?view=review" },
       { label: "Revisados", to: "/tecnologia?view=completed" },
+      { label: "Descarte de equipos", to: "/tecnologia/descartes", permission: "equipos.gestionar" },
       { label: "Incidencias", to: "/incidencias" },
     ],
   },
@@ -95,7 +96,12 @@ const groups = [
     key: "filial",
     label: "Filial",
     icon: Building2,
-    items: [{ label: "Recepciones pendientes", to: "/filial/recepciones", permission: "canReceiveShipment" }],
+    items: [
+      { label: "Mi filial", to: "/filial" },
+      { label: "Crear envío", to: "/envios/nuevo", permission: "canCreateShipment" },
+      { label: "Mis envíos", to: "/envios" },
+      { label: "Recibir envíos", to: "/filial/recepciones", permission: "canReceiveShipment" },
+    ],
   },
   {
     key: "catalogos",

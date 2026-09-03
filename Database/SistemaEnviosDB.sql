@@ -247,6 +247,13 @@ CREATE TABLE dbo.EnvioEquipos
     EnvioId INT NOT NULL,
     EquipoId INT NOT NULL,
     NumeroTicket NVARCHAR(50) NOT NULL,
+    -- Movimiento que abrió el caso. NULL identifica la apertura, que es la única fila que
+    -- estrena un ticket; las continuaciones lo heredan de ella y por eso lo repiten.
+    EnvioEquipoOrigenId INT NULL,
+    -- Solo se llenan en la apertura: sellan el cierre del caso cuando ocurre, en vez de tener
+    -- que deducirlo recorriendo el historial cada vez que se pregunta.
+    FechaCierreCaso DATETIME2(7) NULL,
+    MotivoCierreCaso NVARCHAR(300) NULL,
     UsuarioSolicitanteId UNIQUEIDENTIFIER NOT NULL,
     Observaciones NVARCHAR(2000) NOT NULL,
     FechaCreacion DATETIME2(7) NOT NULL CONSTRAINT DF_EnvioEquipos_FechaCreacion DEFAULT (SYSUTCDATETIME()),
@@ -257,12 +264,26 @@ CREATE TABLE dbo.EnvioEquipos
     CONSTRAINT PK_EnvioEquipos PRIMARY KEY (EnvioEquipoId),
     CONSTRAINT UQ_EnvioEquipos_EnvioEquipo UNIQUE (EnvioId, EquipoId),
     CONSTRAINT FK_EnvioEquipos_Envios FOREIGN KEY (EnvioId) REFERENCES dbo.Envios(EnvioId) ON DELETE CASCADE,
-    CONSTRAINT FK_EnvioEquipos_Equipos FOREIGN KEY (EquipoId) REFERENCES dbo.Equipos(EquipoId)
+    CONSTRAINT FK_EnvioEquipos_Equipos FOREIGN KEY (EquipoId) REFERENCES dbo.Equipos(EquipoId),
+    -- Sin cascada: borrar una apertura no debe llevarse por delante las continuaciones que
+    -- documentan el recorrido del equipo.
+    CONSTRAINT FK_EnvioEquipos_Origen FOREIGN KEY (EnvioEquipoOrigenId) REFERENCES dbo.EnvioEquipos(EnvioEquipoId)
 );
 GO
 
+-- El ticket es único entre las aperturas, no entre todos los movimientos: dos casos
+-- independientes no pueden compartirlo, pero un caso sí puede abarcar varios viajes.
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
+GO
+CREATE UNIQUE INDEX UX_EnvioEquipos_TicketApertura
+    ON dbo.EnvioEquipos(NumeroTicket)
+    WHERE EnvioEquipoOrigenId IS NULL;
+GO
+CREATE INDEX IX_EnvioEquipos_Origen ON dbo.EnvioEquipos(EnvioEquipoOrigenId);
+GO
+
 CREATE INDEX IX_EnvioEquipos_EquipoId ON dbo.EnvioEquipos(EquipoId);
-CREATE UNIQUE INDEX UX_EnvioEquipos_NumeroTicket ON dbo.EnvioEquipos(NumeroTicket);
 GO
 
 CREATE TABLE dbo.Transportes
@@ -435,13 +456,11 @@ CREATE TABLE dbo.Notificaciones
     DestinatarioRol NVARCHAR(50) NOT NULL,
     DestinatarioUsuarioId UNIQUEIDENTIFIER NULL,
     FechaCreacion DATETIME2(7) NOT NULL CONSTRAINT DF_Notificaciones_Fecha DEFAULT(SYSUTCDATETIME()),
-    FechaLeida DATETIME2(7) NULL,
-    UsuarioLecturaId UNIQUEIDENTIFIER NULL,
     CONSTRAINT PK_Notificaciones PRIMARY KEY(NotificacionId),
     CONSTRAINT FK_Notificaciones_Envios FOREIGN KEY(EnvioId) REFERENCES dbo.Envios(EnvioId) ON DELETE CASCADE
 );
 GO
-CREATE INDEX IX_Notificaciones_Rol_Leida_Fecha ON dbo.Notificaciones(DestinatarioRol,FechaLeida,FechaCreacion DESC);
+CREATE INDEX IX_Notificaciones_Rol_Fecha ON dbo.Notificaciones(DestinatarioRol,FechaCreacion DESC);
 GO
 
 INSERT INTO dbo.EstadosEnvio (Codigo, Nombre, Descripcion, EsFinal, Activo)
@@ -449,8 +468,8 @@ VALUES
     (N'EN_FILIAL', N'En filial', N'El envío hacia Tecnología se prepara en la filial.', 0, 1),
     (N'ENTREGADO_TRANSPORTACION', N'Entregado a transportación', N'La filial entregó el envío a transportación.', 0, 1),
     (N'DESPACHADO_TRANSPORTE_PRIVADO', N'Entregado a transporte privado', N'La filial entregó el envío a un responsable privado.', 0, 1),
-    (N'PENDIENTE_CONFIRMACION_TRANSPORTE', N'Pendiente de confirmación', N'Transportación debe confirmar la custodia.', 0, 1),
-    (N'CONFIRMADO_TRANSPORTACION', N'Confirmado por transportación', N'Transportación confirmó la recepción del envío.', 0, 1),
+    (N'PENDIENTE_CONFIRMACION_TRANSPORTE', N'Pendiente de confirmación', N'Transportación debe confirmar la custodia.', 0, 0),
+    (N'CONFIRMADO_TRANSPORTACION', N'Confirmado por transportación', N'Transportación confirmó la recepción del envío.', 0, 0),
     (N'EN_TRANSITO', N'En tránsito', N'El envío se encuentra en traslado.', 0, 1),
     (N'RECIBIDO_TRANSPORTACION', N'Recibido por transportación', N'El envío llegó al punto de recepción logística.', 0, 1),
     (N'ESPERA_TECNOLOGIA', N'En espera de Tecnología', N'El envío espera ser procesado por Tecnología.', 0, 1),
@@ -460,11 +479,11 @@ VALUES
     (N'PREPARACION_TECNOLOGIA', N'En preparación por Tecnología', N'Tecnología prepara un nuevo envío hacia una filial.', 0, 1),
     (N'DESPACHADO_TECNOLOGIA', N'Despachado por Tecnología', N'Tecnología entregó el envío para su traslado.', 0, 1),
     (N'EN_TRANSPORTACION', N'En Transportación', N'El envío fue recibido por el área de Transportación.', 0, 1),
-    (N'TRANSPORTE_ASIGNADO', N'Chofer asignado', N'Transportación asignó el chofer al envío.', 0, 1),
-    (N'DESPACHADO_TRANSPORTACION', N'Despachado por Transportación', N'Transportación despachó el envío hacia la filial.', 0, 1),
-    (N'PENDIENTE_RECEPCION_FILIAL', N'Pendiente de recepción en filial', N'El envío espera recepción en la filial destino.', 0, 1),
-    (N'RECIBIDO_FILIAL', N'Recibido en filial', N'La filial recibió físicamente el envío.', 0, 1),
-    (N'RECEPCION_VALIDADA_FILIAL', N'Recepción validada en filial', N'La filial verificó y cerró la recepción.', 1, 1);
+    (N'TRANSPORTE_ASIGNADO', N'Chofer asignado', N'Retirado del flujo: asignar el chofer manda el envío a tránsito.', 0, 0),
+    (N'DESPACHADO_TRANSPORTACION', N'Despachado por Transportación', N'Retirado del flujo: el despacho ocurre al asignar el chofer.', 0, 0),
+    (N'PENDIENTE_RECEPCION_FILIAL', N'Pendiente de recepción en filial', N'Retirado del flujo: la filial recibe directo desde tránsito.', 0, 0),
+    (N'RECIBIDO_FILIAL', N'Recibido en filial', N'La filial recibió el envío. Cierra el flujo, con o sin incidencia.', 1, 1),
+    (N'RECEPCION_VALIDADA_FILIAL', N'Recepción validada en filial', N'Retirado del flujo: RECIBIDO_FILIAL es el cierre.', 1, 0);
 GO
 
 INSERT INTO dbo.TransicionesEstadoEnvio (EstadoOrigenId, EstadoDestinoId, Activo)
@@ -472,27 +491,25 @@ SELECT origen.EstadoEnvioId, destino.EstadoEnvioId, 1
 FROM
 (
     VALUES
+        -- Interno filial -> Tecnología: entregar a Transportación y salir a ruta es un solo
+        -- acto, y Tecnología recibe directo desde RECIBIDO_TRANSPORTACION.
         (N'EN_FILIAL', N'ENTREGADO_TRANSPORTACION'),
-        (N'ENTREGADO_TRANSPORTACION', N'PENDIENTE_CONFIRMACION_TRANSPORTE'),
-        (N'EN_FILIAL', N'DESPACHADO_TRANSPORTE_PRIVADO'),
-        (N'DESPACHADO_TRANSPORTE_PRIVADO', N'EN_TRANSITO'),
-        (N'PENDIENTE_CONFIRMACION_TRANSPORTE', N'CONFIRMADO_TRANSPORTACION'),
-        (N'CONFIRMADO_TRANSPORTACION', N'EN_TRANSITO'),
+        (N'ENTREGADO_TRANSPORTACION', N'EN_TRANSITO'),
         (N'EN_TRANSITO', N'RECIBIDO_TRANSPORTACION'),
+        (N'RECIBIDO_TRANSPORTACION', N'RECIBIDO_TECNOLOGIA'),
         (N'EN_TRANSITO', N'INCIDENCIA_TRANSPORTACION'),
         (N'INCIDENCIA_TRANSPORTACION', N'EN_TRANSITO'),
-        (N'RECIBIDO_TRANSPORTACION', N'ESPERA_TECNOLOGIA'),
+        -- Privado: no pasa por Transportación y conserva su ruta por espera y revisión.
+        (N'EN_FILIAL', N'DESPACHADO_TRANSPORTE_PRIVADO'),
+        (N'DESPACHADO_TRANSPORTE_PRIVADO', N'EN_TRANSITO'),
         (N'EN_TRANSITO', N'ESPERA_TECNOLOGIA'),
         (N'ESPERA_TECNOLOGIA', N'EN_REVISION'),
         (N'EN_REVISION', N'RECIBIDO_TECNOLOGIA'),
         (N'PREPARACION_TECNOLOGIA', N'DESPACHADO_TECNOLOGIA'),
         (N'DESPACHADO_TECNOLOGIA', N'EN_TRANSPORTACION'),
-        (N'EN_TRANSPORTACION', N'TRANSPORTE_ASIGNADO'),
-        (N'TRANSPORTE_ASIGNADO', N'DESPACHADO_TRANSPORTACION'),
-        (N'DESPACHADO_TRANSPORTACION', N'EN_TRANSITO'),
-        (N'EN_TRANSITO', N'PENDIENTE_RECEPCION_FILIAL'),
-        (N'PENDIENTE_RECEPCION_FILIAL', N'RECIBIDO_FILIAL'),
-        (N'RECIBIDO_FILIAL', N'RECEPCION_VALIDADA_FILIAL')
+        -- Asignar el chofer ES la salida a ruta, y la filial recibe directo desde tránsito.
+        (N'EN_TRANSPORTACION', N'EN_TRANSITO'),
+        (N'EN_TRANSITO', N'RECIBIDO_FILIAL')
 ) AS flujo(CodigoOrigen, CodigoDestino)
 INNER JOIN dbo.EstadosEnvio origen ON origen.Codigo = flujo.CodigoOrigen
 INNER JOIN dbo.EstadosEnvio destino ON destino.Codigo = flujo.CodigoDestino;
@@ -554,6 +571,57 @@ VALUES
     (N'La Romana',                     N'LA-ROMANA',                  14, 1, 1),
     (N'Higüey',                        N'HIGUEY',                     12, 1, 1);
 GO
+/*
+    Acceso por posición. El token de AuthManager trae "position", y de ahí sale tanto el alcance
+    (qué envíos ve) como los permisos (qué puede hacer). Sin estas filas un usuario entra
+    autenticado pero sin permisos, y el sistema responde 403 en todo.
+
+    Perfil: 1 = Global (Tecnología), 2 = Transportación, 3 = Filial.
+*/
+INSERT INTO dbo.PerfilesPorPosicion (Posicion, Perfil)
+VALUES
+    (N'Programador Senior',          1),
+    (N'Encargado de Transportacion', 2),
+    (N'Administrador de Filial',     3),
+    (N'Asistente Administrativo',    3);
+GO
+
+INSERT INTO dbo.PermisosPorPosicion (Posicion, Permiso)
+VALUES
+    -- Tecnología es dueña del sistema: ve todo y administra catálogos.
+    (N'Programador Senior', N'envios.consultar'),
+    (N'Programador Senior', N'envios.crear'),
+    (N'Programador Senior', N'envios.editar'),
+    (N'Programador Senior', N'envios.despachar'),
+    (N'Programador Senior', N'equipos.gestionar'),
+    (N'Programador Senior', N'recepciones.gestionar'),
+    (N'Programador Senior', N'incidencias.gestionar'),
+    (N'Programador Senior', N'transportes.gestionar'),
+    (N'Programador Senior', N'transportes.confirmar'),
+    (N'Programador Senior', N'catalogos.administrar'),
+    -- Transportación solo custodia y confirma; no crea ni edita envíos.
+    (N'Encargado de Transportacion', N'envios.consultar'),
+    (N'Encargado de Transportacion', N'transportes.gestionar'),
+    (N'Encargado de Transportacion', N'transportes.confirmar'),
+    (N'Encargado de Transportacion', N'incidencias.gestionar'),
+    -- La filial origina envíos y recibe devoluciones, dentro de su propio alcance.
+    (N'Administrador de Filial', N'envios.consultar'),
+    (N'Administrador de Filial', N'envios.crear'),
+    (N'Administrador de Filial', N'envios.editar'),
+    (N'Administrador de Filial', N'envios.despachar'),
+    (N'Administrador de Filial', N'equipos.gestionar'),
+    (N'Administrador de Filial', N'recepciones.gestionar'),
+    (N'Administrador de Filial', N'incidencias.gestionar'),
+    (N'Administrador de Filial', N'transportes.gestionar'),
+    -- El asistente no despacha ni administra inventario.
+    (N'Asistente Administrativo', N'envios.consultar'),
+    (N'Asistente Administrativo', N'envios.crear'),
+    (N'Asistente Administrativo', N'envios.editar'),
+    (N'Asistente Administrativo', N'recepciones.gestionar'),
+    (N'Asistente Administrativo', N'incidencias.gestionar'),
+    (N'Asistente Administrativo', N'transportes.gestionar');
+GO
+
 INSERT INTO dbo.TiposEquipo (Nombre, Activo)
 VALUES (N'Laptop', 1), (N'Computadora de escritorio', 1), (N'Monitor', 1), (N'Impresora', 1), (N'Otro', 1);
 GO

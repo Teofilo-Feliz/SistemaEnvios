@@ -71,6 +71,85 @@ WHEN NOT MATCHED BY TARGET THEN
     VALUES (origen.UsuarioExternoId, origen.NombreCompleto, origen.NumeroEmpleado, origen.Correo,
             origen.EsTecnico, origen.Activo, SYSUTCDATETIME(), N'MANUAL');
 
+
+-- ---------------------------------------------------------------- Casos de ticket
+/*
+    Escenarios para probar la herencia de ticket y el descarte. El ticket pertenece al caso,
+    no al viaje: mientras el caso siga abierto, cada movimiento del equipo lo hereda.
+
+      1001  ADR-012  caso ABIERTO, 1 movimiento  -> la devolucion debe heredar 1001 y solo
+                                                    puede ir a Santiago. Sale en Descartes.
+      1002  ADR-015  caso ABIERTO, 3 movimientos -> volvio con incidencia y se reenvio; sirve
+                                                    para ver el contador de vueltas.
+      1003  ADR-009  caso CERRADO conforme       -> el equipo puede estrenar ticket nuevo.
+
+    ADR-013 y ADR-014 quedan en Tecnologia SIN caso: son asignaciones iniciales y por eso no
+    deben aparecer en la pantalla de descarte.
+*/
+DECLARE @Usuario UNIQUEIDENTIFIER = '11111111-2222-3333-4444-555555555555';
+DECLARE @Tecnologia INT = (SELECT UbicacionId FROM dbo.Ubicaciones WHERE CodigoCentro = N'TECNOLOGIA');
+DECLARE @Santiago   INT = (SELECT UbicacionId FROM dbo.Ubicaciones WHERE CodigoCentro = N'SANTIAGO');
+DECLARE @LaVega     INT = (SELECT UbicacionId FROM dbo.Ubicaciones WHERE CodigoCentro = N'LA-VEGA');
+DECLARE @SanCris    INT = (SELECT UbicacionId FROM dbo.Ubicaciones WHERE CodigoCentro = N'SAN-CRISTOBAL');
+DECLARE @EnTecnologia INT = (SELECT EstadoEnvioId FROM dbo.EstadosEnvio WHERE Codigo = N'RECIBIDO_TECNOLOGIA');
+DECLARE @RecibidoFilial INT = (SELECT EstadoEnvioId FROM dbo.EstadosEnvio WHERE Codigo = N'RECIBIDO_FILIAL');
+
+IF NOT EXISTS (SELECT 1 FROM dbo.EnvioEquipos WHERE NumeroTicket = N'1001')
+BEGIN
+    DECLARE @EnvioA INT, @AperturaA INT;
+
+    -- 1001: Santiago mando el equipo y Tecnologia ya lo recibio. Caso abierto.
+    INSERT INTO dbo.Envios (NumeroEnvio, UbicacionOrigenId, UbicacionDestinoId, EstadoEnvioId, Direccion, UsuarioSolicitanteId, Observaciones, FechaCreacion)
+    VALUES (N'ENV-2026-CASO1001', @Santiago, @Tecnologia, @EnTecnologia, 1, @Usuario, N'Laptop con fallo de teclado.', DATEADD(DAY, -6, SYSUTCDATETIME()));
+    SET @EnvioA = SCOPE_IDENTITY();
+    INSERT INTO dbo.EnvioEquipos (EnvioId, EquipoId, NumeroTicket, UsuarioSolicitanteId, Observaciones, FechaCreacion)
+    SELECT @EnvioA, EquipoId, N'1001', @Usuario, N'Apertura del caso.', DATEADD(DAY, -6, SYSUTCDATETIME())
+    FROM dbo.Equipos WHERE CodigoActivo = N'ADR-012';
+    INSERT INTO dbo.HistorialesEstadoEnvio (EnvioId, EstadoEnvioId, Fecha, UbicacionId, UsuarioId, Observaciones)
+    VALUES (@EnvioA, @EnTecnologia, DATEADD(DAY, -5, SYSUTCDATETIME()), @Tecnologia, @Usuario, N'Recibido por Tecnologia.');
+
+    -- 1002: La Vega. Fue, volvio con incidencia y se reenvio: tres movimientos, mismo ticket.
+    DECLARE @EnvioB INT, @EnvioB2 INT, @EnvioB3 INT, @AperturaB INT;
+    INSERT INTO dbo.Envios (NumeroEnvio, UbicacionOrigenId, UbicacionDestinoId, EstadoEnvioId, Direccion, UsuarioSolicitanteId, Observaciones, FechaCreacion)
+    VALUES (N'ENV-2026-CASO1002A', @LaVega, @Tecnologia, @EnTecnologia, 1, @Usuario, N'Impresora no imprime.', DATEADD(DAY, -20, SYSUTCDATETIME()));
+    SET @EnvioB = SCOPE_IDENTITY();
+    INSERT INTO dbo.EnvioEquipos (EnvioId, EquipoId, NumeroTicket, UsuarioSolicitanteId, Observaciones, FechaCreacion)
+    SELECT @EnvioB, EquipoId, N'1002', @Usuario, N'Apertura del caso.', DATEADD(DAY, -20, SYSUTCDATETIME())
+    FROM dbo.Equipos WHERE CodigoActivo = N'ADR-015';
+    SET @AperturaB = SCOPE_IDENTITY();
+
+    INSERT INTO dbo.Envios (NumeroEnvio, UbicacionOrigenId, UbicacionDestinoId, EstadoEnvioId, Direccion, UsuarioSolicitanteId, Observaciones, FechaCreacion)
+    VALUES (N'ENV-2026-CASO1002B', @Tecnologia, @LaVega, @RecibidoFilial, 2, @Usuario, N'Devolucion tras reparacion.', DATEADD(DAY, -14, SYSUTCDATETIME()));
+    SET @EnvioB2 = SCOPE_IDENTITY();
+    INSERT INTO dbo.EnvioEquipos (EnvioId, EquipoId, NumeroTicket, EnvioEquipoOrigenId, UsuarioSolicitanteId, Observaciones, FechaCreacion)
+    SELECT @EnvioB2, EquipoId, N'1002', @AperturaB, @Usuario, N'Devolucion: llego con incidencia.', DATEADD(DAY, -14, SYSUTCDATETIME())
+    FROM dbo.Equipos WHERE CodigoActivo = N'ADR-015';
+
+    INSERT INTO dbo.Envios (NumeroEnvio, UbicacionOrigenId, UbicacionDestinoId, EstadoEnvioId, Direccion, UsuarioSolicitanteId, Observaciones, FechaCreacion)
+    VALUES (N'ENV-2026-CASO1002C', @LaVega, @Tecnologia, @EnTecnologia, 1, @Usuario, N'Reenvio: el problema no se resolvio.', DATEADD(DAY, -9, SYSUTCDATETIME()));
+    SET @EnvioB3 = SCOPE_IDENTITY();
+    INSERT INTO dbo.EnvioEquipos (EnvioId, EquipoId, NumeroTicket, EnvioEquipoOrigenId, UsuarioSolicitanteId, Observaciones, FechaCreacion)
+    SELECT @EnvioB3, EquipoId, N'1002', @AperturaB, @Usuario, N'Reenvio por incidencia.', DATEADD(DAY, -9, SYSUTCDATETIME())
+    FROM dbo.Equipos WHERE CodigoActivo = N'ADR-015';
+
+    -- 1003: ciclo completo cerrado conforme. El equipo ya volvio a San Cristobal.
+    DECLARE @EnvioC INT, @AperturaC INT;
+    INSERT INTO dbo.Envios (NumeroEnvio, UbicacionOrigenId, UbicacionDestinoId, EstadoEnvioId, Direccion, UsuarioSolicitanteId, Observaciones, FechaCreacion, FechaFinalizacion)
+    VALUES (N'ENV-2026-CASO1003A', @SanCris, @Tecnologia, @EnTecnologia, 1, @Usuario, N'PC no enciende.', DATEADD(DAY, -30, SYSUTCDATETIME()), NULL);
+    SET @EnvioC = SCOPE_IDENTITY();
+    INSERT INTO dbo.EnvioEquipos (EnvioId, EquipoId, NumeroTicket, UsuarioSolicitanteId, Observaciones, FechaCreacion, FechaCierreCaso, MotivoCierreCaso)
+    SELECT @EnvioC, EquipoId, N'1003', @Usuario, N'Apertura del caso.', DATEADD(DAY, -30, SYSUTCDATETIME()),
+           DATEADD(DAY, -22, SYSUTCDATETIME()), N'Recibido conforme en la filial.'
+    FROM dbo.Equipos WHERE CodigoActivo = N'ADR-009';
+    SET @AperturaC = SCOPE_IDENTITY();
+
+    INSERT INTO dbo.Envios (NumeroEnvio, UbicacionOrigenId, UbicacionDestinoId, EstadoEnvioId, Direccion, UsuarioSolicitanteId, Observaciones, FechaCreacion, FechaFinalizacion)
+    VALUES (N'ENV-2026-CASO1003B', @Tecnologia, @SanCris, @RecibidoFilial, 2, @Usuario, N'Devolucion reparada.', DATEADD(DAY, -24, SYSUTCDATETIME()), DATEADD(DAY, -22, SYSUTCDATETIME()));
+    INSERT INTO dbo.EnvioEquipos (EnvioId, EquipoId, NumeroTicket, EnvioEquipoOrigenId, UsuarioSolicitanteId, Observaciones, FechaCreacion)
+    SELECT SCOPE_IDENTITY(), EquipoId, N'1003', @AperturaC, @Usuario, N'Devolucion recibida conforme.', DATEADD(DAY, -24, SYSUTCDATETIME())
+    FROM dbo.Equipos WHERE CodigoActivo = N'ADR-009';
+END
+
 COMMIT TRANSACTION;
 GO
 

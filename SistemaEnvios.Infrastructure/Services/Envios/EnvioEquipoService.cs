@@ -1,4 +1,5 @@
 using FluentValidation;
+using SistemaEnvios.Domain.Enums;
 using SistemaEnvios.Application.DTOs.Common;
 using Microsoft.EntityFrameworkCore;
 using SistemaEnvios.Application.Common;
@@ -19,7 +20,8 @@ public sealed class EnvioEquipoService(
     IValidator<ActualizarEnvioEquipoRequest> actualizarValidator,
     SistemaEnviosDbContext db,
     IUserContext userContext,
-    IAlcanceEnvios alcance) : IEnvioEquipoService
+    IAlcanceEnvios alcance,
+    ICasoEquipoService casos) : IEnvioEquipoService
 {
     public async Task<Result<int>> AgregarAsync(
         AgregarEquipoEnvioRequest request,
@@ -57,8 +59,18 @@ public sealed class EnvioEquipoService(
         if (await repository.ExisteEnEnvioAsync(request.EnvioId, request.EquipoId, cancellationToken))
             return Result<int>.Failure("El equipo ya pertenece a este envío.", ErrorType.Conflict);
 
-        if (await db.EnvioEquipos.AnyAsync(x => x.NumeroTicket == request.NumeroTicket.Trim(), cancellationToken))
-            return Result<int>.Failure("El número de ticket ya fue utilizado en otro envío.", ErrorType.Conflict);
+        var caso = await casos.BuscarAbiertoAsync(request.EquipoId, cancellationToken);
+        if (caso is not null && envio.Direccion == DireccionEnvioEnum.HaciaFilial && envio.UbicacionDestinoId != caso.FilialId)
+            return Result<int>.Failure(
+                "El equipo tiene un caso abierto con otra filial y debe volver a ella. Descártelo de esa filial para poder reasignarlo.",
+                ErrorType.Conflict);
+
+        // Un ticket solo se estrena una vez, y solo las aperturas lo estrenan: las
+        // continuaciones repiten el del caso a propósito.
+        var numeroTicket = caso?.NumeroTicket ?? request.NumeroTicket.Trim();
+        if (caso is null && await db.EnvioEquipos.AnyAsync(
+                x => x.EnvioEquipoOrigenId == null && x.NumeroTicket == numeroTicket, cancellationToken))
+            return Result<int>.Failure("El número de ticket ya fue utilizado para abrir otro caso.", ErrorType.Conflict);
 
         var perteneceAEnvioActivo = await db.ReservasEquipoEnvio.AnyAsync(
             x => x.EquipoId == request.EquipoId,
@@ -71,7 +83,8 @@ public sealed class EnvioEquipoService(
         {
             EnvioId = request.EnvioId,
             EquipoId = request.EquipoId,
-            NumeroTicket = request.NumeroTicket.Trim(),
+            NumeroTicket = numeroTicket,
+            EnvioEquipoOrigenId = caso?.EnvioEquipoAperturaId,
             UsuarioSolicitanteId = usuarioId,
             Observaciones = request.Observaciones.Trim(),
             FechaCreacion = DateTime.UtcNow,
@@ -118,7 +131,7 @@ public sealed class EnvioEquipoService(
             .AsNoTracking()
             .Where(x => x.EnvioId == envioId)
             .OrderBy(x => x.EnvioEquipoId)
-            .PaginarAsync(request, x => new EnvioEquipoResponse(x.EnvioEquipoId, x.EnvioId, x.EquipoId, x.NumeroTicket, x.UsuarioSolicitanteId, x.Observaciones), cancellationToken);
+            .PaginarAsync(request, x => new EnvioEquipoResponse(x.EnvioEquipoId, x.EnvioId, x.EquipoId, x.NumeroTicket, x.UsuarioSolicitanteId, x.Observaciones, x.EnvioEquipoOrigenId), cancellationToken);
 
         return Result<PaginaResponse<EnvioEquipoResponse>>.Success(pagina);
     }

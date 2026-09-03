@@ -21,6 +21,7 @@ export const statusMap = {
   RECIBIDO_TECNOLOGIA: { label: "Recibido por tecnología", tone: "success" },
   DESPACHADO_TECNOLOGIA: { label: "Entregado a transportación", tone: "info" },
   EN_TRANSPORTACION: { label: "En transportación", tone: "info" },
+  // Retirados del flujo; se conservan para que el historial de envíos viejos siga legible.
   TRANSPORTE_ASIGNADO: { label: "Chofer asignado", tone: "info" },
   DESPACHADO_TRANSPORTACION: { label: "Despachado por transportación", tone: "info" },
   PENDIENTE_RECEPCION_FILIAL: {

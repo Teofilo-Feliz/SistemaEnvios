@@ -5,6 +5,7 @@ using SistemaEnvios.Domain.Entities;
 using SistemaEnvios.Infrastructure.Persistence;
 using SistemaEnvios.Infrastructure.Repositories;
 using SistemaEnvios.Infrastructure.Repositories.Envios;
+using SistemaEnvios.Infrastructure.Services.Casos;
 using SistemaEnvios.Infrastructure.Services.Envios;
 using SistemaEnvios.Infrastructure.Services.Transportes;
 using SistemaEnvios.Infrastructure.Services.Recepciones;
@@ -44,6 +45,7 @@ public static class DependencyInjection
         services.AddDbContextPool<SistemaEnviosDbContext>(options => options.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure(3)));
         services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
         services.AddScoped<IEnvioEquipoRepository, EnvioEquipoRepository>();
+        services.AddScoped<ICasoEquipoService, CasoEquipoService>();
         services.AddScoped<IEnvioService, EnvioService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IAlcanceEnvios, AlcanceEnvios>();

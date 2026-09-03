@@ -249,9 +249,9 @@ async function deliverToTransport() {
   }
 }
 async function deliverTechnologyToTransport() {
-  if (!(await confirmAction({ title: "Entregar a transportación", text: `¿Confirmas que el envío ${shipment.value.numeroEnvio} fue entregado a Transportación? Pasará a En tránsito hacia la filial.`, confirmText: "Entregado a transportación" }))) return;
+  if (!(await confirmAction({ title: "Entregar a transportación", text: `¿Confirmas que el envío ${shipment.value.numeroEnvio} fue entregado a Transportación? Quedará esperando que le asignen chofer.`, confirmText: "Entregado a transportación" }))) return;
   delivering.value = true;
-  try { await envioService.dispatchFromTechnology(route.params.id); ui.showToast("Entrega registrada. El envío quedó en tránsito hacia la filial.", "success"); await load(); }
+  try { await envioService.dispatchFromTechnology(route.params.id); ui.showToast("Entrega registrada. Transportación debe asignarle chofer.", "success"); await load(); }
   catch (error) { ui.showToast(error.userMessage || "No fue posible registrar la entrega.", "error"); }
   finally { delivering.value = false; }
 }
