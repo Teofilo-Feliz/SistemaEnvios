@@ -254,12 +254,20 @@ public sealed class EnvioService(
         if (userContext.UserId is not Guid usuarioId)
             return Result.Failure("No fue posible identificar al usuario autenticado.", ErrorType.Unauthorized);
 
-        var envio = await db.Envios.Include(x => x.EstadoEnvio)
+        var envio = await db.Envios.Include(x => x.EstadoEnvio).Include(x => x.UbicacionOrigen)
             .FirstOrDefaultAsync(x => x.EnvioId == request.EnvioId, cancellationToken);
         if (envio is null)
             return Result.Failure("El envío no existe.", ErrorType.NotFound);
+
+        // Sin esto se podía editar cualquier envío conociendo su id, incluso de otra filial.
+        var enAlcance = await alcance.VerificarAsync(envio.EnvioId, cancellationToken);
+        if (enAlcance.IsFailure) return enAlcance;
+
         if (!EsEstadoEditable(envio.EstadoEnvio.Codigo))
             return Result.Failure("El envío ya fue despachado y no admite modificaciones.", ErrorType.Conflict);
+
+        var custodia = await VerificarCustodiaAsync(envio, cancellationToken);
+        if (custodia.IsFailure) return custodia;
 
         // Se traen también las ubicaciones actuales del envío: sin ellas el historial diría
         // "Origen: #4 → Azua" en vez de nombrar de dónde venía.
@@ -373,6 +381,30 @@ public sealed class EnvioService(
     /// </summary>
     private static bool EsEstadoEditable(string codigo) =>
         codigo is EstadoEnvioCodigos.EnFilial or EstadoEnvioCodigos.EnPreparacionTecnologia;
+
+    /// <summary>
+    /// Estar dentro del alcance no basta para editar: un envío que Tecnología prepara para una
+    /// filial aparece en el listado de esa filial, y aun así es de Tecnología hasta que sale.
+    /// Edita quien lo tiene en la mano, que es distinto de quién puede verlo.
+    /// </summary>
+    private async Task<Result> VerificarCustodiaAsync(Envio envio, CancellationToken cancellationToken)
+    {
+        var perfil = await alcance.ResolverPerfilAsync(cancellationToken);
+        if (perfil == PerfilAlcance.Global) return Result.Success();
+
+        if (envio.EstadoEnvio.Codigo == EstadoEnvioCodigos.EnPreparacionTecnologia)
+            return Result.Failure(
+                "Este envío lo está preparando Tecnología y solo Tecnología puede modificarlo.",
+                ErrorType.Forbidden);
+
+        if (perfil == PerfilAlcance.Filial && envio.UbicacionOrigen.FilialExternaId != userContext.AffiliateId)
+            return Result.Failure(
+                "Solo puede modificar los envíos que originó su filial.", ErrorType.Forbidden);
+
+        return perfil is PerfilAlcance.Filial
+            ? Result.Success()
+            : Result.Failure("Su perfil no puede modificar envíos.", ErrorType.Forbidden);
+    }
 
     /// <summary>Diferencias legibles entre el envío guardado y lo que llega en la edición.</summary>
     private static List<string> DescribirCambios(

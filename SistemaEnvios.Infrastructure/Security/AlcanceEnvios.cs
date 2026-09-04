@@ -11,9 +11,6 @@ namespace SistemaEnvios.Infrastructure.Security;
 
 public sealed class AlcanceEnvios(SistemaEnviosDbContext db, IUserContext usuario) : IAlcanceEnvios
 {
-    private static readonly string[] RolesGlobales =
-        ["AdministradorGlobal", "SuperAdministrador", "AdministradorSistema"];
-
     /// <summary>
     /// El perfil sale del claim "position" contra PerfilesPorPosicion, no de la ubicación del
     /// usuario. En la sede conviven Tecnología, administradores de filial y asistentes
@@ -22,19 +19,26 @@ public sealed class AlcanceEnvios(SistemaEnviosDbContext db, IUserContext usuari
     /// </summary>
     public async Task<PerfilAlcance> ResolverPerfilAsync(CancellationToken cancellationToken = default)
     {
+        // La posición manda: es del cargo concreto, mientras que un rol agrupa a mucha gente.
         if (!string.IsNullOrWhiteSpace(usuario.Position))
         {
-            var posicion = usuario.Position.Trim();
-            var mapeado = await db.PerfilesPorPosicion.AsNoTracking()
-                .Where(x => x.Posicion == posicion)
-                .Select(x => (byte?)x.Perfil)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (mapeado is byte perfil && Enum.IsDefined(typeof(PerfilAlcance), (int)perfil))
-                return (PerfilAlcance)perfil;
+            var perfilDePosicion = await BuscarPerfilAsync([usuario.Position.Trim()], cancellationToken);
+            if (perfilDePosicion is not null) return perfilDePosicion.Value;
         }
 
-        if (TieneRolGlobal()) return PerfilAlcance.Global;
+        // Un rol creado a propósito para este sistema es más fiable de administrar que la
+        // posición, que es un cargo de recursos humanos y puede venir escrito de mil formas.
+        var roles = usuario.Roles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToArray();
+        if (roles.Length > 0)
+        {
+            var perfilDeRol = await BuscarPerfilAsync(roles, cancellationToken);
+            if (perfilDeRol is not null) return perfilDeRol.Value;
+        }
+
+        // Aquí había un respaldo que concedía alcance Global por el nombre del rol
+        // ("AdministradorGlobal" y parecidos). Esos nombres los define AuthManager para todas
+        // sus aplicaciones, así que un administrador de otra entraba aquí viéndolo todo. El
+        // alcance Global se concede mapeando la posición o el rol, nunca por cómo se llame.
 
         // Posición sin mapear: se cae al alcance más restrictivo que el usuario pueda tener.
         return usuario.AffiliateId.HasValue ? PerfilAlcance.Filial : PerfilAlcance.SinAlcance;
@@ -53,10 +57,16 @@ public sealed class AlcanceEnvios(SistemaEnviosDbContext db, IUserContext usuari
 
             // Solo lo que Transportación custodia: sus etapas del flujo y transporte
             // institucional. El transporte privado va directo a Tecnología sin pasar por ellos.
+            // Sin transporte todavía es el caso normal, no una excepción: Tecnología despacha y
+            // el envío queda esperando a que Transportación le asigne chofer, que es cuando nace
+            // el transporte. Exigirlo aquí escondía justo los envíos que ella tiene que atender.
+            //
+            // El transporte privado se sigue excluyendo: su flujo no deja mover un envío sin un
+            // transporte válido, así que "sin transporte" nunca significa privado.
             PerfilAlcance.Transportacion => query.Where(x =>
                 EstadoEnvioCodigos.EtapasTransportacion.Contains(x.EstadoEnvio.Codigo) &&
-                x.Transporte != null &&
-                x.Transporte.TipoTransporte.Estrategia == EstrategiaTransporteEnum.TransportacionInstitucional),
+                (x.Transporte == null ||
+                 x.Transporte.TipoTransporte.Estrategia == EstrategiaTransporteEnum.TransportacionInstitucional)),
 
             PerfilAlcance.Filial => query.Where(x =>
                 x.UbicacionOrigen.FilialExternaId == filialId ||
@@ -83,7 +93,14 @@ public sealed class AlcanceEnvios(SistemaEnviosDbContext db, IUserContext usuari
             PerfilAlcance.Transportacion => query.Where(x => db.EnvioEquipos.Any(ee =>
                 ee.EquipoId == x.EquipoId &&
                 EstadoEnvioCodigos.EtapasTransportacion.Contains(ee.Envio.EstadoEnvio.Codigo))),
-            PerfilAlcance.Filial => query.Where(x => x.UbicacionActual.FilialExternaId == filialId),
+            // Los suyos, más los que viajan en un envío suyo. Sin esta segunda parte la filial
+            // no podía ver lo que le venía en camino, que es justo lo que tiene que mirar para
+            // recibirlo: el equipo sigue en Tecnología hasta que ella lo recibe.
+            PerfilAlcance.Filial => query.Where(x =>
+                x.UbicacionActual.FilialExternaId == filialId ||
+                db.EnvioEquipos.Any(ee => ee.EquipoId == x.EquipoId &&
+                    (ee.Envio.UbicacionOrigen.FilialExternaId == filialId ||
+                     ee.Envio.UbicacionDestino.FilialExternaId == filialId))),
             _ => query.Where(_ => false),
         };
     }
@@ -142,8 +159,21 @@ public sealed class AlcanceEnvios(SistemaEnviosDbContext db, IUserContext usuari
                 ErrorType.Forbidden);
     }
 
-    private bool TieneRolGlobal() =>
-        usuario.Roles.Any(x => RolesGlobales.Contains(x, StringComparer.OrdinalIgnoreCase)) ||
-        (!usuario.AffiliateId.HasValue &&
-         usuario.Roles.Any(x => x.Equals("Administrador", StringComparison.OrdinalIgnoreCase)));
+    /// <summary>
+    /// Busca el perfil de la primera clave mapeada. La tabla guarda posiciones y roles en la
+    /// misma columna a propósito: para el sistema son lo mismo —un texto del token que decide
+    /// el alcance— y separarlas obligaría a mantener dos catálogos con la misma regla.
+    /// </summary>
+    private async Task<PerfilAlcance?> BuscarPerfilAsync(string[] claves, CancellationToken cancellationToken)
+    {
+        var mapeado = await db.PerfilesPorPosicion.AsNoTracking()
+            .Where(x => claves.Contains(x.Posicion))
+            .Select(x => (byte?)x.Perfil)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return mapeado is byte perfil && Enum.IsDefined(typeof(PerfilAlcance), (int)perfil)
+            ? (PerfilAlcance)perfil
+            : null;
+    }
+
 }

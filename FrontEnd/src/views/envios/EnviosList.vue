@@ -13,6 +13,7 @@ import { aPagina, filas } from "@/services/paginacion";
 import { catalogoService } from "@/services/catalogoService";
 import { useUiStore } from "@/stores/uiStore";
 import { useAuthStore } from "@/stores/authStore";
+import { useRefrescoAlVolver } from "@/composables/useRefrescoAlVolver";
 
 const router = useRouter();
 const ui = useUiStore();
@@ -83,6 +84,11 @@ function stateCode(id) {
     states.value.find((item) => item.estadoEnvioId === id)?.codigo || "unknown"
   );
 }
+function puedeEditar(item) {
+  const codigo = stateCode(item.estadoEnvioId);
+  if (codigo === "PREPARACION_TECNOLOGIA") return auth.esGlobal;
+  return codigo === "EN_FILIAL";
+}
 function mapRow(item) {
   return {
     id: item.envioId,
@@ -103,7 +109,9 @@ function mapRow(item) {
     tipoTransporteId: item.tipoTransporteId == null ? "" : String(item.tipoTransporteId),
     observaciones: item.observaciones || "",
     // Editable mientras no se haya movido, en cualquiera de las dos direcciones.
-    canEdit: ["EN_FILIAL", "PREPARACION_TECNOLOGIA"].includes(stateCode(item.estadoEnvioId)),
+    // Edita quien lo tiene en la mano: la filial lo suyo en EN_FILIAL, y lo que Tecnología
+    // prepara es de Tecnología aunque la filial destino lo vea en su listado.
+    canEdit: puedeEditar(item),
   };
 }
 function compare(value, operator, expected) {
@@ -185,6 +193,8 @@ function clear() {
   load();
 }
 onMounted(load);
+// Al volver a esta pestaña los datos pueden haber cambiado en otra máquina.
+useRefrescoAlVolver(load);
 watch(page, load);
 watch(filialSeleccionada, () => { page.value = 1; load(); });
 </script>

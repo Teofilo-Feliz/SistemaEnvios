@@ -10,6 +10,7 @@ import { filas } from "@/services/paginacion";
 import { useUiStore } from "@/stores/uiStore";
 import "@/assets/styles/transport-dashboard.css";
 import TransportationStageCard from "@/components/transportation/TransportationStageCard.vue";
+import { useRefrescoAlVolver } from "@/composables/useRefrescoAlVolver";
 
 const router = useRouter();
 const ui = useUiStore();
@@ -35,7 +36,8 @@ const flujoDesdeFilial = computed(() => [
 ]);
 
 const flujoDesdeTecnologia = computed(() => [
-  { code: "EN_TRANSPORTACION", title: "Recibidos de Tecnología", icon: PackageCheck, value: contar("EN_TRANSPORTACION") },
+  // Es la bandeja de trabajo de Transportación: lo que está parado esperando un chofer.
+  { code: "EN_TRANSPORTACION", title: "Esperan asignación de chofer", icon: UserRound, value: contar("EN_TRANSPORTACION") },
   { code: "EN_TRANSITO", title: "En tránsito a la filial", icon: Send, value: contar("EN_TRANSITO", 2) },
 ]);
 
@@ -87,6 +89,8 @@ function open(stage) {
 }
 
 onMounted(load);
+// Al volver a esta pestaña los datos pueden haber cambiado en otra máquina.
+useRefrescoAlVolver(load);
 </script>
 
 <template>

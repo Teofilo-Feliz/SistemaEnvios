@@ -71,7 +71,7 @@ public sealed class DashboardFilialTests
     private static DashboardService Servicio(SistemaEnviosDbContext db, string posicion = "Administrador de Filial")
     {
         IUserContext u = new FakeUserContext(UsuarioId, "1,AZUA", position: posicion);
-        return new DashboardService(db, new AlcanceEnvios(db, u), u);
+        return new DashboardService(db, AlcanceDePrueba.Crear(db, u), u);
     }
 
     private static async Task<SistemaEnviosDbContext> SembrarAsync()

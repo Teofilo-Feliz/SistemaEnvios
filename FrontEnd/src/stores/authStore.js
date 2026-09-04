@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { authService, userManager } from '@/services/authService'
 import { perfilService } from '@/services/perfilService'
+import { inicioDe } from '@/config/modulos'
 import { registrarProveedorDeToken } from '@/services/api'
 
 const aliases = { canCreateShipment:'envios.crear', canReceiveShipment:'recepciones.gestionar', canConfirmTransport:'transportes.confirmar', canReviewEquipment:'recepciones.gestionar', canManageCatalogs:'catalogos.administrar' }
@@ -38,7 +39,11 @@ export const useAuthStore = defineStore('auth', () => {
   // otra aplicacion ("evaluador") y una posicion que aqui se traduce a alcance. Hasta que
   // /api/perfil responda, el frontend no sabe que puede pedir.
   const perfil = ref(null)
+  const perfilNombre = computed(() => perfil.value?.perfil || null)
   const esGlobal = computed(() => perfil.value?.perfil === 'Global')
+  const esFilial = computed(() => perfil.value?.perfil === 'Filial')
+  // Dónde aterriza este usuario al entrar: su propio módulo, no el tablero general.
+  const moduloInicio = computed(() => inicioDe(perfilNombre.value))
   const puedeFiltrarPorFilial = computed(() => Boolean(perfil.value?.puedeFiltrarPorFilial))
   const filialNombre = computed(() => perfil.value?.filialNombre || affiliateName.value)
   const filialSinMapear = computed(() => Boolean(perfil.value) && perfil.value.filialId != null && !perfil.value.filialMapeada)
@@ -113,5 +118,5 @@ export const useAuthStore = defineStore('auth', () => {
     userManager.events.addSilentRenewError(logoutLocal)
   }
 
-  return { user, permissions, profile, isAuthenticated, roles, assignedRoles, displayName, initials, roleLabel, affiliate, affiliateId, affiliateName, perfil, esGlobal, puedeFiltrarPorFilial, filialNombre, filialSinMapear, cargarPerfil, hasRole, hasAssignedRole, hasPermission, can, setIdentity, logoutLocal, logout, renewSilent, handleRedirectCallback, handleSilentRenewCallback, checkSession, getValidToken, forceLogoutAndRedirectToLogin, initSsoMonitoring }
+  return { user, permissions, profile, isAuthenticated, roles, assignedRoles, displayName, initials, roleLabel, affiliate, affiliateId, affiliateName, perfil, perfilNombre, esGlobal, esFilial, moduloInicio, puedeFiltrarPorFilial, filialNombre, filialSinMapear, cargarPerfil, hasRole, hasAssignedRole, hasPermission, can, setIdentity, logoutLocal, logout, renewSilent, handleRedirectCallback, handleSilentRenewCallback, checkSession, getValidToken, forceLogoutAndRedirectToLogin, initSsoMonitoring }
 })

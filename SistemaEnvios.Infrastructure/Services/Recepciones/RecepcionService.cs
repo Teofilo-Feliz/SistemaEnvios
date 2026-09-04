@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using SistemaEnvios.Application.Common;
+using SistemaEnvios.Application.DTOs.Common;
 using SistemaEnvios.Application.DTOs.Recepciones;
 using SistemaEnvios.Application.Interfaces.Repositories;
 using SistemaEnvios.Application.Interfaces.Security;
@@ -19,8 +20,34 @@ public sealed class RecepcionService(
     IValidator<VerificarEquipoRequest> verificarValidator,
     IValidator<AsignarTecnicoRequest> asignarValidator,
     IUserContext userContext,
-    IAlcanceEnvios alcance) : IRecepcionService
+    IAlcanceEnvios alcance,
+    ICasoEquipoService casos) : IRecepcionService
 {
+    public async Task<Result<PaginaResponse<IncidenciaRecepcionResponse>>> ListarIncidenciasPorEnvioAsync(
+        int envioId, ParametrosPaginaSimple request, CancellationToken cancellationToken = default)
+    {
+        var enAlcance = await alcance.VerificarAsync(envioId, cancellationToken);
+        if (enAlcance.IsFailure)
+            return Result<PaginaResponse<IncidenciaRecepcionResponse>>.Failure(enAlcance.Error!, enAlcance.ErrorType);
+
+        var pagina = await db.RecepcionEquipos.AsNoTracking()
+            .Where(x => x.Recepcion.EnvioId == envioId
+                        && x.EstadoRecepcionEquipo == EstadoRecepcionEquipoEnum.VerificadoConIncidencia)
+            .OrderBy(x => x.RecepcionEquipoId)
+            .PaginarAsync(request, x => new IncidenciaRecepcionResponse(
+                x.EnvioEquipoId,
+                x.EnvioEquipo.EquipoId,
+                x.EnvioEquipo.Equipo.NumeroSerie,
+                x.EnvioEquipo.Equipo.CodigoActivo,
+                x.EnvioEquipo.Equipo.Marca,
+                x.EnvioEquipo.Equipo.Modelo,
+                x.EnvioEquipo.NumeroTicket,
+                x.Observaciones,
+                x.FechaVerificacion), cancellationToken);
+
+        return Result<PaginaResponse<IncidenciaRecepcionResponse>>.Success(pagina);
+    }
+
     public async Task<Result<RecepcionResponse>> ObtenerPorEnvioAsync(
         int envioId,
         CancellationToken cancellationToken = default)
@@ -225,11 +252,11 @@ public sealed class RecepcionService(
             x => x.RecepcionId == recepcionId &&
                  x.EstadoRecepcionEquipo == EstadoRecepcionEquipoEnum.VerificadoConIncidencia,
             cancellationToken);
-        // Simétrico a Tecnología: la recepción termina en "recibido", y la incidencia queda
-        // marcada en la recepción, no en un estado aparte del envío.
+        // El estado dice cómo llegó. Marcarlo solo en la recepción obligaba a abrirla para
+        // enterarse de que algo vino mal, y quien mira la lista necesita verlo ahí.
         var codigoFinal = recepcion.Envio.Direccion == DireccionEnvioEnum.HaciaTecnologia
-            ? EstadoEnvioCodigos.RecibidoPorTecnologia
-            : EstadoEnvioCodigos.RecibidoEnFilial;
+            ? (conIncidencia ? EstadoEnvioCodigos.RecibidoPorTecnologiaConIncidencia : EstadoEnvioCodigos.RecibidoPorTecnologia)
+            : (conIncidencia ? EstadoEnvioCodigos.RecibidoEnFilialConIncidencia : EstadoEnvioCodigos.RecibidoEnFilial);
         var estadoFinal = await db.EstadosEnvio.FirstOrDefaultAsync(
             x => x.Codigo == codigoFinal && x.Activo && x.EsFinal,
             cancellationToken);
@@ -257,6 +284,24 @@ public sealed class RecepcionService(
         recepcion.Envio.FechaFinalizacion = fechaActual;
         recepcion.Envio.FechaModificacion = fechaActual;
         recepcion.Envio.UsuarioModificacionId = usuarioId;
+
+        // El caso se cierra cuando el equipo vuelve a su filial y llega bien. Con incidencia
+        // sigue abierto: el asunto no se resolvió y la vuelta siguiente hereda su ticket.
+        if (!conIncidencia && recepcion.Envio.Direccion == DireccionEnvioEnum.HaciaFilial)
+        {
+            var equiposDelEnvio = await db.EnvioEquipos.AsNoTracking()
+                .Where(x => x.EnvioId == recepcion.EnvioId)
+                .Select(x => x.EquipoId)
+                .ToListAsync(cancellationToken);
+
+            foreach (var equipoId in equiposDelEnvio)
+            {
+                var caso = await casos.BuscarAbiertoAsync(equipoId, cancellationToken);
+                if (caso is not null)
+                    await casos.CerrarAsync(
+                        caso.EnvioEquipoAperturaId, "Recibido conforme en la filial.", usuarioId, cancellationToken);
+            }
+        }
 
         db.HistorialEstadosEnvio.Add(new HistorialEstadoEnvio
         {

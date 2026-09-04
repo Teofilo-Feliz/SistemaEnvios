@@ -95,8 +95,8 @@ public sealed class EnvioEquipoServiceTests
         new AgregarEquipoEnvioRequestValidator(),
         new ActualizarEnvioEquipoRequestValidator(),
         db,
-        FakeUserContext.Global(usuarioId), new AlcanceEnvios(db, FakeUserContext.Global(usuarioId)),
-        new CasoEquipoService(db, new UnitOfWork(db), FakeUserContext.Global(usuarioId), new AlcanceEnvios(db, FakeUserContext.Global(usuarioId))));
+        FakeUserContext.Global(usuarioId), AlcanceDePrueba.Crear(db, FakeUserContext.Global(usuarioId)),
+        new CasoEquipoService(db, new UnitOfWork(db), FakeUserContext.Global(usuarioId), AlcanceDePrueba.Crear(db, FakeUserContext.Global(usuarioId))));
 
     private static Envio CrearEnvio(int estadoId, int ubicacionId, Guid usuarioId) => new()
     {

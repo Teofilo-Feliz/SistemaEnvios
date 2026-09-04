@@ -9,6 +9,7 @@ using SistemaEnvios.Domain.Constants;
 using SistemaEnvios.Domain.Entities;
 using SistemaEnvios.Domain.Enums;
 using SistemaEnvios.Infrastructure.Persistence;
+using SistemaEnvios.Infrastructure.Services.Casos;
 using SistemaEnvios.Infrastructure.Repositories;
 using SistemaEnvios.Infrastructure.Security;
 using SistemaEnvios.Infrastructure.Services.Estados;
@@ -127,7 +128,7 @@ public sealed class FlujoHaciaFilialTests
     }
 
     [Fact]
-    public async Task LaRecepcionConIncidenciaTambienTerminaEnRecibidoFilial()
+    public async Task LaRecepcionConIncidenciaTerminaEnSuPropioEstado()
     {
         await using var db = CrearContexto();
         var e = await SembrarAsync(db, EstadoEnvioCodigos.EnTransito);
@@ -144,7 +145,8 @@ public sealed class FlujoHaciaFilialTests
         var resultado = await servicio.CompletarAsync(recepcionId);
 
         Assert.True(resultado.IsSuccess, resultado.Error);
-        Assert.Equal(e.Estados[EstadoEnvioCodigos.RecibidoEnFilial].EstadoEnvioId, e.Envio.EstadoEnvioId);
+        // El estado lo dice: quien mira la lista no debe abrir la recepción para enterarse.
+        Assert.Equal(e.Estados[EstadoEnvioCodigos.RecibidoEnFilialConIncidencia].EstadoEnvioId, e.Envio.EstadoEnvioId);
         var recepcion = await db.Recepciones.FirstAsync(x => x.RecepcionId == recepcionId);
         Assert.Equal(EstadoRecepcionEnum.CompletadaConIncidencia, recepcion.EstadoRecepcion);
     }
@@ -176,13 +178,13 @@ public sealed class FlujoHaciaFilialTests
         string[] codigos = [
             EstadoEnvioCodigos.EnPreparacionTecnologia, EstadoEnvioCodigos.DespachadoPorTecnologia,
             EstadoEnvioCodigos.EnTransportacion, EstadoEnvioCodigos.EnTransito,
-            EstadoEnvioCodigos.RecibidoEnFilial];
+            EstadoEnvioCodigos.RecibidoEnFilial, EstadoEnvioCodigos.RecibidoEnFilialConIncidencia];
         var estados = codigos.ToDictionary(c => c, c => new EstadoEnvio
         {
             Codigo = c,
             Nombre = c,
             Activo = true,
-            EsFinal = c == EstadoEnvioCodigos.RecibidoEnFilial
+            EsFinal = c is EstadoEnvioCodigos.RecibidoEnFilial or EstadoEnvioCodigos.RecibidoEnFilialConIncidencia
         });
         var tecnologia = new Ubicacion { Nombre = "Tecnología", CodigoCentro = "TEC", Tipo = TipoUbicacionEnum.Tecnologia, Activo = true };
         var filial = new Ubicacion { Nombre = "Santiago", CodigoCentro = "F41", FilialExternaId = 41, Tipo = TipoUbicacionEnum.Filial, Activo = true };
@@ -197,7 +199,8 @@ public sealed class FlujoHaciaFilialTests
             (EstadoEnvioCodigos.EnPreparacionTecnologia, EstadoEnvioCodigos.DespachadoPorTecnologia),
             (EstadoEnvioCodigos.DespachadoPorTecnologia, EstadoEnvioCodigos.EnTransportacion),
             (EstadoEnvioCodigos.EnTransportacion, EstadoEnvioCodigos.EnTransito),
-            (EstadoEnvioCodigos.EnTransito, EstadoEnvioCodigos.RecibidoEnFilial)];
+            (EstadoEnvioCodigos.EnTransito, EstadoEnvioCodigos.RecibidoEnFilial),
+            (EstadoEnvioCodigos.EnTransito, EstadoEnvioCodigos.RecibidoEnFilialConIncidencia)];
         db.TransicionesEstadoEnvio.AddRange(pasos.Select(p => new TransicionEstadoEnvio
         {
             EstadoOrigenId = estados[p.De].EstadoEnvioId,
@@ -232,13 +235,13 @@ public sealed class FlujoHaciaFilialTests
         var u = FakeUserContext.Global(UsuarioId);
         return new TransporteService(db, new UnitOfWork(db),
             new CrearTransporteRequestValidator(), new ActualizarTransporteRequestValidator(),
-            u, new AlcanceEnvios(db, u));
+            u, AlcanceDePrueba.Crear(db, u));
     }
 
     private static EstadoEnvioService Estados(SistemaEnviosDbContext db)
     {
         var u = FakeUserContext.Global(UsuarioId);
-        return new EstadoEnvioService(db, new UnitOfWork(db), u, new AlcanceEnvios(db, u));
+        return new EstadoEnvioService(db, new UnitOfWork(db), u, AlcanceDePrueba.Crear(db, u));
     }
 
     private static RecepcionService Recepciones(SistemaEnviosDbContext db)
@@ -246,7 +249,8 @@ public sealed class FlujoHaciaFilialTests
         var u = FakeUserContext.Global(UsuarioId);
         return new RecepcionService(db, new UnitOfWork(db),
             new CrearRecepcionRequestValidator(), new VerificarEquipoRequestValidator(),
-            new AsignarTecnicoRequestValidator(), u, new AlcanceEnvios(db, u));
+            new AsignarTecnicoRequestValidator(), u, AlcanceDePrueba.Crear(db, u),
+            new CasoEquipoService(db, new UnitOfWork(db), u, AlcanceDePrueba.Crear(db, u)));
     }
 
     private static SistemaEnviosDbContext CrearContexto() => new(

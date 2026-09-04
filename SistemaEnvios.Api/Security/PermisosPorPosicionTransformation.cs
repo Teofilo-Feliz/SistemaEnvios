@@ -14,8 +14,10 @@ namespace SistemaEnvios.Api.Security;
 /// de donde AuthorizationConfiguration los lee. Corre después de autenticar y antes de
 /// autorizar, así que las políticas [Authorize] y IUserContext ven lo mismo.
 /// </summary>
-public sealed class PermisosPorPosicionTransformation(SistemaEnviosDbContext db, IMemoryCache cache)
-    : IClaimsTransformation
+public sealed class PermisosPorPosicionTransformation(
+    SistemaEnviosDbContext db,
+    IMemoryCache cache,
+    ILogger<PermisosPorPosicionTransformation> registro) : IClaimsTransformation
 {
     private const string ClaimPermisos = "permissions";
     private const string ClaimPosicion = "position";
@@ -41,9 +43,29 @@ public sealed class PermisosPorPosicionTransformation(SistemaEnviosDbContext db,
             .Where(PermisosConocidos.Contains)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        // Se acumulan los permisos de la posición y de los roles: un usuario puede llegar por
+        // cualquiera de los dos caminos, y AuthManager permite crear un rol dedicado a este
+        // sistema, que es más fiable de administrar que un cargo de recursos humanos.
         var posicion = principal.FindFirstValue(ClaimPosicion)?.Trim();
         if (!string.IsNullOrEmpty(posicion))
             permisos.UnionWith(await PermisosDePosicionAsync(posicion));
+
+        foreach (var rol in ClavesDeAcceso.Roles(principal))
+            permisos.UnionWith(await PermisosDePosicionAsync(rol));
+
+        // Nadie mapeado: el usuario entra pero sin poder hacer nada, y la pantalla solo muestra
+        // 403 sin causa. Se registra qué trajo el token para saber exactamente qué fila falta.
+        if (permisos.Count == 0)
+        {
+            var claves = ClavesDeAcceso.Describir(principal);
+            if (cache.TryGetValue($"aviso-claves::{claves}", out _) == false)
+            {
+                cache.Set($"aviso-claves::{claves}", true, TimeSpan.FromHours(1));
+                registro.LogWarning(
+                    "Usuario autenticado sin permisos en este sistema: {Claves}. Agregue esa clave a PerfilesPorPosicion y PermisosPorPosicion; hasta entonces todas las pantallas responderán 403.",
+                    claves);
+            }
+        }
 
         var resultado = principal.Clone();
         var destino = (ClaimsIdentity)resultado.Identity!;

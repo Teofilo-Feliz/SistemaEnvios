@@ -37,6 +37,10 @@ public sealed class MaquinaEstadosSqlServerTests
             datos.Add(EstadoEnvioCodigos.DespachadoPorTecnologia, EstadoEnvioCodigos.EnTransportacion);
             datos.Add(EstadoEnvioCodigos.EnTransportacion, EstadoEnvioCodigos.EnTransito);
             datos.Add(EstadoEnvioCodigos.EnTransito, EstadoEnvioCodigos.RecibidoEnFilial);
+            // Recibir con incidencia es un desenlace propio, no una variante del recibido.
+            datos.Add(EstadoEnvioCodigos.EnTransito, EstadoEnvioCodigos.RecibidoEnFilialConIncidencia);
+            datos.Add(EstadoEnvioCodigos.RecibidoPorTransportacion, EstadoEnvioCodigos.RecibidoPorTecnologiaConIncidencia);
+            datos.Add(EstadoEnvioCodigos.EnProcesoDeRevision, EstadoEnvioCodigos.RecibidoPorTecnologiaConIncidencia);
             return datos;
         }
     }

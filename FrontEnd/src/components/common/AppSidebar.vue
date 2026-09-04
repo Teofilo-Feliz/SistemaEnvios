@@ -16,6 +16,7 @@ import {
 } from "lucide-vue-next";
 import { useUiStore } from "@/stores/uiStore";
 import { useAuthStore } from "@/stores/authStore";
+import { grupoVisible } from "@/config/modulos";
 const route = useRoute();
 const ui = useUiStore();
 const auth = useAuthStore();
@@ -56,8 +57,13 @@ const groups = [
     items: [
       { label: "Dashboard", to: "/transportacion" },
       {
-        label: "Confirmaciones",
-        to: "/transportacion/confirmaciones",
+        label: "Recepción del chofer",
+        to: "/transportacion/recepcion-chofer",
+        permission: "transportes.confirmar",
+      },
+      {
+        label: "Llegadas",
+        to: "/transportacion/llegadas",
         permission: "transportes.confirmar",
       },
       { label: "Operaciones", to: "/transportacion/operaciones" },
@@ -65,6 +71,11 @@ const groups = [
         label: "Asignar transporte a envío",
         to: "/transportacion/nuevo",
         permission: "transportes.gestionar",
+      },
+      {
+        label: "Transportes y choferes",
+        to: "/transportacion/catalogos",
+        permission: "transportes.administrar",
       },
     ],
   },
@@ -78,18 +89,9 @@ const groups = [
       { label: "Equipos pendientes", to: "/tecnologia?view=pending" },
       { label: "En revisión", to: "/tecnologia?view=review" },
       { label: "Revisados", to: "/tecnologia?view=completed" },
+      { label: "Equipos en Tecnología", to: "/tecnologia?view=casos" },
       { label: "Descarte de equipos", to: "/tecnologia/descartes", permission: "equipos.gestionar" },
       { label: "Incidencias", to: "/incidencias" },
-    ],
-  },
-  {
-    key: "seguimiento",
-    label: "Seguimiento",
-    icon: PackageSearch,
-    items: [
-      { label: "Buscar envío", to: "/seguimiento/buscar" },
-      { label: "Historial", to: "/seguimiento/historial" },
-      { label: "Trazabilidad", to: "/seguimiento/trazabilidad" },
     ],
   },
   {
@@ -109,7 +111,6 @@ const groups = [
     icon: Building2,
     permission: "canManageCatalogs",
     items: [
-      { label: "Transportes y choferes", to: "/catalogos/transportes" },
       ...[
         "Filiales",
         "Ubicaciones",
@@ -166,7 +167,7 @@ function active(to) {
         @click="ui.mobileOpen = false"
         ><CircleGauge :size="19" /><span>Dashboard</span></RouterLink
       ><template v-for="group in groups" :key="group.key"
-        ><div v-if="auth.can(group.permission)" class="nav-group">
+        ><div v-if="grupoVisible(auth.perfilNombre, group.key) && auth.can(group.permission)" class="nav-group">
           <button
             class="nav-group-button"
             :title="group.label"

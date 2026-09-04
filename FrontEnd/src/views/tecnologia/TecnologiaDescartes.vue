@@ -10,6 +10,7 @@ import ModalCard from "@/components/common/ModalCard.vue";
 import { casoService } from "@/services/casoService";
 import { aPagina, filas } from "@/services/paginacion";
 import { useUiStore } from "@/stores/uiStore";
+import { useRefrescoAlVolver } from "@/composables/useRefrescoAlVolver";
 
 const router = useRouter();
 const ui = useUiStore();
@@ -112,6 +113,8 @@ async function descartar() {
 }
 
 onMounted(load);
+// Al volver a esta pestaña los datos pueden haber cambiado en otra máquina.
+useRefrescoAlVolver(load);
 watch(page, load);
 </script>
 

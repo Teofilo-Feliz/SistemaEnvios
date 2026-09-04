@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SistemaEnvios.Domain.Entities;
 
 namespace SistemaEnvios.Infrastructure.Persistence;
@@ -27,9 +28,31 @@ public class SistemaEnviosDbContext(DbContextOptions<SistemaEnviosDbContext> opt
     public DbSet<PermisoPosicion> PermisosPorPosicion => Set<PermisoPosicion>();
     public DbSet<PerfilPosicion> PerfilesPorPosicion => Set<PerfilPosicion>();
 
+    /// <summary>
+    /// Todo se guarda en UTC, pero SQL Server devuelve las fechas sin zona horaria. Sin esto el
+    /// JSON sale sin la "Z" y el navegador interpreta la hora como local: un movimiento de las
+    /// 18:01 aparece a las 22:01. Se marca al leer, en un solo sitio, en vez de recordarlo en
+    /// cada consulta.
+    /// </summary>
+    private static readonly ValueConverter<DateTime, DateTime> ALecturaUtc = new(
+        aLaBase => aLaBase,
+        deLaBase => DateTime.SpecifyKind(deLaBase, DateTimeKind.Utc));
+
+    private static readonly ValueConverter<DateTime?, DateTime?> ALecturaUtcOpcional = new(
+        aLaBase => aLaBase,
+        deLaBase => deLaBase.HasValue ? DateTime.SpecifyKind(deLaBase.Value, DateTimeKind.Utc) : deLaBase);
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(SistemaEnviosDbContext).Assembly);
+
+        foreach (var entidad in modelBuilder.Model.GetEntityTypes())
+            foreach (var propiedad in entidad.GetProperties())
+            {
+                if (propiedad.ClrType == typeof(DateTime)) propiedad.SetValueConverter(ALecturaUtc);
+                else if (propiedad.ClrType == typeof(DateTime?)) propiedad.SetValueConverter(ALecturaUtcOpcional);
+            }
+
         base.OnModelCreating(modelBuilder);
     }
 }

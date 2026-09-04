@@ -21,4 +21,7 @@ export const envioService = {
   removeEquipment: (id) => api.delete(`/envio-equipos/${id}`),
   reception: (id) => api.get(`/recepciones/por-envio/${id}`),
   incidents: (id, params) => api.get(`/incidencias/por-envio/${id}`, { params }),
+  // Los equipos que llegaron mal en la recepción, con lo que anotó quien recibió. Es distinto
+  // de las incidencias registradas a mano: esto sale de verificar equipo por equipo.
+  receptionIncidents: (id, params) => api.get(`/recepciones/incidencias/por-envio/${id}`, { params }),
 }

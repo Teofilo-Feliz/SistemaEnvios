@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using SistemaEnvios.Application.DTOs.Common;
 using Microsoft.AspNetCore.Mvc;
 using SistemaEnvios.Api.Extensions;
 using SistemaEnvios.Application.DTOs.Recepciones;
@@ -11,6 +12,12 @@ namespace SistemaEnvios.Api.Controllers.Recepciones;
 [Route("api/recepciones")]
 public sealed class RecepcionesController(IRecepcionService service) : ControllerBase
 {
+    /// <summary>Los equipos que llegaron mal, para poder ver cuáles son y qué les pasa.</summary>
+    [HttpGet("incidencias/por-envio/{envioId:int}")]
+    [Authorize(Policy = PermissionNames.EnviosConsultar)]
+    public async Task<IActionResult> IncidenciasPorEnvio(int envioId, [FromQuery] ParametrosPaginaSimple request, CancellationToken cancellationToken) =>
+        (await service.ListarIncidenciasPorEnvioAsync(envioId, request, cancellationToken)).ToActionResult(this);
+
     [HttpGet("por-envio/{envioId:int}")]
     [Authorize(Policy = PermissionNames.EnviosConsultar)]
     public async Task<IActionResult> ObtenerPorEnvio(int envioId, CancellationToken cancellationToken) =>

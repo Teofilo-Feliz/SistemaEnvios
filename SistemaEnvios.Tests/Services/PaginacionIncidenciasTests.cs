@@ -63,7 +63,7 @@ public sealed class PaginacionIncidenciasTests
     {
         IUserContext usuario = new FakeUserContext(UsuarioId, "41,SANTIAGO", position: posicion);
         return new IncidenciaService(
-            db, new UnitOfWork(db), new CrearIncidenciaRequestValidator(), usuario, new AlcanceEnvios(db, usuario));
+            db, new UnitOfWork(db), new CrearIncidenciaRequestValidator(), usuario, AlcanceDePrueba.Crear(db, usuario));
     }
 
     private static async Task<SistemaEnviosDbContext> SembrarAsync(int cantidad)

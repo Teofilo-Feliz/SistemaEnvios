@@ -60,7 +60,7 @@ public sealed class CasoDeEquipoConsultaTests
     private static CasoEquipoService Servicio(SistemaEnviosDbContext db, string posicion)
     {
         IUserContext u = new FakeUserContext(UsuarioId, "1,AZUA", position: posicion);
-        return new CasoEquipoService(db, new UnitOfWork(db), u, new AlcanceEnvios(db, u));
+        return new CasoEquipoService(db, new UnitOfWork(db), u, AlcanceDePrueba.Crear(db, u));
     }
 
     private static async Task<SistemaEnviosDbContext> SembrarAsync()

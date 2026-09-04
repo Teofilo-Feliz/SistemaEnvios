@@ -27,7 +27,7 @@ public sealed class AlcancePerfilTransportacionTests
             permissions: [PermissionNames.TransportesGestionar],
             position: "Asistente Administrativo");
 
-        Assert.Equal(PerfilAlcance.Filial, await new AlcanceEnvios(db, usuario).ResolverPerfilAsync());
+        Assert.Equal(PerfilAlcance.Filial, await AlcanceDePrueba.Crear(db, usuario).ResolverPerfilAsync());
     }
 
     [Fact]
@@ -39,7 +39,7 @@ public sealed class AlcancePerfilTransportacionTests
             permissions: [PermissionNames.TransportesGestionar],
             position: "Encargado de Transportacion");
 
-        Assert.Equal(PerfilAlcance.Transportacion, await new AlcanceEnvios(db, usuario).ResolverPerfilAsync());
+        Assert.Equal(PerfilAlcance.Transportacion, await AlcanceDePrueba.Crear(db, usuario).ResolverPerfilAsync());
     }
 
     private static async Task<SistemaEnviosDbContext> CrearContextoAsync()

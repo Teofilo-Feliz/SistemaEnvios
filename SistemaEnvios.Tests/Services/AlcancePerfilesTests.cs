@@ -63,7 +63,7 @@ public sealed class AlcancePerfilesTests
         await using var db = CrearContexto();
         await SembrarAsync(db, EstadoEnvioCodigos.EnFilial, EstrategiaTransporteEnum.EntregaDirectaTecnologia);
 
-        var perfil = await new AlcanceEnvios(db, Tecnologia())
+        var perfil = await AlcanceDePrueba.Crear(db, Tecnologia())
             .ResolverPerfilAsync();
 
         Assert.Equal(PerfilAlcance.Global, perfil);
@@ -87,7 +87,7 @@ public sealed class AlcancePerfilesTests
         await using var db = CrearContexto();
         await SembrarAsync(db, EstadoEnvioCodigos.EnFilial, EstrategiaTransporteEnum.EntregaDirectaTecnologia);
 
-        var perfil = await new AlcanceEnvios(db, new FakeUserContext(UsuarioId, ClaimSantiago))
+        var perfil = await AlcanceDePrueba.Crear(db, new FakeUserContext(UsuarioId, ClaimSantiago))
             .ResolverPerfilAsync();
 
         Assert.Equal(PerfilAlcance.Filial, perfil);
@@ -113,7 +113,7 @@ public sealed class AlcancePerfilesTests
 
     private static async Task<List<Envio>> ListarAsync(SistemaEnviosDbContext db, IUserContext usuario)
     {
-        var alcance = new AlcanceEnvios(db, usuario);
+        var alcance = AlcanceDePrueba.Crear(db, usuario);
         var query = await alcance.FiltrarAsync(db.Envios.AsNoTracking());
         return await query.ToListAsync();
     }

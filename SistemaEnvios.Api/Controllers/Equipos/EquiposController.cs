@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SistemaEnvios.Api.Extensions;
+using SistemaEnvios.Application.DTOs.Common;
 using SistemaEnvios.Application.DTOs.Equipos;
 using SistemaEnvios.Application.Interfaces.Services;
 using SistemaEnvios.Application.Security;
@@ -20,6 +21,15 @@ public sealed class EquiposController(IEquipoService service) : ControllerBase
     [Authorize(Policy = PermissionNames.EnviosConsultar)]
     public async Task<IActionResult> Obtener(int equipoId, CancellationToken cancellationToken) =>
         (await service.ObtenerAsync(equipoId, cancellationToken)).ToActionResult(this);
+
+    /// <summary>
+    /// Por dónde ha pasado el equipo. Mismo permiso que ver la ficha: quien puede abrir el
+    /// equipo puede ver su recorrido, y el alcance ya lo aplica el servicio.
+    /// </summary>
+    [HttpGet("{equipoId:int}/historial")]
+    [Authorize(Policy = PermissionNames.EnviosConsultar)]
+    public async Task<IActionResult> Historial(int equipoId, [FromQuery] ParametrosPaginaSimple request, CancellationToken cancellationToken) =>
+        (await service.ListarViajesAsync(equipoId, request, cancellationToken)).ToActionResult(this);
 
     [HttpPost]
     [Authorize(Policy = PermissionNames.EquiposGestionar)]

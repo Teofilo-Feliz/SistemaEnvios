@@ -25,6 +25,7 @@ import { useUiStore } from "@/stores/uiStore";
 import { useAuthStore } from "@/stores/authStore";
 import { isInternalTransport, isPrivateTransport } from "@/utils/transport";
 import { confirmAction, notifyNotificationsChanged } from "@/utils/confirm";
+import { useRefrescoAlVolver } from "@/composables/useRefrescoAlVolver";
 
 const route = useRoute();
 const router = useRouter();
@@ -47,6 +48,8 @@ const history = ref([]);
 const transport = ref(null);
 const reception = ref(null);
 const incidents = ref([]);
+// Equipos marcados con incidencia al recibirlos, que es lo que explica el estado en rojo.
+const incidenciasRecepcion = ref([]);
 const tabs = [
   ["summary", "Resumen"],
   ["equipment", "Equipos"],
@@ -83,14 +86,22 @@ const flowLabel = computed(() =>
 const esEditable = computed(() =>
   ["EN_FILIAL", "PREPARACION_TECNOLOGIA"].includes(stateCode(shipment.value?.estadoEnvioId)),
 );
+const ESTADOS_CON_INCIDENCIA = ["RECIBIDO_FILIAL_INCIDENCIA", "RECIBIDO_TECNOLOGIA_INCIDENCIA"];
+
 const events = computed(() =>
   history.value.map((x) => ({
     label: stateName(x.estadoEnvioId),
     date: new Date(x.fecha).toLocaleString("es-DO"),
-    actor: x.usuarioId,
+    // Antes se mostraba el id del usuario, que sin sincronización con AuthManager no se
+    // resuelve a un nombre. La observación del movimiento sí explica qué pasó.
+    nota: x.observaciones || "",
+    incidencia: ESTADOS_CON_INCIDENCIA.includes(stateCode(x.estadoEnvioId)),
     current: x.estadoEnvioId === shipment.value?.estadoEnvioId,
   })),
 );
+
+// El botón del recorrido abre las incidencias sin sacar al usuario de donde está mirando.
+const incidenciasAbiertas = ref(false);
 // La asociación envío-equipo solo trae el equipoId; la marca, el modelo y el serial salen
 // del equipo, que se carga aparte (equipoDetails) para no mostrar "Equipo #12".
 const mappedEquipment = computed(() =>
@@ -159,6 +170,7 @@ async function load() {
       transporteService.getByEnvio(route.params.id),
       envioService.reception(route.params.id),
       envioService.incidents(route.params.id, { pageSize: 100 }),
+      envioService.receptionIncidents(route.params.id, { pageSize: 100 }),
     ];
     const [
       detail,
@@ -169,6 +181,7 @@ async function load() {
       transportResult,
       receptionResult,
       incidentsResult,
+      recepcionIncidentsResult,
     ] = await Promise.all(
       requests.map((request) => request.catch(() => ({ data: null }))),
     );
@@ -181,6 +194,7 @@ async function load() {
     transport.value = transportResult.data;
     reception.value = receptionResult.data;
     incidents.value = filas(incidentsResult);
+    incidenciasRecepcion.value = filas(recepcionIncidentsResult);
   } catch (error) {
     ui.showToast(
       error.userMessage || "No fue posible cargar el envío.",
@@ -273,6 +287,8 @@ function printPage() {
   window.print();
 }
 onMounted(load);
+// Al volver a esta pestaña los datos pueden haber cambiado en otra máquina.
+useRefrescoAlVolver(load);
 </script>
 <template>
   <button
@@ -364,7 +380,7 @@ onMounted(load);
     </nav>
     <div v-if="tab === 'summary'" class="detail-grid">
       <BaseCard title="Progreso del envío"
-        ><ShipmentTimeline :events="events" /></BaseCard
+        ><ShipmentTimeline :events="events" @ver-incidencia="incidenciasAbiertas = true" /></BaseCard
       ><BaseCard title="Información logística"
         ><dl class="summary-list">
           <div>
@@ -385,7 +401,7 @@ onMounted(load);
       ><BaseTable :columns="equipCols" :rows="mappedEquipment" @view="verEquipo"
     /></BaseCard>
     <BaseCard v-else-if="tab === 'history'" title="Historial real del envío"
-      ><ShipmentTimeline :events="events"
+      ><ShipmentTimeline :events="events" @ver-incidencia="incidenciasAbiertas = true"
     /></BaseCard>
     <BaseCard v-else-if="tab === 'transport'" title="Transportación"
       ><div v-if="transport">
@@ -455,14 +471,31 @@ onMounted(load);
       </div></BaseCard
     >
     <BaseCard v-else title="Incidencias"
-      ><div v-if="incidents.length">
+      ><div v-if="incidenciasRecepcion.length" class="incidencias-recepcion">
+        <h3>Equipos que llegaron con incidencia</h3>
+        <article v-for="item in incidenciasRecepcion" :key="item.envioEquipoId">
+          <header>
+            <strong>{{ item.marca }} {{ item.modelo }}</strong>
+            <span class="etiqueta-ticket">Ticket {{ item.numeroTicket }}</span>
+          </header>
+          <p class="identificacion">
+            Serial: {{ item.numeroSerie || "—" }} · Activo: {{ item.codigoActivo || "—" }}
+          </p>
+          <p class="anotacion">{{ item.observaciones || "Se marcó con incidencia sin detallar." }}</p>
+          <small v-if="item.fechaVerificacion">
+            Verificado el {{ new Date(item.fechaVerificacion).toLocaleString("es-DO") }}
+          </small>
+        </article>
+      </div>
+      <div v-if="incidents.length" class="incidencias-registradas">
+        <h3>Incidencias registradas aparte</h3>
         <ul>
           <li v-for="item in incidents" :key="item.incidenciaId">
             {{ item.descripcion }}
           </li>
         </ul>
       </div>
-      <div v-else class="empty-state">
+      <div v-if="!incidents.length && !incidenciasRecepcion.length" class="empty-state">
         No hay incidencias registradas.
       </div></BaseCard
     >
@@ -524,6 +557,32 @@ onMounted(load);
         Abrir ficha completa
       </button>
     </template>
+  </ModalCard>
+
+  <ModalCard
+    :open="incidenciasAbiertas"
+    eyebrow="Recepción con incidencia"
+    :title="shipment ? `Envío ${shipment.numeroEnvio}` : ''"
+    @close="incidenciasAbiertas = false"
+  >
+    <div v-if="incidenciasRecepcion.length" class="incidencias-recepcion">
+      <article v-for="item in incidenciasRecepcion" :key="item.envioEquipoId">
+        <header>
+          <strong>{{ item.marca }} {{ item.modelo }}</strong>
+          <span class="etiqueta-ticket">Ticket {{ item.numeroTicket }}</span>
+        </header>
+        <p class="identificacion">
+          Serial: {{ item.numeroSerie || "—" }} · Activo: {{ item.codigoActivo || "—" }}
+        </p>
+        <p class="anotacion">{{ item.observaciones || "Se marcó con incidencia sin detallar." }}</p>
+        <small v-if="item.fechaVerificacion">
+          Verificado el {{ new Date(item.fechaVerificacion).toLocaleString("es-DO") }}
+        </small>
+      </article>
+    </div>
+    <div v-else class="empty-state">
+      El envío quedó marcado con incidencia pero no hay equipos anotados.
+    </div>
   </ModalCard>
 </template>
 

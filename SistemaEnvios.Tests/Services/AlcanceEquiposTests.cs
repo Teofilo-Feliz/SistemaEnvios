@@ -117,7 +117,7 @@ public sealed class AlcanceEquiposTests
         return new EquipoService(
             db, new UnitOfWork(db),
             new CrearEquipoRequestValidator(), new ActualizarEquipoRequestValidator(),
-            usuario, new AlcanceEnvios(db, usuario));
+            usuario, AlcanceDePrueba.Crear(db, usuario));
     }
 
     private static async Task<SistemaEnviosDbContext> SembrarAsync()

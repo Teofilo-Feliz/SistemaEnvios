@@ -294,6 +294,9 @@ async function addEquipment() {
         types.value.find((x) => x.tipoEquipoId === Number(item.typeId))
           ?.nombre || `Tipo #${item.typeId}`,
     });
+    // El destino de un equipo con caso lo decide el caso, venga por donde venga: agregarlo
+    // por primera vez o volver a agregarlo tras editarlo. Así la regla no depende del camino.
+    if (item.casoFilialId && isTechnology(origin.value)) form.destinationId = item.casoFilialId;
     ui.notify("Equipo listo para asociar al envío.", "success");
     resetItem();
     Object.keys(itemErrors).forEach((k) => (itemErrors[k] = ""));
@@ -302,7 +305,15 @@ async function addEquipment() {
   }
 }
 function removeEquipment(id) {
+  // Si el equipo que sale es el que fijaba el destino, el destino deja de estar decidido y hay
+  // que limpiarlo. Sin esto el campo se desbloquea conservando la filial del caso anterior:
+  // parece editable, viene relleno con un valor plausible, y el envío se va a otra filial.
+  const fijadoAntes = form.equipment.find((x) => x.id === id)?.casoFilialId ?? null;
   form.equipment = form.equipment.filter((x) => x.id !== id);
+  const sigueFijado = form.equipment.some((x) => x.ticketHeredado && x.casoFilialId);
+  if (fijadoAntes && !sigueFijado && Number(form.destinationId) === Number(fijadoAntes)) {
+    form.destinationId = "";
+  }
 }
 
 // Al editar, el envío puede no tener transporte todavía (se crea) o tenerlo (se actualiza).

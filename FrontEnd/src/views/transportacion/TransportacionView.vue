@@ -21,6 +21,7 @@ import { catalogoService } from "@/services/catalogoService";
 import { useUiStore } from "@/stores/uiStore";
 import { isInternalTransport } from "@/utils/transport";
 import { confirmAction, notifyNotificationsChanged } from "@/utils/confirm";
+import { useRefrescoAlVolver } from "@/composables/useRefrescoAlVolver";
 const router = useRouter(), route = useRoute(),
   ui = useUiStore(),
   loading = ref(true),
@@ -181,6 +182,8 @@ async function confirmArrival(row) {
   catch (e) { ui.notify(e.userMessage || "No fue posible confirmar la llegada.", "error"); }
 }
 onMounted(load);
+// Al volver a esta pestaña los datos pueden haber cambiado en otra máquina.
+useRefrescoAlVolver(load);
 // Cambiar de página vuelve a consultar: el corte lo hace el servidor, no el navegador.
 watch(page, load);
 </script>

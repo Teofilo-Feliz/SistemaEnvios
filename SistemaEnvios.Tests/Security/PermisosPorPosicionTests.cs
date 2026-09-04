@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging.Abstractions;
 using SistemaEnvios.Api.Security;
 using SistemaEnvios.Application.Security;
 using SistemaEnvios.Domain.Entities;
@@ -72,7 +73,7 @@ public sealed class PermisosPorPosicionTests
     public async Task Transformar_DosVeces_NoDuplicaPermisos()
     {
         await using var db = await CrearContextoAsync(("Asistente Administrativo", PermissionNames.EnviosConsultar));
-        var transformacion = new PermisosPorPosicionTransformation(db, new MemoryCache(new MemoryCacheOptions()));
+        var transformacion = new PermisosPorPosicionTransformation(db, new MemoryCache(new MemoryCacheOptions()), NullLogger<PermisosPorPosicionTransformation>.Instance);
         var principal = Principal("Asistente Administrativo", "evaluador");
 
         var unaVez = await transformacion.TransformAsync(principal);
@@ -83,7 +84,7 @@ public sealed class PermisosPorPosicionTests
 
     private static async Task<string[]> TransformarAsync(SistemaEnviosDbContext db, string posicion, string permisos)
     {
-        var transformacion = new PermisosPorPosicionTransformation(db, new MemoryCache(new MemoryCacheOptions()));
+        var transformacion = new PermisosPorPosicionTransformation(db, new MemoryCache(new MemoryCacheOptions()), NullLogger<PermisosPorPosicionTransformation>.Instance);
         var resultado = await transformacion.TransformAsync(Principal(posicion, permisos));
         return resultado.FindAll("permissions").Select(x => x.Value).ToArray();
     }

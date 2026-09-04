@@ -478,11 +478,14 @@ VALUES
     (N'INCIDENCIA_TRANSPORTACION', N'Incidencia en transportación', N'El traslado presenta una incidencia pendiente.', 0, 1),
     (N'PREPARACION_TECNOLOGIA', N'En preparación por Tecnología', N'Tecnología prepara un nuevo envío hacia una filial.', 0, 1),
     (N'DESPACHADO_TECNOLOGIA', N'Despachado por Tecnología', N'Tecnología entregó el envío para su traslado.', 0, 1),
-    (N'EN_TRANSPORTACION', N'En Transportación', N'El envío fue recibido por el área de Transportación.', 0, 1),
+    (N'EN_TRANSPORTACION', N'En espera de asignación de chofer', N'Transportación tiene el envío y debe asignarle chofer; al asignarlo sale a ruta.', 0, 1),
     (N'TRANSPORTE_ASIGNADO', N'Chofer asignado', N'Retirado del flujo: asignar el chofer manda el envío a tránsito.', 0, 0),
     (N'DESPACHADO_TRANSPORTACION', N'Despachado por Transportación', N'Retirado del flujo: el despacho ocurre al asignar el chofer.', 0, 0),
     (N'PENDIENTE_RECEPCION_FILIAL', N'Pendiente de recepción en filial', N'Retirado del flujo: la filial recibe directo desde tránsito.', 0, 0),
-    (N'RECIBIDO_FILIAL', N'Recibido en filial', N'La filial recibió el envío. Cierra el flujo, con o sin incidencia.', 1, 1),
+    (N'RECIBIDO_FILIAL', N'Recibido en filial', N'La filial recibió el envío conforme. Cierra el flujo y el caso del equipo.', 1, 1),
+    -- El envío termina igual; lo que sigue abierto es el caso, para la vuelta siguiente.
+    (N'RECIBIDO_FILIAL_INCIDENCIA', N'Recibido en filial con incidencia', N'Llegó, pero algún equipo venía mal. El caso del equipo sigue abierto.', 1, 1),
+    (N'RECIBIDO_TECNOLOGIA_INCIDENCIA', N'Recibido por Tecnología con incidencia', N'Llegó a Tecnología, pero algún equipo venía mal.', 1, 1),
     (N'RECEPCION_VALIDADA_FILIAL', N'Recepción validada en filial', N'Retirado del flujo: RECIBIDO_FILIAL es el cierre.', 1, 0);
 GO
 
@@ -509,7 +512,11 @@ FROM
         (N'DESPACHADO_TECNOLOGIA', N'EN_TRANSPORTACION'),
         -- Asignar el chofer ES la salida a ruta, y la filial recibe directo desde tránsito.
         (N'EN_TRANSPORTACION', N'EN_TRANSITO'),
-        (N'EN_TRANSITO', N'RECIBIDO_FILIAL')
+        (N'EN_TRANSITO', N'RECIBIDO_FILIAL'),
+        -- Recibir con incidencia es un desenlace distinto, no una variante del mismo estado.
+        (N'EN_TRANSITO', N'RECIBIDO_FILIAL_INCIDENCIA'),
+        (N'RECIBIDO_TRANSPORTACION', N'RECIBIDO_TECNOLOGIA_INCIDENCIA'),
+        (N'EN_REVISION', N'RECIBIDO_TECNOLOGIA_INCIDENCIA')
 ) AS flujo(CodigoOrigen, CodigoDestino)
 INNER JOIN dbo.EstadosEnvio origen ON origen.Codigo = flujo.CodigoOrigen
 INNER JOIN dbo.EstadosEnvio destino ON destino.Codigo = flujo.CodigoDestino;
@@ -537,7 +544,7 @@ INSERT INTO dbo.Ubicaciones (Nombre, CodigoCentro, FilialExternaId, Tipo, Activo
 VALUES
     (N'Tecnología',                    N'TECNOLOGIA',               NULL, 2, 1),
     (N'Santo Domingo Oeste',           N'SANTO-DOMINGO-OESTE',         4, 1, 1),
-    (N'Santo Domingo Este',            N'SANTO-DOMINGO-ESTE',         16, 1, 1),
+    (N'Santo Domingo Este',            N'SANTO-DOMINGO-ESTE',         31, 1, 1),
     (N'Guerra',                        N'GUERRA',                     10, 1, 1),
     (N'San Cristóbal',                 N'SAN-CRISTOBAL',              21, 1, 1),
     (N'Haina',                         N'HAINA',                      37, 1, 1),
@@ -580,10 +587,16 @@ GO
 */
 INSERT INTO dbo.PerfilesPorPosicion (Posicion, Perfil)
 VALUES
-    (N'Programador Senior',          1),
-    (N'Encargado de Transportacion', 2),
-    (N'Administrador de Filial',     3),
-    (N'Asistente Administrativo',    3);
+    (N'Programador Senior',                  1),
+    -- Las dos claves que AuthManager emite para Transportación: el rol creado a propósito
+    -- para este sistema y el cargo de recursos humanos. Se mapean las dos porque el token
+    -- puede traer una sin la otra. El acento no es cosmético: la base es Modern_Spanish_CI_AS,
+    -- que ignora mayúsculas pero distingue tildes, así que 'Transportacion' no cruza con
+    -- 'Transportación'. Estos textos se copian del token, no se escriben de memoria.
+    (N'Encargado Transportación',            2),
+    (N'Encargado transportacion y mecanica', 2),
+    (N'Administrador de Filial',             3),
+    (N'Asistente Administrativo',            3);
 GO
 
 INSERT INTO dbo.PermisosPorPosicion (Posicion, Permiso)
@@ -599,11 +612,22 @@ VALUES
     (N'Programador Senior', N'transportes.gestionar'),
     (N'Programador Senior', N'transportes.confirmar'),
     (N'Programador Senior', N'catalogos.administrar'),
-    -- Transportación solo custodia y confirma; no crea ni edita envíos.
-    (N'Encargado de Transportacion', N'envios.consultar'),
-    (N'Encargado de Transportacion', N'transportes.gestionar'),
-    (N'Encargado de Transportacion', N'transportes.confirmar'),
-    (N'Encargado de Transportacion', N'incidencias.gestionar'),
+    (N'Programador Senior', N'transportes.administrar'),
+    -- Transportación solo custodia y confirma; no crea ni edita envíos. 'envios.consultar'
+    -- es imprescindible aunque suene de más: su propio módulo lo exige para abrirse.
+    (N'Encargado Transportación', N'envios.consultar'),
+    (N'Encargado Transportación', N'transportes.gestionar'),
+    (N'Encargado Transportación', N'transportes.confirmar'),
+    (N'Encargado Transportación', N'incidencias.gestionar'),
+    -- La flota es suya: tipos de transporte y choferes internos. Es un permiso aparte de
+    -- 'transportes.gestionar' porque ese lo tienen las filiales para asignar transporte a
+    -- sus propios envíos, y asignar no es administrar.
+    (N'Encargado Transportación', N'transportes.administrar'),
+    (N'Encargado transportacion y mecanica', N'envios.consultar'),
+    (N'Encargado transportacion y mecanica', N'transportes.gestionar'),
+    (N'Encargado transportacion y mecanica', N'transportes.confirmar'),
+    (N'Encargado transportacion y mecanica', N'incidencias.gestionar'),
+    (N'Encargado transportacion y mecanica', N'transportes.administrar'),
     -- La filial origina envíos y recibe devoluciones, dentro de su propio alcance.
     (N'Administrador de Filial', N'envios.consultar'),
     (N'Administrador de Filial', N'envios.crear'),

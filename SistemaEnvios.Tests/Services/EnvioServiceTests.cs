@@ -178,8 +178,8 @@ public sealed class EnvioServiceTests
         new CrearEnvioRequestValidator(),
         new ActualizarEnvioRequestValidator(),
         FakeUserContext.Global(UsuarioId),
-        new AlcanceEnvios(db, FakeUserContext.Global(UsuarioId)),
-        new CasoEquipoService(db, new UnitOfWork(db), FakeUserContext.Global(UsuarioId), new AlcanceEnvios(db, FakeUserContext.Global(UsuarioId))));
+        AlcanceDePrueba.Crear(db, FakeUserContext.Global(UsuarioId)),
+        new CasoEquipoService(db, new UnitOfWork(db), FakeUserContext.Global(UsuarioId), AlcanceDePrueba.Crear(db, FakeUserContext.Global(UsuarioId))));
 
     private static SistemaEnviosDbContext CrearContexto()
     {

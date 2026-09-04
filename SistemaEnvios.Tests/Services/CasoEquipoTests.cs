@@ -125,7 +125,7 @@ public sealed class CasoEquipoTests
     private static CasoEquipoService Servicio(SistemaEnviosDbContext db)
     {
         IUserContext u = FakeUserContext.Global(UsuarioId);
-        return new CasoEquipoService(db, new UnitOfWork(db), u, new AlcanceEnvios(db, u));
+        return new CasoEquipoService(db, new UnitOfWork(db), u, AlcanceDePrueba.Crear(db, u));
     }
 
     private static int Equipo(SistemaEnviosDbContext db) => db.Equipos.First().EquipoId;

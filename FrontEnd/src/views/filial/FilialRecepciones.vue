@@ -10,6 +10,7 @@ import { envioService } from "@/services/envioService";
 import { catalogoService } from "@/services/catalogoService";
 import { useUiStore } from "@/stores/uiStore";
 import { useAuthStore } from "@/stores/authStore";
+import { useRefrescoAlVolver } from "@/composables/useRefrescoAlVolver";
 
 const router = useRouter();
 const ui = useUiStore();
@@ -88,6 +89,8 @@ function recibir(row) {
 }
 
 onMounted(load);
+// Al volver a esta pestaña los datos pueden haber cambiado en otra máquina.
+useRefrescoAlVolver(load);
 watch(page, load);
 </script>
 

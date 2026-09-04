@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from "vue-router";
 import AppLayout from "@/layouts/AppLayout.vue";
 import { useAuthStore } from "@/stores/authStore";
+import { inicioDe, rutaPermitida } from "@/config/modulos";
 import { userManager } from "@/services/authService";
 const PlaceholderView = () => import("@/views/PlaceholderView.vue");
 const routes = [
@@ -14,7 +15,7 @@ const routes = [
     name: "login",
     component: () => import("@/views/auth/LoginView.vue"),
   },
-  { path: "/", redirect: "/dashboard" },
+  { path: "/", redirect: () => inicioDe(useAuthStore().perfilNombre) },
   {
     path: "/",
     component: AppLayout,
@@ -101,6 +102,16 @@ const routes = [
         meta: { permission: "transportes.gestionar" },
       },
       {
+        // Los tipos de transporte y los choferes son de Transportación, no un catálogo
+        // general de Tecnología. Exige 'transportes.administrar', que es mantener la flota;
+        // 'transportes.gestionar' es otra cosa y lo tienen las filiales para sus envíos.
+        path: "transportacion/catalogos",
+        name: "transportacion-catalogos",
+        component: () =>
+          import("@/views/transportacion/TransportesCatalogos.vue"),
+        meta: { permission: "transportes.administrar" },
+      },
+      {
         // Descartar es lo que cierra un caso que no va a terminar con el equipo de vuelta en
         // su filial; exige gestionar equipos, no solo consultarlos.
         path: "tecnologia/descartes",
@@ -150,54 +161,60 @@ const routes = [
         meta: { permission: "envios.consultar" },
       },
       {
-        path: "seguimiento/:section?",
-        name: "seguimiento",
-        component: PlaceholderView,
-        meta: { permission: "envios.consultar" },
-      },
-      {
+        // La ruta vieja vivía en Catálogos. Se conserva como redirección para que no se
+        // rompan los enlaces guardados ni las pestañas que alguien tenga abiertas.
         path: "catalogos/transportes",
-        name: "transport-catalogs",
-        component: () => import("@/views/catalogos/TransportesCatalogos.vue"),
-        meta: { permission: "catalogos.administrar" },
+        redirect: { name: "transportacion-catalogos" },
       },
       {
         path: "catalogos/:section?",
         name: "catalogos",
         component: PlaceholderView,
-        meta: { permission: "catalogos.administrar" },
+        meta: { permission: "catalogos.administrar", title: "Catálogos" },
       },
       {
         path: "administracion/:section?",
         name: "administracion",
         component: PlaceholderView,
-        meta: { permission: "catalogos.administrar" },
+        meta: { permission: "catalogos.administrar", title: "Administración" },
       },
       {
         path: "perfil",
         name: "profile",
         component: PlaceholderView,
-        meta: { permission: "envios.consultar" },
+        meta: { permission: "envios.consultar", title: "Mi perfil" },
       },
       {
         path: "preferencias",
         name: "preferences",
         component: PlaceholderView,
-        meta: { permission: "envios.consultar" },
+        meta: { permission: "envios.consultar", title: "Preferencias" },
       },
     ],
   },
-  { path: "/:pathMatch(.*)*", redirect: "/dashboard" },
+  { path: "/:pathMatch(.*)*", redirect: () => inicioDe(useAuthStore().perfilNombre) },
 ];
+// Dos bandejas en vez de una: mezclar "el chofer recibió el equipo" con "el envío llegó" se
+// prestaba a confusión, porque son momentos distintos del mismo traslado. Comparten componente
+// porque el trabajo es idéntico; lo que cambia es qué se confirma.
 routes
   .find((route) => route.component === AppLayout)
-  ?.children.push({
-    path: "transportacion/confirmaciones",
-    name: "transportacion-confirmations",
-    component: () =>
-      import("@/views/transportacion/TransportacionConfirmaciones.vue"),
-    meta: { permission: "transportes.confirmar" },
-  });
+  ?.children.push(
+    {
+      path: "transportacion/recepcion-chofer",
+      name: "transportacion-custodia",
+      component: () => import("@/views/transportacion/TransportacionBandeja.vue"),
+      props: { modo: "custodia" },
+      meta: { permission: "transportes.confirmar" },
+    },
+    {
+      path: "transportacion/llegadas",
+      name: "transportacion-llegadas",
+      component: () => import("@/views/transportacion/TransportacionBandeja.vue"),
+      props: { modo: "llegada" },
+      meta: { permission: "transportes.confirmar" },
+    },
+  );
 const router = createRouter({
   history: createWebHistory(),
   routes,
@@ -217,9 +234,17 @@ router.beforeEach(async (to) => {
     return { name: "login" };
   }
   if (to.name === "Unauthorized") return true;
+
+  // Cada perfil trabaja dentro de su módulo. Ocultarlo del menú no basta: la URL escrita a
+  // mano o un enlace viejo llegarían igual.
+  if (!rutaPermitida(auth.perfilNombre, to.path)) {
+    const inicio = auth.moduloInicio;
+    return { path: inicio === to.path ? "/unauthorized" : inicio };
+  }
+
   const permission = to.meta.permission;
   if (!permission || auth.can(permission)) return true;
-  const first = auth.can("envios.consultar") ? "/dashboard" : auth.can("envios.crear") ? "/tecnologia/envios/nuevo" : auth.can("transportes.gestionar") ? "/transportacion" : auth.can("recepciones.gestionar") ? "/filial/recepciones" : "/unauthorized";
-  return { path: first === to.path ? "/unauthorized" : first };
+  const inicio = auth.moduloInicio;
+  return { path: inicio === to.path ? "/unauthorized" : inicio };
 });
 export default router;

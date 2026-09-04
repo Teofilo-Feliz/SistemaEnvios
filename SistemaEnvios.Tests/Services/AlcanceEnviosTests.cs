@@ -91,7 +91,8 @@ public sealed class AlcanceEnviosTests
         await using var db = CrearContexto();
         await SembrarEnvioDesdeFilialAsync(db, filialExternaId: 30);
 
-        var resultado = await CrearServicio(db, ClaimSantiago, ["AdministradorGlobal"]).ConsultarAsync(new ConsultarEnviosRequest());
+        var resultado = await // El alcance Global se concede por posición mapeada, no por el nombre del rol.
+        CrearServicio(db, ClaimSantiago, "Programador Senior").ConsultarAsync(new ConsultarEnviosRequest());
 
         Assert.True(resultado.IsSuccess);
         Assert.Single(resultado.Value!.Items);
@@ -138,9 +139,9 @@ public sealed class AlcanceEnviosTests
     private static EnvioService CrearServicio(
         SistemaEnviosDbContext db,
         string affiliate,
-        IReadOnlyCollection<string>? roles = null)
+        string? posicion = null)
     {
-        var userContext = new FakeUserContext(UsuarioId, affiliate, roles);
+        var userContext = new FakeUserContext(UsuarioId, affiliate, position: posicion);
         return new EnvioService(
             new GenericRepository<Envio>(db),
             db,
@@ -148,7 +149,7 @@ public sealed class AlcanceEnviosTests
             new CrearEnvioRequestValidator(),
             new ActualizarEnvioRequestValidator(),
             userContext,
-            new AlcanceEnvios(db, userContext), new CasoEquipoService(db, new UnitOfWork(db), userContext, new AlcanceEnvios(db, userContext)));
+            AlcanceDePrueba.Crear(db, userContext), new CasoEquipoService(db, new UnitOfWork(db), userContext, AlcanceDePrueba.Crear(db, userContext)));
     }
 
     private static SistemaEnviosDbContext CrearContexto()

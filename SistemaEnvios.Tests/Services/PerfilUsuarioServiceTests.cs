@@ -74,7 +74,7 @@ public sealed class PerfilUsuarioServiceTests
     }
 
     private static PerfilUsuarioService Servicio(SistemaEnviosDbContext db, IUserContext usuario) =>
-        new(db, usuario, new AlcanceEnvios(db, usuario));
+        new(db, usuario, AlcanceDePrueba.Crear(db, usuario));
 
     private static async Task<SistemaEnviosDbContext> CrearContextoAsync(
         params (string Posicion, PerfilAlcance Perfil)[] mapeo)

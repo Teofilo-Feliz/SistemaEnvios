@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using SistemaEnvios.Application.Common;
+using SistemaEnvios.Application.DTOs.Common;
 using SistemaEnvios.Application.DTOs.Transportes;
 using SistemaEnvios.Application.Interfaces.Repositories;
 using SistemaEnvios.Application.Interfaces.Security;
@@ -60,6 +61,50 @@ public sealed class TransporteService(
         }
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result<int>.Success(transporte.TransporteId);
+    }
+
+    /// <summary>
+    /// Las dos bandejas salen de la misma consulta con distinto corte, y ambas filtran en la
+    /// base. Antes la pantalla paginaba envíos y descartaba después en el navegador: el total
+    /// mentía y una página de diez podía mostrar dos filas.
+    /// </summary>
+    public Task<Result<PaginaResponse<BandejaTransportacionResponse>>> ListarPendientesDeCustodiaAsync(
+        ParametrosPaginaSimple request, CancellationToken cancellationToken = default) =>
+        BandejaAsync(request, EstadoEnvioCodigos.EntregadoATransportacion, confirmada: false, cancellationToken);
+
+    public Task<Result<PaginaResponse<BandejaTransportacionResponse>>> ListarPendientesDeLlegadaAsync(
+        ParametrosPaginaSimple request, CancellationToken cancellationToken = default) =>
+        BandejaAsync(request, EstadoEnvioCodigos.EnTransito, confirmada: true, cancellationToken);
+
+    private async Task<Result<PaginaResponse<BandejaTransportacionResponse>>> BandejaAsync(
+        ParametrosPaginaSimple request, string codigoEstado, bool confirmada, CancellationToken cancellationToken)
+    {
+        var envios = await alcance.FiltrarAsync(db.Envios.AsNoTracking(), cancellationToken);
+
+        // Solo transporte institucional: el privado va directo a Tecnología y Transportación
+        // nunca lo custodia.
+        var query = db.Transportes.AsNoTracking()
+            .Where(x => x.Interno != null
+                        && x.TipoTransporte.Estrategia == EstrategiaTransporteEnum.TransportacionInstitucional
+                        && x.Interno.FechaEntregaTransportacion != null
+                        && x.Interno.EntregaConfirmada == confirmada
+                        && x.Envio.EstadoEnvio.Codigo == codigoEstado
+                        && envios.Any(e => e.EnvioId == x.EnvioId));
+
+        var pagina = await query
+            .OrderBy(x => x.Interno!.FechaEntregaTransportacion).ThenBy(x => x.TransporteId)
+            .PaginarAsync(request, x => new BandejaTransportacionResponse(
+                x.EnvioId,
+                x.TransporteId,
+                x.Envio.NumeroEnvio,
+                x.TipoTransporte.Nombre,
+                x.Interno!.NombreChoferAlMomento,
+                x.Interno.NumeroEmpleadoAlMomento,
+                x.Envio.UbicacionOrigen.Nombre,
+                x.Envio.UbicacionDestino.Nombre,
+                x.Interno.FechaEntregaTransportacion), cancellationToken);
+
+        return Result<PaginaResponse<BandejaTransportacionResponse>>.Success(pagina);
     }
 
     public async Task<Result<TransporteResponse>> ObtenerPorEnvioAsync(int envioId, CancellationToken cancellationToken = default)

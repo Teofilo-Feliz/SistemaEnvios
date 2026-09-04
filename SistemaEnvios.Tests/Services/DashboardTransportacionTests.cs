@@ -58,8 +58,8 @@ public sealed class DashboardTransportacionTests
 
     private static DashboardService Servicio(SistemaEnviosDbContext db)
     {
-        IUserContext usuario = new FakeUserContext(UsuarioId, roles: ["AdministradorGlobal"]);
-        return new DashboardService(db, new AlcanceEnvios(db, usuario), usuario);
+        IUserContext usuario = FakeUserContext.Global(UsuarioId);
+        return new DashboardService(db, AlcanceDePrueba.Crear(db, usuario), usuario);
     }
 
     private static async Task<SistemaEnviosDbContext> SembrarAsync()

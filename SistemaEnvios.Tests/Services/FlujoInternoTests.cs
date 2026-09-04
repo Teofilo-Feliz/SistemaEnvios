@@ -94,7 +94,7 @@ public sealed class FlujoInternoTests
     private static EstadoEnvioService Estados(SistemaEnviosDbContext db)
     {
         var usuario = Usuario();
-        return new EstadoEnvioService(db, new UnitOfWork(db), usuario, new AlcanceEnvios(db, usuario));
+        return new EstadoEnvioService(db, new UnitOfWork(db), usuario, AlcanceDePrueba.Crear(db, usuario));
     }
 
     private static TransporteService Transportes(SistemaEnviosDbContext db)
@@ -103,7 +103,7 @@ public sealed class FlujoInternoTests
         return new TransporteService(
             db, new UnitOfWork(db),
             new CrearTransporteRequestValidator(), new ActualizarTransporteRequestValidator(),
-            usuario, new AlcanceEnvios(db, usuario));
+            usuario, AlcanceDePrueba.Crear(db, usuario));
     }
 
     private static IUserContext Usuario() => FakeUserContext.Global(UsuarioId);

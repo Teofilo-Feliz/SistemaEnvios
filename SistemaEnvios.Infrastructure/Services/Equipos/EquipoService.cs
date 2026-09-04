@@ -39,6 +39,38 @@ public sealed class EquipoService(
             : Result<EquipoResponse>.Success(equipo);
     }
 
+    public async Task<Result<PaginaResponse<ViajeEquipoResponse>>> ListarViajesAsync(
+        int equipoId, ParametrosPaginaSimple request, CancellationToken cancellationToken = default)
+    {
+        // Mismo alcance que ver la ficha: si puede abrir el equipo, puede ver por dónde anduvo.
+        // Se distingue "no existe" de "no le corresponde" para no mandar a nadie a buscar un
+        // permiso que no le falta.
+        var alcanzable = await (await alcance.FiltrarEquiposAsync(db.Equipos.AsNoTracking(), cancellationToken))
+            .AnyAsync(x => x.EquipoId == equipoId, cancellationToken);
+        if (!alcanzable)
+            return await db.Equipos.AnyAsync(x => x.EquipoId == equipoId, cancellationToken)
+                ? Result<PaginaResponse<ViajeEquipoResponse>>.Failure("El equipo no pertenece a su filial.", ErrorType.Forbidden)
+                : Result<PaginaResponse<ViajeEquipoResponse>>.Failure("El equipo no existe.", ErrorType.NotFound);
+
+        var pagina = await db.EnvioEquipos.AsNoTracking()
+            .Where(x => x.EquipoId == equipoId)
+            // Lo último primero: quien abre la ficha quiere saber dónde está ahora.
+            .OrderByDescending(x => x.Envio.FechaCreacion).ThenByDescending(x => x.EnvioEquipoId)
+            .PaginarAsync(request, x => new ViajeEquipoResponse(
+                x.EnvioId,
+                x.Envio.NumeroEnvio,
+                x.Envio.FechaCreacion,
+                x.Envio.UbicacionOrigen.Nombre,
+                x.Envio.UbicacionDestino.Nombre,
+                x.Envio.EstadoEnvio.Codigo,
+                x.Envio.EstadoEnvio.Nombre,
+                x.NumeroTicket,
+                x.EnvioEquipoOrigenId == null,
+                x.Observaciones), cancellationToken);
+
+        return Result<PaginaResponse<ViajeEquipoResponse>>.Success(pagina);
+    }
+
     public async Task<Result<PaginaResponse<EquipoResponse>>> ListarAsync(ConsultarEquiposRequest request, CancellationToken cancellationToken = default)
     {
         var query = await alcance.FiltrarEquiposAsync(db.Equipos.AsNoTracking(), cancellationToken);

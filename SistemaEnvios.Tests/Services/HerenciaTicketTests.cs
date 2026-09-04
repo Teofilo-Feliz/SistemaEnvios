@@ -149,7 +149,7 @@ public sealed class HerenciaTicketTests
     private static CasoEquipoService Caso(SistemaEnviosDbContext db)
     {
         var u = FakeUserContext.Global(UsuarioId);
-        return new CasoEquipoService(db, new UnitOfWork(db), u, new AlcanceEnvios(db, u));
+        return new CasoEquipoService(db, new UnitOfWork(db), u, AlcanceDePrueba.Crear(db, u));
     }
 
     private static EnvioService Servicio(SistemaEnviosDbContext db)
@@ -158,7 +158,7 @@ public sealed class HerenciaTicketTests
         return new EnvioService(
             new GenericRepository<Envio>(db), db, new UnitOfWork(db),
             new CrearEnvioRequestValidator(), new ActualizarEnvioRequestValidator(),
-            u, new AlcanceEnvios(db, u), Caso(db));
+            u, AlcanceDePrueba.Crear(db, u), Caso(db));
     }
 
     private static async Task<SistemaEnviosDbContext> SembrarAsync()

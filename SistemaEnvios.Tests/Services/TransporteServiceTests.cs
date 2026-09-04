@@ -72,7 +72,7 @@ public sealed class TransporteServiceTests
             new UnitOfWork(db),
             new CrearTransporteRequestValidator(),
             new ActualizarTransporteRequestValidator(),
-            FakeUserContext.Global(UsuarioId), new AlcanceEnvios(db, FakeUserContext.Global(UsuarioId)));
+            FakeUserContext.Global(UsuarioId), AlcanceDePrueba.Crear(db, FakeUserContext.Global(UsuarioId)));
 
         var resultado = await servicio.ConfirmarAsync(transporte.TransporteId);
 

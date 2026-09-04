@@ -25,5 +25,6 @@ internal sealed class FakeUserContext(
     public IReadOnlyCollection<string> Permissions => permissions ?? [];
 
     /// <summary>Usuario sin filial y con rol global: ve todos los envios, sin restriccion de alcance.</summary>
-    public static FakeUserContext Global(Guid? userId) => new(userId, roles: ["AdministradorGlobal"]);
+    /// <summary>Actor con alcance Global. Se identifica por posición mapeada, no por el nombre de un rol.</summary>
+    public static FakeUserContext Global(Guid? userId) => new(userId, position: "Programador Senior");
 }

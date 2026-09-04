@@ -52,7 +52,7 @@ public sealed class NotificacionUnicaTests
     private static EstadoEnvioService Servicio(SistemaEnviosDbContext db)
     {
         var u = new FakeUserContext(UsuarioId, "1,AZUA", position: "Encargado de Transportacion");
-        return new EstadoEnvioService(db, new UnitOfWork(db), u, new AlcanceEnvios(db, u));
+        return new EstadoEnvioService(db, new UnitOfWork(db), u, AlcanceDePrueba.Crear(db, u));
     }
 
     private static async Task<SistemaEnviosDbContext> SembrarAsync()

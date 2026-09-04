@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
-import { Bell, CheckCircle2, CircleDashed, ClipboardCheck, RefreshCw } from "lucide-vue-next";
+import { Bell, CheckCircle2, CircleDashed, ClipboardCheck, RefreshCw, Wrench } from "lucide-vue-next";
 import PageHeader from "@/components/common/PageHeader.vue";
 import Pagination from "@/components/common/Pagination.vue";
 import { aPagina, filas } from "@/services/paginacion";
@@ -12,8 +12,10 @@ import { envioService } from "@/services/envioService";
 import { catalogoService } from "@/services/catalogoService";
 import { equipoService } from "@/services/equipoService";
 import { notificacionService } from "@/services/notificacionService";
+import { casoService } from "@/services/casoService";
 import { useUiStore } from "@/stores/uiStore";
 import { confirmAction, escapeHtml, notifyNotificationsChanged } from "@/utils/confirm";
+import { useRefrescoAlVolver } from "@/composables/useRefrescoAlVolver";
 
 const router = useRouter();
 const ui = useUiStore();
@@ -24,6 +26,33 @@ const notificationCount = ref(0);
 const page = ref(1);
 const pageSize = 10;
 const totalItems = ref(0);
+const casos = ref([]);
+const casosPage = ref(1);
+const casosPageSize = 10;
+const casosTotal = ref(0);
+const casosLoading = ref(true);
+const casosColumns = [
+  { key: "equipo", label: "Equipo" },
+  { key: "serial", label: "Serial" },
+  { key: "ticket", label: "Ticket" },
+  { key: "filial", label: "Filial dueña" },
+  { key: "vueltas", label: "Movimientos" },
+  { key: "antiguedad", label: "Aquí desde hace" },
+];
+// La antigüedad es el número que importa para operar: un equipo que lleva semanas parado no
+// se distingue de uno que llegó ayer si solo se listan los tickets.
+const casosFilas = computed(() =>
+  casos.value.map((x) => ({
+    id: x.equipoId,
+    equipo: `${x.marca} ${x.modelo}`,
+    serial: x.numeroSerie || x.codigoActivo || "—",
+    ticket: x.numeroTicket,
+    filial: x.filialNombre,
+    vueltas: x.movimientos,
+    antiguedad: x.diasAbierto === 0 ? "hoy" : `${x.diasAbierto} día${x.diasAbierto === 1 ? "" : "s"}`,
+  })),
+);
+
 const columns = [
   { key: "number", label: "Envío" },
   { key: "transport", label: "Transporte" },
@@ -69,7 +98,23 @@ const stats = computed(() => [
   { title: "Esperando Tecnología", value: queue.value.length, icon: CircleDashed, tone: "blue" },
   { title: "Pendientes de verificar", value: inReview.value.length, icon: ClipboardCheck, tone: "amber" },
   { title: "Disponibles para retirar", value: queue.value.length, icon: CheckCircle2, tone: "green" },
+  { title: "Equipos en Tecnología", value: casosTotal.value, icon: Wrench, tone: "blue" },
 ]);
+
+async function loadCasos() {
+  casosLoading.value = true;
+  try {
+    const pagina = await casoService.list({ page: casosPage.value, pageSize: casosPageSize });
+    casos.value = filas(pagina);
+    casosTotal.value = aPagina(pagina).totalItems;
+  } catch (error) {
+    // Que falle la bandeja no debe tumbar las colas de envíos, que son el trabajo del día.
+    casos.value = [];
+    ui.notify(error.userMessage || "No fue posible cargar los equipos en Tecnología.", "error");
+  } finally {
+    casosLoading.value = false;
+  }
+}
 
 async function load() {
   loading.value = true;
@@ -123,15 +168,23 @@ async function receiveShipment(row) {
   }
 }
 
-onMounted(load);
+function cargarTodo() {
+  load();
+  loadCasos();
+}
+
+onMounted(cargarTodo);
+// Al volver a esta pestaña los datos pueden haber cambiado en otra máquina.
+useRefrescoAlVolver(cargarTodo);
 watch(page, load);
+watch(casosPage, loadCasos);
 </script>
 
 <template>
   <div>
     <PageHeader title="Tecnología" subtitle="Retiro desde Transportación y revisión técnica">
       <RouterLink class="btn btn-ghost" to="/tecnologia/notificaciones"><Bell :size="15" /> Notificaciones <strong v-if="notificationCount">{{ notificationCount }}</strong></RouterLink>
-      <button class="btn btn-ghost" :disabled="loading" @click="load"><RefreshCw :size="15" /> Actualizar</button>
+      <button class="btn btn-ghost" :disabled="loading" @click="cargarTodo"><RefreshCw :size="15" /> Actualizar</button>
     </PageHeader>
     <div class="module-stats"><StatCard v-for="item in stats" :key="item.title" v-bind="item" /></div>
     <BaseCard title="Envíos disponibles para retirar de Transportación" :padded="false">
@@ -147,5 +200,21 @@ watch(page, load);
       />
     </BaseCard>
     <Pagination :page="page" :total="totalItems" :page-size="pageSize" @update:page="page = $event" />
+
+    <BaseCard title="Equipos en Tecnología" :padded="false">
+      <BaseTable
+        :columns="casosColumns"
+        :rows="casosFilas"
+        :loading="casosLoading"
+        @view="(row) => router.push(`/equipos/${row.id}`)"
+      />
+    </BaseCard>
+    <Pagination
+      v-if="casosTotal > casosPageSize"
+      :page="casosPage"
+      :total="casosTotal"
+      :page-size="casosPageSize"
+      @update:page="casosPage = $event"
+    />
   </div>
 </template>

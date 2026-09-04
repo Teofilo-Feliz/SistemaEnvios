@@ -267,8 +267,8 @@ public sealed class EstadoEnvioService(
 
     private static bool PerteneceAlFlujo(DireccionEnvioEnum direccion, string codigo) => direccion switch
     {
-        DireccionEnvioEnum.HaciaTecnologia => codigo is EstadoEnvioCodigos.EnFilial or EstadoEnvioCodigos.EntregadoATransportacion or EstadoEnvioCodigos.DespachadoTransportePrivado or EstadoEnvioCodigos.EnTransito or EstadoEnvioCodigos.RecibidoPorTransportacion or EstadoEnvioCodigos.EnEsperaDeTecnologia or EstadoEnvioCodigos.EnProcesoDeRevision or EstadoEnvioCodigos.RecibidoPorTecnologia or EstadoEnvioCodigos.IncidenciaEnTransportacion,
-        DireccionEnvioEnum.HaciaFilial => codigo is EstadoEnvioCodigos.EnPreparacionTecnologia or EstadoEnvioCodigos.DespachadoPorTecnologia or EstadoEnvioCodigos.EnTransportacion or EstadoEnvioCodigos.EnTransito or EstadoEnvioCodigos.RecibidoEnFilial or EstadoEnvioCodigos.IncidenciaEnTransportacion,
+        DireccionEnvioEnum.HaciaTecnologia => codigo is EstadoEnvioCodigos.EnFilial or EstadoEnvioCodigos.EntregadoATransportacion or EstadoEnvioCodigos.DespachadoTransportePrivado or EstadoEnvioCodigos.EnTransito or EstadoEnvioCodigos.RecibidoPorTransportacion or EstadoEnvioCodigos.EnEsperaDeTecnologia or EstadoEnvioCodigos.EnProcesoDeRevision or EstadoEnvioCodigos.RecibidoPorTecnologia or EstadoEnvioCodigos.RecibidoPorTecnologiaConIncidencia or EstadoEnvioCodigos.IncidenciaEnTransportacion,
+        DireccionEnvioEnum.HaciaFilial => codigo is EstadoEnvioCodigos.EnPreparacionTecnologia or EstadoEnvioCodigos.DespachadoPorTecnologia or EstadoEnvioCodigos.EnTransportacion or EstadoEnvioCodigos.EnTransito or EstadoEnvioCodigos.RecibidoEnFilial or EstadoEnvioCodigos.RecibidoEnFilialConIncidencia or EstadoEnvioCodigos.IncidenciaEnTransportacion,
         _ => false
     };
 

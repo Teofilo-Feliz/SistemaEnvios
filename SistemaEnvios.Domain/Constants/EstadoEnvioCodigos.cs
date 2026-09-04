@@ -12,6 +12,12 @@ public static class EstadoEnvioCodigos
     public const string EnEsperaDeTecnologia = "ESPERA_TECNOLOGIA";
     public const string EnProcesoDeRevision = "EN_REVISION";
     public const string RecibidoPorTecnologia = "RECIBIDO_TECNOLOGIA";
+
+    /// <summary>
+    /// El envío llegó y se recibió, pero algún equipo venía mal. El envío termina igual; lo que
+    /// sigue abierto es el caso, para la vuelta siguiente.
+    /// </summary>
+    public const string RecibidoPorTecnologiaConIncidencia = "RECIBIDO_TECNOLOGIA_INCIDENCIA";
     public const string IncidenciaEnTransportacion = "INCIDENCIA_TRANSPORTACION";
 
     public const string EnPreparacionTecnologia = "PREPARACION_TECNOLOGIA";
@@ -21,6 +27,7 @@ public static class EstadoEnvioCodigos
     public const string DespachadoPorTransportacion = "DESPACHADO_TRANSPORTACION";
     public const string PendienteRecepcionFilial = "PENDIENTE_RECEPCION_FILIAL";
     public const string RecibidoEnFilial = "RECIBIDO_FILIAL";
+    public const string RecibidoEnFilialConIncidencia = "RECIBIDO_FILIAL_INCIDENCIA";
     public const string RecepcionValidadaEnFilial = "RECEPCION_VALIDADA_FILIAL";
 
     /// <summary>

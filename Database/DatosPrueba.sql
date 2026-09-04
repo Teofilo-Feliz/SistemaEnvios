@@ -1,8 +1,8 @@
 /*
-    Datos de prueba para el flujo de envios, alineados con las 34 filiales reales + Tecnologia.
+    Datos de PRUEBA para recorrer el flujo. No se ejecuta en una instalacion real: los datos
+    operativos son las ubicaciones (script base) y los choferes (Choferes.sql).
 
     Cubre las tres tablas sin las cuales el flujo no se puede recorrer completo:
-      - ChoferesInternos    : requerido para registrar transporte institucional.
       - Equipos             : un envio sin equipos no se puede crear ni despachar.
       - UsuariosReferencia  : requerido para asignar tecnico en la recepcion.
 
@@ -16,20 +16,8 @@ SET ANSI_NULLS ON;
 SET XACT_ABORT ON;
 BEGIN TRANSACTION;
 
--- ---------------------------------------------------------------- Choferes internos
-MERGE dbo.ChoferesInternos AS destino
-USING (VALUES
-    (N'Ramón Castillo Peña',     N'EMP-4101', 1),
-    (N'José Luis Encarnación',   N'EMP-4102', 1),
-    (N'Wilkin Rosario Núñez',    N'EMP-4103', 1),
-    (N'Ángel Manuel Frías',      N'EMP-4104', 1),
-    (N'Domingo Reyes Cabrera',   N'EMP-4105', 1),
-    (N'Franklin Ureña Santos',   N'EMP-4106', 0)   -- inactivo: para probar que no se puede asignar
-) AS origen (NombreCompleto, NumeroEmpleado, Activo)
-ON destino.NumeroEmpleado = origen.NumeroEmpleado
-WHEN NOT MATCHED BY TARGET THEN
-    INSERT (NombreCompleto, NumeroEmpleado, Activo)
-    VALUES (origen.NombreCompleto, origen.NumeroEmpleado, origen.Activo);
+-- Los choferes ya no viven aqui: son datos operativos reales y estan en Choferes.sql,
+-- que se ejecuta despues del script base. Este archivo es solo para datos de prueba.
 
 -- ---------------------------------------------------------------- Equipos
 -- Repartidos entre cuatro filiales (para el flujo filial -> Tecnologia) y Tecnologia

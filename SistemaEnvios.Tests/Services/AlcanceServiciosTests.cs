@@ -78,7 +78,8 @@ public sealed class AlcanceServiciosTests
                 new CrearRecepcionRequestValidator(),
                 new VerificarEquipoRequestValidator(),
                 new AsignarTecnicoRequestValidator(),
-                usuario, alcance)
+                usuario, alcance,
+                new CasoEquipoService(db, new UnitOfWork(db), usuario, alcance))
             .CrearAsync(new CrearRecepcionRequest { EnvioId = envio.EnvioId });
 
         AssertFueraDeAlcance(resultado);
@@ -168,7 +169,7 @@ public sealed class AlcanceServiciosTests
     private static (IUserContext Usuario, IAlcanceEnvios Alcance) Contexto(SistemaEnviosDbContext db)
     {
         var usuario = new FakeUserContext(UsuarioId, ClaimSantiago);
-        return (usuario, new AlcanceEnvios(db, usuario));
+        return (usuario, AlcanceDePrueba.Crear(db, usuario));
     }
 
     private static async Task<Envio> SembrarAsync(SistemaEnviosDbContext db)

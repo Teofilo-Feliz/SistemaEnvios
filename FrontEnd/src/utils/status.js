@@ -20,7 +20,12 @@ export const statusMap = {
   EN_REVISION_TECNOLOGIA: { label: "En proceso de revisión", tone: "primary" },
   RECIBIDO_TECNOLOGIA: { label: "Recibido por tecnología", tone: "success" },
   DESPACHADO_TECNOLOGIA: { label: "Entregado a transportación", tone: "info" },
-  EN_TRANSPORTACION: { label: "En transportación", tone: "info" },
+  // Transportación lo tiene y debe asignarle chofer. El nombre dice qué falta, no dónde está:
+  // "en transportación" no le decía a nadie que el envío estaba parado esperando.
+  EN_TRANSPORTACION: { label: "Espera asignación de chofer", tone: "warning" },
+  // Llegó pero algo venía mal: se distingue del recibido normal porque pide seguimiento.
+  RECIBIDO_FILIAL_INCIDENCIA: { label: "Recibido con incidencia", tone: "danger" },
+  RECIBIDO_TECNOLOGIA_INCIDENCIA: { label: "Recibido con incidencia", tone: "danger" },
   // Retirados del flujo; se conservan para que el historial de envíos viejos siga legible.
   TRANSPORTE_ASIGNADO: { label: "Chofer asignado", tone: "info" },
   DESPACHADO_TRANSPORTACION: { label: "Despachado por transportación", tone: "info" },

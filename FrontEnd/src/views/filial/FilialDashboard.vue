@@ -10,6 +10,7 @@ import StatCard from "@/components/dashboard/StatCard.vue";
 import { dashboardService } from "@/services/dashboardService";
 import { useUiStore } from "@/stores/uiStore";
 import { useAuthStore } from "@/stores/authStore";
+import { useRefrescoAlVolver } from "@/composables/useRefrescoAlVolver";
 
 const router = useRouter();
 const ui = useUiStore();
@@ -69,6 +70,8 @@ async function load() {
 }
 
 onMounted(load);
+// Al volver a esta pestaña los datos pueden haber cambiado en otra máquina.
+useRefrescoAlVolver(load);
 </script>
 
 <template>

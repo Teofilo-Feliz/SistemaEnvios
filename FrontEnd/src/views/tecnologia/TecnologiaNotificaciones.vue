@@ -9,6 +9,7 @@ import BaseCard from "@/components/common/BaseCard.vue";
 import BaseTable from "@/components/common/BaseTable.vue";
 import { notificacionService } from "@/services/notificacionService";
 import { useUiStore } from "@/stores/uiStore";
+import { useRefrescoAlVolver } from "@/composables/useRefrescoAlVolver";
 
 const router = useRouter();
 const ui = useUiStore();
@@ -45,6 +46,8 @@ async function load() {
 }
 
 onMounted(load);
+// Al volver a esta pestaña los datos pueden haber cambiado en otra máquina.
+useRefrescoAlVolver(load);
 watch(page, load);
 </script>
 

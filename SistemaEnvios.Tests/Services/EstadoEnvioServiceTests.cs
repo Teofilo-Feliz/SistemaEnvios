@@ -145,7 +145,7 @@ public sealed class EstadoEnvioServiceTests
     };
 
     private static EstadoEnvioService CrearServicio(SistemaEnviosDbContext db) =>
-        new(db, new UnitOfWork(db), FakeUserContext.Global(UsuarioId), new AlcanceEnvios(db, FakeUserContext.Global(UsuarioId)));
+        new(db, new UnitOfWork(db), FakeUserContext.Global(UsuarioId), AlcanceDePrueba.Crear(db, FakeUserContext.Global(UsuarioId)));
 
     private static SistemaEnviosDbContext CrearContexto() => new(
         new DbContextOptionsBuilder<SistemaEnviosDbContext>()

@@ -56,7 +56,7 @@ public sealed class EquipoServiceTests
             new CrearEquipoRequestValidator(),
             new ActualizarEquipoRequestValidator(),
             FakeUserContext.Global(usuarioId),
-            new AlcanceEnvios(db, FakeUserContext.Global(usuarioId)));
+            AlcanceDePrueba.Crear(db, FakeUserContext.Global(usuarioId)));
 
         var resultado = await service.ActualizarAsync(new ActualizarEquipoRequest
         {

@@ -13,6 +13,7 @@ public static class AuthorizationConfiguration
         PermissionNames.EnviosDespachar,
         PermissionNames.TransportesGestionar,
         PermissionNames.TransportesConfirmar,
+        PermissionNames.TransportesAdministrar,
         PermissionNames.RecepcionesGestionar,
         PermissionNames.IncidenciasGestionar,
         PermissionNames.EquiposGestionar,

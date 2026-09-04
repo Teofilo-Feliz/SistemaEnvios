@@ -67,7 +67,7 @@ public sealed class FiltroEstadosEnvioTests
         return new EnvioService(
             new GenericRepository<Envio>(db), db, new UnitOfWork(db),
             new CrearEnvioRequestValidator(), new ActualizarEnvioRequestValidator(),
-            usuario, new AlcanceEnvios(db, usuario), new CasoEquipoService(db, new UnitOfWork(db), usuario, new AlcanceEnvios(db, usuario)));
+            usuario, AlcanceDePrueba.Crear(db, usuario), new CasoEquipoService(db, new UnitOfWork(db), usuario, AlcanceDePrueba.Crear(db, usuario)));
     }
 
     private static async Task<SistemaEnviosDbContext> SembrarAsync()

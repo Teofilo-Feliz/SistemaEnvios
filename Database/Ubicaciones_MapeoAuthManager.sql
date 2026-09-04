@@ -1,11 +1,17 @@
 -- Mapeo de cada ubicacion con el id de filial que AuthManager emite en el claim "affiliate".
 -- Idempotente: se puede volver a ejecutar sin efectos secundarios.
 --
--- Dos casos no coinciden por nombre y se resolvieron por eliminacion, porque las 34 filiales
--- de ADR y las 34 de AuthManager (las 35 menos el centro sede) son la misma lista:
+-- Casos que no coinciden por nombre:
 --
---   * AuthManager 16 "LOS MINA"  ->  filial "Santo Domingo Este". Los Mina es el sector de
---     Santo Domingo Este; era el unico par que quedaba libre de los dos lados.
+--   * "Santo Domingo Este" lleva el 31, CONFIRMADO con el token real de su administrador.
+--     Antes estaba en 16 porque se dedujo por eliminacion emparejandolo con "LOS MINA", y
+--     esa deduccion era falsa: su administrador no podia entrar. Los ids que quedan sin
+--     asignar (16, 32, 33, 38) corresponden a filiales de AuthManager que no estan en la
+--     lista de ADR; no hay que forzarlos a ninguna.
+--
+--     Leccion para el proximo: un id deducido por eliminacion es una hipotesis. Solo se
+--     confirma cuando entra un usuario real de esa filial.
+--
 --   * AuthManager 30 "SANTO DOMINGO" es el centro sede, donde esta Tecnologia. NO se usa
 --     como llave de alcance: si Tecnologia llevara el 30, cualquier empleado de la sede con
 --     perfil de filial veria todos los envios, porque todos pasan por Tecnologia.
@@ -32,7 +38,7 @@ JOIN (VALUES
     (N'JARABACOA',                13),
     (N'LA-ROMANA',                14),
     (N'LA-VEGA',                  15),
-    (N'SANTO-DOMINGO-ESTE',       16),   -- AuthManager: "LOS MINA"
+    (N'SANTO-DOMINGO-ESTE',       31),   -- Confirmado con el token real de su administrador.
     (N'MONTECRISTI',              17),
     (N'NAGUA',                    18),
     (N'PUERTO-PLATA',             19),

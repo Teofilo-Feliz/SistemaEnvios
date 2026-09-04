@@ -70,11 +70,11 @@ public sealed class PerfilPorPosicionTests
         await using var db = await CrearContextoAsync();
         var usuario = new FakeUserContext(UsuarioId, affiliate: null, position: "Cargo Desconocido");
 
-        Assert.Equal(PerfilAlcance.SinAlcance, await new AlcanceEnvios(db, usuario).ResolverPerfilAsync());
+        Assert.Equal(PerfilAlcance.SinAlcance, await AlcanceDePrueba.Crear(db, usuario).ResolverPerfilAsync());
     }
 
     private static Task<PerfilAlcance> Perfil(SistemaEnviosDbContext db, string posicion) =>
-        new AlcanceEnvios(db, new FakeUserContext(UsuarioId, Sede, position: posicion)).ResolverPerfilAsync();
+        AlcanceDePrueba.Crear(db, new FakeUserContext(UsuarioId, Sede, position: posicion)).ResolverPerfilAsync();
 
     private static async Task<SistemaEnviosDbContext> CrearContextoAsync(
         params (string Posicion, PerfilAlcance Perfil)[] mapeo)
