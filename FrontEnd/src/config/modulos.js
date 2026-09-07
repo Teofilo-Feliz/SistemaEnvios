@@ -35,7 +35,8 @@ export const MODULOS_POR_PERFIL = {
   // extremo de todo envío— pero trabaja dentro de su módulo: no administra catálogos, ni la
   // flota, ni la configuración del sistema. Eso es lo que acota esta entrada.
   Tecnologia: {
-    inicio: "/tecnologia",
+    // La raíz del módulo redirige aquí; se apunta directo para no encadenar dos saltos al entrar.
+    inicio: "/tecnologia/pendientes",
     // Necesita /envios y /equipos porque desde sus propias pantallas se abre el detalle de un
     // envío y la ficha de un equipo; sin ellas los enlaces de su módulo mueren en /unauthorized.
     rutas: ["/tecnologia", "/envios", "/equipos", "/incidencias", "/perfil", "/unauthorized"],

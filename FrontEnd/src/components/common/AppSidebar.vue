@@ -88,10 +88,10 @@ const groups = [
         to: "/tecnologia/envios/nuevo",
         permission: "canCreateShipment",
       },
-      { label: "Equipos pendientes", to: "/tecnologia?view=pending" },
-      { label: "En revisión", to: "/tecnologia?view=review" },
-      { label: "Revisados", to: "/tecnologia?view=completed" },
-      { label: "Equipos en Tecnología", to: "/tecnologia?view=casos" },
+      { label: "Equipos pendientes", to: "/tecnologia/pendientes" },
+      { label: "En revisión", to: "/tecnologia/revision" },
+      { label: "Revisados", to: "/tecnologia/revisados" },
+      { label: "Equipos en Tecnología", to: "/tecnologia/equipos" },
       {
         label: "Descarte de equipos",
         to: "/tecnologia/descartes",
@@ -144,7 +144,9 @@ function toggle(key) {
   localStorage.setItem("sidebar_groups", JSON.stringify(opened.value));
 }
 function active(to) {
-  return route.fullPath === to || (to === "/envios" && route.path === "/envios");
+  // Se compara la ruta y no fullPath: las pantallas ya no se distinguen por query, y
+  // comparar la query completa dejaba de marcar el activo en cuanto la URL llevaba un filtro.
+  return route.path === to;
 }
 </script>
 <template>

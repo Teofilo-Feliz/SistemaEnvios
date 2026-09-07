@@ -168,10 +168,32 @@ const routes = [
         component: () => import("@/views/recepciones/RecepcionEnvio.vue"),
         meta: { permission: "recepciones.gestionar" },
       },
+      // Las cuatro pantallas del modulo apilaban su contenido en una sola vista y se
+      // distinguian por un "?view=" que el componente nunca leia: elegias una y salian todas.
+      // Con ruta propia cada una carga lo suyo y el menu marca la activa sin ambiguedad.
+      { path: "tecnologia", redirect: "/tecnologia/pendientes" },
       {
-        path: "tecnologia",
-        name: "tecnologia",
-        component: () => import("@/views/tecnologia/TecnologiaView.vue"),
+        path: "tecnologia/pendientes",
+        name: "tecnologia-pendientes",
+        component: () => import("@/views/tecnologia/TecnologiaEnvios.vue"),
+        meta: { permission: "envios.consultar", vista: "pendientes" },
+      },
+      {
+        path: "tecnologia/revision",
+        name: "tecnologia-revision",
+        component: () => import("@/views/tecnologia/TecnologiaEnvios.vue"),
+        meta: { permission: "envios.consultar", vista: "revision" },
+      },
+      {
+        path: "tecnologia/revisados",
+        name: "tecnologia-revisados",
+        component: () => import("@/views/tecnologia/TecnologiaEnvios.vue"),
+        meta: { permission: "envios.consultar", vista: "revisados" },
+      },
+      {
+        path: "tecnologia/equipos",
+        name: "tecnologia-equipos",
+        component: () => import("@/views/tecnologia/TecnologiaEquipos.vue"),
         meta: { permission: "envios.consultar" },
       },
       {
