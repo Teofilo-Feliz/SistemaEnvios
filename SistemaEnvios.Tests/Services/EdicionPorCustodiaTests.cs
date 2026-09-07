@@ -104,7 +104,7 @@ public sealed class EdicionPorCustodiaTests
             new GenericRepository<Envio>(db), db, new UnitOfWork(db),
             new CrearEnvioRequestValidator(), new ActualizarEnvioRequestValidator(),
             u, AlcanceDePrueba.Crear(db, u),
-            new CasoEquipoService(db, new UnitOfWork(db), u, AlcanceDePrueba.Crear(db, u)));
+            new CasoEquipoService(db, new UnitOfWork(db), u, AlcanceDePrueba.Crear(db, u)), ValidadorTicketDePrueba.QueAcepta());
     }
 
     private static async Task<SistemaEnviosDbContext> SembrarAsync()

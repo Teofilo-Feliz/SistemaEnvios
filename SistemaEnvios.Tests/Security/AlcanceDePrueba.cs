@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging.Abstractions;
 using SistemaEnvios.Application.Interfaces.Security;
 using SistemaEnvios.Domain.Entities;
 using SistemaEnvios.Infrastructure.Persistence;
@@ -29,7 +31,7 @@ internal static class AlcanceDePrueba
     public static AlcanceEnvios Crear(SistemaEnviosDbContext db, IUserContext usuario)
     {
         Sembrar(db);
-        return new AlcanceEnvios(db, usuario);
+        return new AlcanceEnvios(db, usuario, new MemoryCache(new MemoryCacheOptions()), NullLogger<AlcanceEnvios>.Instance);
     }
 
     /// <summary>

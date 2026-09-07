@@ -8,7 +8,13 @@ public enum ErrorType
     Conflict = 3,
     Unauthorized = 4,
     Forbidden = 5,
-    BusinessRule = 6
+    BusinessRule = 6,
+    /// <summary>
+    /// Un sistema de terceros del que dependemos falló (caído, lento, credenciales vencidas).
+    /// No es culpa de quien llamó ni una regla de negocio: se distingue para que la respuesta
+    /// sea 502 y el usuario sepa que reintentar puede funcionar.
+    /// </summary>
+    ExternalService = 7
 }
 
 public class Result

@@ -1,4 +1,5 @@
 export const statusMap = {
+  EN_FILIAL: { label: "En filial", tone: "neutral" },
   PREPARACION_TECNOLOGIA: {
     label: "En preparación de tecnología",
     tone: "neutral",
@@ -17,6 +18,9 @@ export const statusMap = {
     tone: "success",
   },
   ESPERA_TECNOLOGIA: { label: "En espera de tecnología", tone: "warning" },
+  // El código en base es EN_REVISION; EN_REVISION_TECNOLOGIA nunca existió como estado, pero
+  // se conserva por si alguna vista todavía lo pasa a mano.
+  EN_REVISION: { label: "En proceso de revisión", tone: "primary" },
   EN_REVISION_TECNOLOGIA: { label: "En proceso de revisión", tone: "primary" },
   RECIBIDO_TECNOLOGIA: { label: "Recibido por tecnología", tone: "success" },
   DESPACHADO_TECNOLOGIA: { label: "Entregado a transportación", tone: "info" },
@@ -27,6 +31,14 @@ export const statusMap = {
   RECIBIDO_FILIAL_INCIDENCIA: { label: "Recibido con incidencia", tone: "danger" },
   RECIBIDO_TECNOLOGIA_INCIDENCIA: { label: "Recibido con incidencia", tone: "danger" },
   // Retirados del flujo; se conservan para que el historial de envíos viejos siga legible.
+  PENDIENTE_CONFIRMACION_TRANSPORTE: {
+    label: "Pendiente de confirmación",
+    tone: "warning",
+  },
+  CONFIRMADO_TRANSPORTACION: {
+    label: "Confirmado por transportación",
+    tone: "info",
+  },
   TRANSPORTE_ASIGNADO: { label: "Chofer asignado", tone: "info" },
   DESPACHADO_TRANSPORTACION: { label: "Despachado por transportación", tone: "info" },
   PENDIENTE_RECEPCION_FILIAL: {

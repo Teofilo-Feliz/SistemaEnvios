@@ -8,5 +8,6 @@ namespace SistemaEnvios.Api.Controllers.Notificaciones;
 [ApiController][Route("api/notificaciones")]
 public sealed class NotificacionesController(INotificacionService service):ControllerBase
 {
-    [HttpGet][Authorize(Policy=PermissionNames.EnviosConsultar)] public async Task<IActionResult> Listar([FromQuery]ConsultarNotificacionesRequest request,CancellationToken ct=default)=>(await service.ListarAsync(request,ct)).ToActionResult(this);
+    [HttpGet][Authorize(Policy=PermissionNames.EnviosConsultar)] public async Task<IActionResult> Listar([FromQuery]
+    ConsultarNotificacionesRequest request,CancellationToken ct=default)=>(await service.ListarAsync(request,ct)).ToActionResult(this);
 }

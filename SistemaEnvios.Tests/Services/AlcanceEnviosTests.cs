@@ -149,7 +149,7 @@ public sealed class AlcanceEnviosTests
             new CrearEnvioRequestValidator(),
             new ActualizarEnvioRequestValidator(),
             userContext,
-            AlcanceDePrueba.Crear(db, userContext), new CasoEquipoService(db, new UnitOfWork(db), userContext, AlcanceDePrueba.Crear(db, userContext)));
+            AlcanceDePrueba.Crear(db, userContext), new CasoEquipoService(db, new UnitOfWork(db), userContext, AlcanceDePrueba.Crear(db, userContext)), ValidadorTicketDePrueba.QueAcepta());
     }
 
     private static SistemaEnviosDbContext CrearContexto()

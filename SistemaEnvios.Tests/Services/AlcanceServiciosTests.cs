@@ -97,7 +97,7 @@ public sealed class AlcanceServiciosTests
                 new AgregarEquipoEnvioRequestValidator(),
                 new ActualizarEnvioEquipoRequestValidator(),
                 db, usuario, alcance,
-                new CasoEquipoService(db, new UnitOfWork(db), usuario, alcance))
+                new CasoEquipoService(db, new UnitOfWork(db), usuario, alcance), ValidadorTicketDePrueba.QueAcepta())
             .ListarPorEnvioAsync(envio.EnvioId, new ParametrosPaginaSimple());
 
         AssertFueraDeAlcance(resultado);

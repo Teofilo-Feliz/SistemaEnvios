@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from "vue-router";
 import AppLayout from "@/layouts/AppLayout.vue";
 import { useAuthStore } from "@/stores/authStore";
-import { inicioDe, rutaPermitida } from "@/config/modulos";
+import { rutaPermitida } from "@/config/modulos";
 import { userManager } from "@/services/authService";
 const PlaceholderView = () => import("@/views/PlaceholderView.vue");
 const routes = [
@@ -15,7 +15,12 @@ const routes = [
     name: "login",
     component: () => import("@/views/auth/LoginView.vue"),
   },
-  { path: "/", redirect: () => inicioDe(useAuthStore().perfilNombre) },
+  // La raíz no decide aquí a dónde va el usuario. Un `redirect` se evalúa al resolver la ruta,
+  // antes de que el guard cargue el perfil, así que siempre veía perfilNombre en null y elegía
+  // el destino equivocado. Ahora solo aterriza, y el guard —que sí tiene el perfil— redirige.
+  // El guard siempre redirige desde aquí, así que este componente no llega a verse; es solo
+  // para que la ruta resuelva. No puede ser una pantalla con lógica propia.
+  { path: "/", name: "inicio", component: { template: '<div class="page-loading">Entrando…</div>' } },
   {
     path: "/",
     component: AppLayout,
@@ -192,7 +197,8 @@ const routes = [
       },
     ],
   },
-  { path: "/:pathMatch(.*)*", redirect: () => inicioDe(useAuthStore().perfilNombre) },
+  // Igual que la raíz: una URL inexistente aterriza y el guard decide con el perfil ya cargado.
+  { path: "/:pathMatch(.*)*", name: "no-encontrado", component: { template: '<div class="page-loading">Entrando…</div>' } },
 ];
 // Dos bandejas en vez de una: mezclar "el chofer recibió el equipo" con "el envío llegó" se
 // prestaba a confusión, porque son momentos distintos del mismo traslado. Comparten componente
@@ -234,6 +240,11 @@ router.beforeEach(async (to) => {
     return { name: "login" };
   }
   if (to.name === "Unauthorized") return true;
+
+  // "Llévame a donde me toca". Se resuelve aquí y no en un redirect de la ruta porque este es
+  // el primer punto donde el perfil ya está cargado. Un perfil que el backend no supo
+  // clasificar aterriza en /unauthorized, no en el tablero general.
+  if (to.name === "inicio" || to.name === "no-encontrado") return { path: auth.moduloInicio };
 
   // Cada perfil trabaja dentro de su módulo. Ocultarlo del menú no basta: la URL escrita a
   // mano o un enlace viejo llegarían igual.

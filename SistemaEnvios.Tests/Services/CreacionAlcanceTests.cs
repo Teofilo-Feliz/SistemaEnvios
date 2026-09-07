@@ -81,7 +81,7 @@ public sealed class CreacionAlcanceTests
     private static EnvioService Servicio(SistemaEnviosDbContext db, IUserContext usuario) =>
         new(new GenericRepository<Envio>(db), db, new UnitOfWork(db),
             new CrearEnvioRequestValidator(), new ActualizarEnvioRequestValidator(),
-            usuario, AlcanceDePrueba.Crear(db, usuario), new CasoEquipoService(db, new UnitOfWork(db), usuario, AlcanceDePrueba.Crear(db, usuario)));
+            usuario, AlcanceDePrueba.Crear(db, usuario), new CasoEquipoService(db, new UnitOfWork(db), usuario, AlcanceDePrueba.Crear(db, usuario)), ValidadorTicketDePrueba.QueAcepta());
 
     private static async Task<SistemaEnviosDbContext> CrearContextoAsync()
     {

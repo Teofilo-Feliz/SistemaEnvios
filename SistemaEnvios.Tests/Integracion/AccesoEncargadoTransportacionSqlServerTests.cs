@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using SistemaEnvios.Application.Interfaces.Security;
 using SistemaEnvios.Application.Security;
@@ -111,7 +113,8 @@ public sealed class AccesoEncargadoTransportacionSqlServerTests
             Guid.Parse("78b7c168-eacb-45f1-93f2-a0528f727c7a"),
             FilialDelToken,
             roles: [RolDelToken.Trim()],
-            position: PosicionDelToken));
+            position: PosicionDelToken),
+            new MemoryCache(new MemoryCacheOptions()), NullLogger<AlcanceEnvios>.Instance);
 
     private static SistemaEnviosDbContext Contexto() => new(
         new DbContextOptionsBuilder<SistemaEnviosDbContext>().UseSqlServer(Cadena).Options);

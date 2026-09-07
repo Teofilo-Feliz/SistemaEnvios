@@ -7,6 +7,7 @@ using SistemaEnvios.Application.DTOs.Envios;
 using SistemaEnvios.Application.Interfaces.Repositories;
 using SistemaEnvios.Application.Interfaces.Security;
 using SistemaEnvios.Application.Interfaces.Services;
+using SistemaEnvios.Application.Interfaces.Services.Integraciones;
 using SistemaEnvios.Domain.Constants;
 using SistemaEnvios.Domain.Entities;
 using SistemaEnvios.Infrastructure.Persistence;
@@ -21,7 +22,8 @@ public sealed class EnvioEquipoService(
     SistemaEnviosDbContext db,
     IUserContext userContext,
     IAlcanceEnvios alcance,
-    ICasoEquipoService casos) : IEnvioEquipoService
+    ICasoEquipoService casos,
+    IValidadorTicketGlpi ticketsGlpi) : IEnvioEquipoService
 {
     public async Task<Result<int>> AgregarAsync(
         AgregarEquipoEnvioRequest request,
@@ -71,6 +73,13 @@ public sealed class EnvioEquipoService(
         if (caso is null && await db.EnvioEquipos.AnyAsync(
                 x => x.EnvioEquipoOrigenId == null && x.NumeroTicket == numeroTicket, cancellationToken))
             return Result<int>.Failure("El número de ticket ya fue utilizado para abrir otro caso.", ErrorType.Conflict);
+
+        // Solo se consulta a GLPI el ticket que escribió el usuario; el heredado ya viene del caso.
+        if (caso is null)
+        {
+            var enGlpi = await ticketsGlpi.ValidarAsync(numeroTicket, cancellationToken);
+            if (enGlpi.IsFailure) return Result<int>.Failure(enGlpi.Error!, enGlpi.ErrorType);
+        }
 
         var perteneceAEnvioActivo = await db.ReservasEquipoEnvio.AnyAsync(
             x => x.EquipoId == request.EquipoId,
@@ -139,8 +148,12 @@ public sealed class EnvioEquipoService(
     public async Task<Result<bool>> TicketDisponibleAsync(string numeroTicket, int? excluirEnvioEquipoId = null, CancellationToken cancellationToken = default)
     {
         var ticket = numeroTicket?.Trim();
-        if (string.IsNullOrWhiteSpace(ticket) || !ticket.All(char.IsDigit))
-            return Result<bool>.Failure("El número de ticket debe contener únicamente caracteres numéricos.", ErrorType.Validation);
+        // Mismas reglas que al guardarlo: antes bastaba con que fueran dígitos, así que "0"
+        // salía "disponible" y el front lo daba por bueno hasta que fallaba al crear el envío.
+        if (!NumeroTicket.TieneFormato(ticket))
+            return Result<bool>.Failure(NumeroTicket.MensajeFormato, ErrorType.Validation);
+        if (!NumeroTicket.EsMayorQueCero(ticket))
+            return Result<bool>.Failure(NumeroTicket.MensajeMayorQueCero, ErrorType.Validation);
         var existe = await db.EnvioEquipos.AsNoTracking().AnyAsync(
             x => x.NumeroTicket == ticket && (!excluirEnvioEquipoId.HasValue || x.EnvioEquipoId != excluirEnvioEquipoId.Value),
             cancellationToken);
@@ -166,10 +179,29 @@ public sealed class EnvioEquipoService(
         if (enAlcance.IsFailure) return enAlcance;
         if (!EsEstadoEditable(detalle.Envio.EstadoEnvio.Codigo))
             return Result.Failure("El envío ya fue despachado y no admite modificaciones.", ErrorType.Conflict);
-        if (await db.EnvioEquipos.AnyAsync(x => x.NumeroTicket == request.NumeroTicket.Trim() && x.EnvioEquipoId != request.EnvioEquipoId, cancellationToken))
-            return Result.Failure("El número de ticket ya fue utilizado en otro envío.", ErrorType.Conflict);
+        // Una continuación conserva el ticket de su caso pase lo que pase, igual que al crearla:
+        // el equipo vuelve a la filial con el mismo ticket con que llegó. Solo una apertura tiene
+        // un ticket propio que alguien pueda corregir.
+        var esApertura = detalle.EnvioEquipoOrigenId is null;
+        var ticket = esApertura ? request.NumeroTicket.Trim() : detalle.NumeroTicket;
 
-        detalle.NumeroTicket = request.NumeroTicket.Trim();
+        if (esApertura)
+        {
+            // Solo las aperturas estrenan un ticket, así que la comparación va contra ellas.
+            // Contra todas las filas, una continuación chocaría siempre con su propia apertura y
+            // ni siquiera se le podrían corregir las observaciones al equipo devuelto.
+            if (await db.EnvioEquipos.AnyAsync(
+                    x => x.EnvioEquipoOrigenId == null && x.NumeroTicket == ticket && x.EnvioEquipoId != request.EnvioEquipoId,
+                    cancellationToken))
+                return Result.Failure("El número de ticket ya fue utilizado en otro envío.", ErrorType.Conflict);
+
+            // Editar una apertura es escribir un ticket a mano igual que al crear, así que pasa
+            // por la misma comprobación contra la mesa de ayuda.
+            var ticketEnGlpi = await ticketsGlpi.ValidarAsync(ticket, cancellationToken);
+            if (ticketEnGlpi.IsFailure) return ticketEnGlpi;
+        }
+
+        detalle.NumeroTicket = ticket;
         detalle.Observaciones = request.Observaciones.Trim();
         detalle.FechaModificacion = DateTime.UtcNow;
         detalle.UsuarioModificacionId = usuarioId;

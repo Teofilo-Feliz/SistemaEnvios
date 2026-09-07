@@ -97,7 +97,7 @@ public sealed class CasoEquipoService(
     public async Task<Result<PaginaResponse<CasoListadoResponse>>> ListarAbiertosEnTecnologiaAsync(
         ConsultarCasosRequest request, CancellationToken cancellationToken = default)
     {
-        if (await alcance.ResolverPerfilAsync(cancellationToken) != PerfilAlcance.Global)
+        if (!(await alcance.ResolverPerfilAsync(cancellationToken)).EsTecnologia())
             return Result<PaginaResponse<CasoListadoResponse>>.Failure(
                 "Solo Tecnología puede consultar los casos abiertos para descarte.", ErrorType.Forbidden);
 
@@ -150,7 +150,7 @@ public sealed class CasoEquipoService(
             return Result.Failure("No fue posible identificar al usuario autenticado.", ErrorType.Unauthorized);
         if (string.IsNullOrWhiteSpace(motivo))
             return Result.Failure("El descarte requiere un motivo.", ErrorType.Validation);
-        if (await alcance.ResolverPerfilAsync(cancellationToken) != PerfilAlcance.Global)
+        if (!(await alcance.ResolverPerfilAsync(cancellationToken)).EsTecnologia())
             return Result.Failure("Solo Tecnología puede descartar un equipo de una filial.", ErrorType.Forbidden);
 
         var caso = await BuscarAbiertoAsync(equipoId, cancellationToken);

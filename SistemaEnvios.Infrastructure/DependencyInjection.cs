@@ -28,6 +28,7 @@ using SistemaEnvios.Application.Interfaces.Services;
 using SistemaEnvios.Application.Interfaces.Services.Dashboard;
 using SistemaEnvios.Application.Interfaces.Services.Seguridad;
 using SistemaEnvios.Infrastructure.Services.Seguridad;
+using SistemaEnvios.Infrastructure.Integrations.Glpi;
 
 namespace SistemaEnvios.Infrastructure;
 
@@ -64,6 +65,7 @@ public static class DependencyInjection
         services.AddScoped<INotificacionService, NotificacionService>();
         services.AddScoped<IPerfilUsuarioService, PerfilUsuarioService>();
         services.AddValidatorsFromAssemblyContaining<CrearEnvioRequestValidator>();
+        services.AddGlpi(configuration);
         return services;
     }
 }

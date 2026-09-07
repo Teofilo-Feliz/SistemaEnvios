@@ -158,7 +158,7 @@ public sealed class HerenciaTicketTests
         return new EnvioService(
             new GenericRepository<Envio>(db), db, new UnitOfWork(db),
             new CrearEnvioRequestValidator(), new ActualizarEnvioRequestValidator(),
-            u, AlcanceDePrueba.Crear(db, u), Caso(db));
+            u, AlcanceDePrueba.Crear(db, u), Caso(db), ValidadorTicketDePrueba.QueAcepta());
     }
 
     private static async Task<SistemaEnviosDbContext> SembrarAsync()

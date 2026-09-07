@@ -35,7 +35,7 @@ public sealed class PerfilUsuarioService(
             UbicacionId: ubicacion?.UbicacionId,
             FilialMapeada: ubicacion is not null,
             // Solo el perfil global elige filial: los demás ya vienen acotados por el backend.
-            PuedeFiltrarPorFilial: perfil == PerfilAlcance.Global,
+            PuedeFiltrarPorFilial: perfil.EsTecnologia(),
             Permisos: usuario.Permissions));
     }
 }

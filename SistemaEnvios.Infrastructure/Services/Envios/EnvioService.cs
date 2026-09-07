@@ -7,6 +7,7 @@ using SistemaEnvios.Application.DTOs.Envios;
 using SistemaEnvios.Application.Interfaces.Repositories;
 using SistemaEnvios.Application.Interfaces.Security;
 using SistemaEnvios.Application.Interfaces.Services;
+using SistemaEnvios.Application.Interfaces.Services.Integraciones;
 using SistemaEnvios.Domain.Constants;
 using SistemaEnvios.Domain.Entities;
 using SistemaEnvios.Domain.Enums;
@@ -22,7 +23,8 @@ public sealed class EnvioService(
     IValidator<ActualizarEnvioRequest> actualizarValidator,
     IUserContext userContext,
     IAlcanceEnvios alcance,
-    ICasoEquipoService casos) : IEnvioService
+    ICasoEquipoService casos,
+    IValidadorTicketGlpi ticketsGlpi) : IEnvioService
 {
     public async Task<Result<EnvioResponse>> CrearConEquiposAsync(CrearEnvioConEquiposRequest request, CancellationToken cancellationToken = default)
     {
@@ -38,9 +40,21 @@ public sealed class EnvioService(
             .Where(x => casosPorEquipo[x.EquipoId] is null)
             .Select(x => x.NumeroTicket?.Trim())
             .ToList();
-        if (ticketsNuevos.Any(x => string.IsNullOrWhiteSpace(x) || x!.Length is < 3 or > 50 || !x.All(char.IsDigit)) ||
+        if (ticketsNuevos.Any(x => !NumeroTicket.EsValido(x)) ||
             ticketsNuevos.Distinct(StringComparer.Ordinal).Count() != ticketsNuevos.Count)
-            return Result<EnvioResponse>.Failure("Los tickets deben ser numéricos, tener entre 3 y 50 dígitos y no repetirse.", ErrorType.Validation);
+            return Result<EnvioResponse>.Failure(
+                "Los tickets deben ser numéricos, mayores que cero, de 3 a 50 dígitos y no repetirse.",
+                ErrorType.Validation);
+
+        // Se comprueban todos contra GLPI antes de tocar la base: si uno no existe, el envío no
+        // llega a crearse a medias. Solo los nuevos; los heredados de un caso ya están fuera de
+        // esta lista por construcción.
+        foreach (var ticket in ticketsNuevos)
+        {
+            var enGlpi = await ticketsGlpi.ValidarAsync(ticket!, cancellationToken);
+            if (enGlpi.IsFailure)
+                return Result<EnvioResponse>.Failure(enGlpi.Error!, enGlpi.ErrorType);
+        }
         if (userContext.UserId is not Guid usuarioId)
             return Result<EnvioResponse>.Failure("No fue posible identificar al usuario autenticado.", ErrorType.Unauthorized);
         // Todo se arma en memoria y se guarda con un único SaveChanges, que ya es atómico.
@@ -390,7 +404,7 @@ public sealed class EnvioService(
     private async Task<Result> VerificarCustodiaAsync(Envio envio, CancellationToken cancellationToken)
     {
         var perfil = await alcance.ResolverPerfilAsync(cancellationToken);
-        if (perfil == PerfilAlcance.Global) return Result.Success();
+        if (perfil.EsTecnologia()) return Result.Success();
 
         if (envio.EstadoEnvio.Codigo == EstadoEnvioCodigos.EnPreparacionTecnologia)
             return Result.Failure(

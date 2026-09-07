@@ -69,7 +69,7 @@ public sealed class FiltroPorFilialTests
             new GenericRepository<Envio>(db), db, new UnitOfWork(db),
             new CrearEnvioRequestValidator(), new ActualizarEnvioRequestValidator(),
             usuario, AlcanceDePrueba.Crear(db, usuario),
-            new CasoEquipoService(db, new UnitOfWork(db), usuario, AlcanceDePrueba.Crear(db, usuario)));
+            new CasoEquipoService(db, new UnitOfWork(db), usuario, AlcanceDePrueba.Crear(db, usuario)), ValidadorTicketDePrueba.QueAcepta());
     }
 
     private static async Task<(Ubicacion Santiago, Ubicacion Tecnologia)> SembrarAsync(SistemaEnviosDbContext db)

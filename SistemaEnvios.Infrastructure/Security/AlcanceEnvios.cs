@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using SistemaEnvios.Application.Common;
 using SistemaEnvios.Application.Interfaces.Security;
 using SistemaEnvios.Application.Security;
@@ -9,7 +11,11 @@ using SistemaEnvios.Infrastructure.Persistence;
 
 namespace SistemaEnvios.Infrastructure.Security;
 
-public sealed class AlcanceEnvios(SistemaEnviosDbContext db, IUserContext usuario) : IAlcanceEnvios
+public sealed class AlcanceEnvios(
+    SistemaEnviosDbContext db,
+    IUserContext usuario,
+    IMemoryCache cache,
+    ILogger<AlcanceEnvios> registro) : IAlcanceEnvios
 {
     /// <summary>
     /// El perfil sale del claim "position" contra PerfilesPorPosicion, no de la ubicación del
@@ -41,7 +47,13 @@ public sealed class AlcanceEnvios(SistemaEnviosDbContext db, IUserContext usuari
         // alcance Global se concede mapeando la posición o el rol, nunca por cómo se llame.
 
         // Posición sin mapear: se cae al alcance más restrictivo que el usuario pueda tener.
-        return usuario.AffiliateId.HasValue ? PerfilAlcance.Filial : PerfilAlcance.SinAlcance;
+        // El respaldo es silencioso por diseño —nadie se queda fuera del sistema— pero eso
+        // esconde el síntoma real: Transportación aterriza en el tablero de filial y parece un
+        // fallo de enrutamiento, no una fila que falta. Se registra la clave exacta que trajo el
+        // token para saber qué insertar, igual que hace PermisosPorPosicionTransformation.
+        var respaldo = usuario.AffiliateId.HasValue ? PerfilAlcance.Filial : PerfilAlcance.SinAlcance;
+        AvisarPosicionSinMapear(roles, respaldo);
+        return respaldo;
     }
 
     public async Task<IQueryable<Envio>> FiltrarAsync(
@@ -53,7 +65,9 @@ public sealed class AlcanceEnvios(SistemaEnviosDbContext db, IUserContext usuari
 
         return perfil switch
         {
-            PerfilAlcance.Global => query,
+            // Tecnología está en un extremo de todo envío, así que los ve todos. Lo que la
+            // separa de Global no son los datos sino las pantallas que puede abrir.
+            PerfilAlcance.Global or PerfilAlcance.Tecnologia => query,
 
             // Solo lo que Transportación custodia: sus etapas del flujo y transporte
             // institucional. El transporte privado va directo a Tecnología sin pasar por ellos.
@@ -89,7 +103,7 @@ public sealed class AlcanceEnvios(SistemaEnviosDbContext db, IUserContext usuari
 
         return perfil switch
         {
-            PerfilAlcance.Global => query,
+            PerfilAlcance.Global or PerfilAlcance.Tecnologia => query,
             PerfilAlcance.Transportacion => query.Where(x => db.EnvioEquipos.Any(ee =>
                 ee.EquipoId == x.EquipoId &&
                 EstadoEnvioCodigos.EtapasTransportacion.Contains(ee.Envio.EstadoEnvio.Codigo))),
@@ -108,7 +122,7 @@ public sealed class AlcanceEnvios(SistemaEnviosDbContext db, IUserContext usuari
     public async Task<Result> VerificarUbicacionAsync(int ubicacionId, CancellationToken cancellationToken = default)
     {
         var perfil = await ResolverPerfilAsync(cancellationToken);
-        if (perfil == PerfilAlcance.Global) return Result.Success();
+        if (perfil.EsTecnologia()) return Result.Success();
 
         var mapeada = await VerificarFilialMapeadaAsync(cancellationToken);
         if (mapeada.IsFailure) return mapeada;
@@ -142,7 +156,7 @@ public sealed class AlcanceEnvios(SistemaEnviosDbContext db, IUserContext usuari
     public async Task<Result> VerificarAsync(int envioId, CancellationToken cancellationToken = default)
     {
         var perfil = await ResolverPerfilAsync(cancellationToken);
-        if (perfil == PerfilAlcance.Global) return Result.Success();
+        if (perfil.EsTecnologia()) return Result.Success();
 
         var mapeada = await VerificarFilialMapeadaAsync(cancellationToken);
         if (mapeada.IsFailure) return mapeada;
@@ -157,6 +171,25 @@ public sealed class AlcanceEnvios(SistemaEnviosDbContext db, IUserContext usuari
                     ? "El envío no está bajo custodia de Transportación."
                     : "El envío no pertenece a su filial.",
                 ErrorType.Forbidden);
+    }
+
+    /// <summary>
+    /// Un aviso por combinación de claves y por hora: ResolverPerfilAsync se llama varias veces
+    /// por petición, y sin el tope el log se llenaría con la misma línea.
+    /// </summary>
+    private void AvisarPosicionSinMapear(string[] roles, PerfilAlcance respaldo)
+    {
+        var posicion = string.IsNullOrWhiteSpace(usuario.Position) ? "(sin posición)" : usuario.Position.Trim();
+        var partesRoles = roles.Length == 0 ? "(sin roles)" : string.Join(", ", roles.Select(x => $"'{x}'"));
+        var clave = $"aviso-perfil-sin-mapear::{posicion}|{partesRoles}";
+        if (cache.TryGetValue(clave, out _)) return;
+        cache.Set(clave, true, TimeSpan.FromHours(1));
+
+        registro.LogWarning(
+            "Perfil sin mapear: posición '{Posicion}'; roles {Roles}. Se aplicó el respaldo {Respaldo}, " +
+            "así que este usuario aterriza en el módulo equivocado. Inserte la clave exacta en " +
+            "dbo.PerfilesPorPosicion (Perfil: 1=Global, 2=Transportacion, 3=Filial).",
+            posicion, partesRoles, respaldo);
     }
 
     /// <summary>

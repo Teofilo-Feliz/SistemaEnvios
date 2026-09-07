@@ -42,6 +42,7 @@ public static class ResultExtensions
             ErrorType.Forbidden => StatusCodes.Status403Forbidden,
             ErrorType.NotFound => StatusCodes.Status404NotFound,
             ErrorType.Conflict => StatusCodes.Status409Conflict,
+            ErrorType.ExternalService => StatusCodes.Status502BadGateway,
             _ => StatusCodes.Status422UnprocessableEntity
         };
 
@@ -58,6 +59,7 @@ public static class ResultExtensions
         ErrorType.Forbidden => "Acceso denegado",
         ErrorType.NotFound => "Recurso no encontrado",
         ErrorType.Conflict => "Conflicto con el estado actual",
+        ErrorType.ExternalService => "Servicio externo no disponible",
         _ => "Regla de negocio no satisfecha"
     };
 }

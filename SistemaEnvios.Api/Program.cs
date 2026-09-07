@@ -98,14 +98,31 @@ if (!AudienciaToken.EstaValidada(app.Configuration))
         "La audiencia del token no está validada: este API acepta cualquier token emitido por {Emisor}, incluidos los de otras aplicaciones. Configure '{Seccion}'.",
         app.Configuration["Authentication:Authority"], AudienciaToken.Seccion);
     var audienciasVistas = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
+    var sinAudienciaVisto = 0;
     app.Use(async (context, next) =>
     {
         if (context.User.Identity?.IsAuthenticated == true)
-            foreach (var audiencia in AudienciaToken.DelPrincipal(context.User))
+        {
+            var audiencias = AudienciaToken.DelPrincipal(context.User);
+            foreach (var audiencia in audiencias)
                 if (audienciasVistas.TryAdd(audiencia, 0))
                     app.Logger.LogWarning(
                         "Token aceptado con audiencia '{Audiencia}'. Agréguela a '{Seccion}' para que el API deje de aceptar tokens de otras aplicaciones.",
                         audiencia, AudienciaToken.Seccion);
+
+            // Un token sin audiencia no se puede validar por audiencia: configurarla dejaría
+            // fuera a todo el mundo. Cuando pasa, lo que hace falta saber es qué claims trae
+            // realmente, para ver si viene con otro nombre o si AuthManager no la emite.
+            // Solo los NOMBRES de los claims: los valores identifican a la persona.
+            if (audiencias.Count == 0 && Interlocked.Exchange(ref sinAudienciaVisto, 1) == 0)
+            {
+                var tipos = context.User.Claims.Select(x => x.Type).Distinct(StringComparer.Ordinal).Order();
+                app.Logger.LogWarning(
+                    "Token aceptado SIN audiencia. Claims presentes: {Claims}. Si 'aud' no aparece, " +
+                    "AuthManager no la emite para este cliente y configurar '{Seccion}' rechazaría todos los tokens.",
+                    string.Join(", ", tipos), AudienciaToken.Seccion);
+            }
+        }
         await next();
     });
 }

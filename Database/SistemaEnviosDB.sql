@@ -57,7 +57,7 @@ CREATE TABLE dbo.PerfilesPorPosicion
     Posicion NVARCHAR(150) NOT NULL,
     Perfil   TINYINT       NOT NULL,
     CONSTRAINT PK_PerfilesPorPosicion PRIMARY KEY (Posicion),
-    CONSTRAINT CK_PerfilPosicion_Perfil CHECK (Perfil IN (1, 2, 3))
+    CONSTRAINT CK_PerfilPosicion_Perfil CHECK (Perfil IN (1, 2, 3, 4))   -- 4 = Tecnología (soporte técnico)
 );
 GO
 

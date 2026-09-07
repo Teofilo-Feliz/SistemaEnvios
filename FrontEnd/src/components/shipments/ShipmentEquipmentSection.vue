@@ -3,6 +3,7 @@ import { reactive } from 'vue'
 import { Plus } from 'lucide-vue-next'
 import ShipmentEquipmentTable from './ShipmentEquipmentTable.vue'
 import { envioService } from '@/services/envioService'
+import { glpiService } from '@/services/glpiService'
 
 const props = defineProps({ item: Object, equipments: Array, types: Array, registeredEquipment: Array, registering: Boolean })
 const emit = defineEmits(['add', 'remove', 'edit', 'new'])
@@ -23,9 +24,14 @@ async function validateAndAdd() {
         ? 'El número de ticket solo permite caracteres numéricos.'
         : props.item.ticket.length < 3
           ? 'El número de ticket debe tener al menos 3 dígitos.'
-          : props.equipments.some((equipment) => equipment.ticket === props.item.ticket && equipment.id !== props.item.id)
-            ? 'Este número de ticket ya fue agregado.'
-            : ''
+          // "0" o "000" son dígitos y del largo pedido, pero en la mesa de ayuda no existe el
+          // caso cero. Se mira dígito a dígito porque el campo admite hasta 50 y ese número
+          // desborda cualquier entero. Los ceros a la izquierda sí valen: "007" es el ticket 7.
+          : !/[1-9]/.test(props.item.ticket)
+            ? 'El número de ticket debe ser mayor que cero.'
+            : props.equipments.some((equipment) => equipment.ticket === props.item.ticket && equipment.id !== props.item.id)
+              ? 'Este número de ticket ya fue agregado.'
+              : ''
   if (Object.values(errors).some(Boolean)) return
   if (!props.item.ticketHeredado) {
     try {
@@ -37,6 +43,20 @@ async function validateAndAdd() {
     } catch (error) {
       errors.ticket = error.userMessage || 'No se pudo validar el número de ticket.'
       return
+    }
+
+    // Que el ticket exista en la mesa de ayuda es distinto de que esté libre: lo anterior mira
+    // nuestra base, esto mira GLPI. El servidor lo vuelve a comprobar al guardar; esto es para
+    // que el usuario se entere aquí y no después de llenar el envío completo.
+    try {
+      const { data } = await glpiService.ticketExiste(props.item.ticket)
+      if (data?.existe === false) {
+        errors.ticket = `El ticket ${props.item.ticket} no existe en la mesa de ayuda.`
+        return
+      }
+    } catch {
+      // GLPI caído no bloquea: el servidor aplica la misma política y deja pasar registrando el
+      // aviso. Frenar aquí dejaría a todas las filiales sin poder crear envíos.
     }
   }
   emit('add')
