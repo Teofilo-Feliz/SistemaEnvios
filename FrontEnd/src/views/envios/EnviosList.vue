@@ -28,9 +28,7 @@ const locations = ref([]);
 // Solo el perfil global elige filial. A los demás el backend ya les acotó la consulta, así que
 // mostrarles el selector sugeriría un control que no tienen.
 const filialSeleccionada = ref("");
-const filiales = computed(() =>
-  locations.value.filter((x) => x.tipo === 1 || x.tipo === "Filial"),
-);
+const filiales = computed(() => locations.value.filter((x) => x.tipo === 1 || x.tipo === "Filial"));
 const alcanceTexto = computed(() => {
   if (auth.esGlobal) {
     const filial = filiales.value.find(
@@ -74,15 +72,10 @@ const sources = computed(() => ({
   ],
 }));
 function locationName(id) {
-  return (
-    locations.value.find((item) => item.ubicacionId === id)?.nombre ||
-    `Ubicación #${id}`
-  );
+  return locations.value.find((item) => item.ubicacionId === id)?.nombre || `Ubicación #${id}`;
 }
 function stateCode(id) {
-  return (
-    states.value.find((item) => item.estadoEnvioId === id)?.codigo || "unknown"
-  );
+  return states.value.find((item) => item.estadoEnvioId === id)?.codigo || "unknown";
 }
 function puedeEditar(item) {
   const codigo = stateCode(item.estadoEnvioId);
@@ -158,10 +151,20 @@ async function load() {
     const params = { page: page.value, pageSize: 10 };
     for (const rule of activeFilters.value.rules || []) {
       if (rule.type !== "rule" || rule.operator !== "equals" || !rule.value) continue;
-      if (["estadoEnvioId", "tipoTransporteId", "ubicacionOrigenId", "ubicacionDestinoId", "direccion"].includes(rule.field)) params[rule.field] = rule.value;
+      if (
+        [
+          "estadoEnvioId",
+          "tipoTransporteId",
+          "ubicacionOrigenId",
+          "ubicacionDestinoId",
+          "direccion",
+        ].includes(rule.field)
+      )
+        params[rule.field] = rule.value;
       if (rule.field === "numeroEnvio") params.search = rule.value;
     }
-    if (auth.puedeFiltrarPorFilial && filialSeleccionada.value) params.ubicacionId = filialSeleccionada.value;
+    if (auth.puedeFiltrarPorFilial && filialSeleccionada.value)
+      params.ubicacionId = filialSeleccionada.value;
     // Los catálogos alimentan selectores, así que se recorren completos; los envíos vienen
     // de a página desde el servidor.
     const [shipments, ubicaciones, estados, tiposTransporte] = await Promise.all([
@@ -196,13 +199,14 @@ onMounted(load);
 // Al volver a esta pestaña los datos pueden haber cambiado en otra máquina.
 useRefrescoAlVolver(load);
 watch(page, load);
-watch(filialSeleccionada, () => { page.value = 1; load(); });
+watch(filialSeleccionada, () => {
+  page.value = 1;
+  load();
+});
 </script>
 <template>
   <div>
-    <PageHeader
-      title="Envíos"
-      :subtitle="alcanceTexto"
+    <PageHeader title="Envíos" :subtitle="alcanceTexto"
       ><label v-if="auth.puedeFiltrarPorFilial" class="filial-scope"
         ><span>Filial</span>
         <select v-model="filialSeleccionada" :disabled="loading">

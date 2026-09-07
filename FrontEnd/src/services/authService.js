@@ -1,6 +1,6 @@
-import { UserManager, WebStorageStateStore } from 'oidc-client-ts'
+import { UserManager, WebStorageStateStore } from "oidc-client-ts";
 
-const authority = import.meta.env.VITE_AUTH_AUTHORITY || ''
+const authority = import.meta.env.VITE_AUTH_AUTHORITY || "";
 const settings = {
   // sessionStorage y no localStorage: el token muere al cerrar la pestaña y no queda escrito
   // en disco para el siguiente que use la máquina. El SSO de AuthManager vuelve a emitirlo por
@@ -8,11 +8,11 @@ const settings = {
   userStore: new WebStorageStateStore({ store: window.sessionStorage }),
   stateStore: new WebStorageStateStore({ store: window.sessionStorage }),
   authority,
-  client_id: import.meta.env.VITE_AUTH_CLIENT_ID || '',
+  client_id: import.meta.env.VITE_AUTH_CLIENT_ID || "",
   redirect_uri: `${window.location.origin}/callback`,
   post_logout_redirect_uri: `${window.location.origin}/signed-out`,
-  response_type: import.meta.env.VITE_AUTH_RESPONSE_TYPE || 'code',
-  scope: import.meta.env.VITE_AUTH_SCOPES || 'openid profile roles',
+  response_type: import.meta.env.VITE_AUTH_RESPONSE_TYPE || "code",
+  scope: import.meta.env.VITE_AUTH_SCOPES || "openid profile roles",
   loadUserInfo: true,
   automaticSilentRenew: true,
   silent_redirect_uri: `${window.location.origin}/silent-renew`,
@@ -21,9 +21,9 @@ const settings = {
   // Sin metadata a mano: al declararla, oidc-client-ts omite el discovery, y el bloque que
   // había no incluía issuer ni jwks_uri — sin ellos no se puede validar la firma del id_token.
   // El servidor publica los mismos cuatro endpoints en su .well-known, más esos dos.
-}
-export const userManager = authority && settings.client_id ? new UserManager(settings) : null
-export const isOidcConfigured = Boolean(userManager)
+};
+export const userManager = authority && settings.client_id ? new UserManager(settings) : null;
+export const isOidcConfigured = Boolean(userManager);
 
 // Cierre de sesion sin id_token_hint.
 //
@@ -36,11 +36,11 @@ export const isOidcConfigured = Boolean(userManager)
 // que necesita para validar el post_logout_redirect_uri. El orden importa: si el servidor
 // rechazara igual, la sesion local ya quedo cerrada en vez de a medias.
 async function signoutRedirect() {
-  if (!userManager) return
-  await userManager.removeUser().catch(() => {})
+  if (!userManager) return;
+  await userManager.removeUser().catch(() => {});
   return userManager.signoutRedirect({
     extraQueryParams: { client_id: settings.client_id },
-  })
+  });
 }
 
 export const authService = {
@@ -48,4 +48,4 @@ export const authService = {
   signinCallback: () => userManager?.signinRedirectCallback(),
   signinSilentCallback: () => userManager?.signinSilentCallback(),
   signoutRedirect,
-}
+};

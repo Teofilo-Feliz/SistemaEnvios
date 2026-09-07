@@ -1,12 +1,6 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
-import {
-  CheckCircle2,
-  Clock3,
-  PackageCheck,
-  RefreshCw,
-  Truck,
-} from "lucide-vue-next";
+import { CheckCircle2, Clock3, PackageCheck, RefreshCw, Truck } from "lucide-vue-next";
 import { useRouter, useRoute } from "vue-router";
 import PageHeader from "@/components/common/PageHeader.vue";
 import { aPagina, filas } from "@/services/paginacion";
@@ -22,14 +16,16 @@ import { useUiStore } from "@/stores/uiStore";
 import { isInternalTransport } from "@/utils/transport";
 import { confirmAction, notifyNotificationsChanged } from "@/utils/confirm";
 import { useRefrescoAlVolver } from "@/composables/useRefrescoAlVolver";
-const router = useRouter(), route = useRoute(),
+const router = useRouter(),
+  route = useRoute(),
   ui = useUiStore(),
   loading = ref(true),
   rows = ref([]),
   locations = ref([]),
   states = ref([]),
   filters = ref({ logic: "AND", rules: [] });
-const page = ref(1), pageSize = 10;
+const page = ref(1),
+  pageSize = 10;
 const totalItems = ref(0);
 const columns = [
   { key: "number", label: "Envío" },
@@ -54,16 +50,13 @@ const sources = computed(() => ({
 const stats = computed(() => [
   {
     title: "Pendientes de confirmación",
-    value: rows.value.filter(
-      (x) => x.status === "ENTREGADO_TRANSPORTACION",
-    ).length,
+    value: rows.value.filter((x) => x.status === "ENTREGADO_TRANSPORTACION").length,
     icon: Clock3,
     tone: "amber",
   },
   {
     title: "Confirmados",
-    value: rows.value.filter((x) => x.status === "EN_TRANSITO")
-      .length,
+    value: rows.value.filter((x) => x.status === "EN_TRANSITO").length,
     icon: PackageCheck,
     tone: "blue",
   },
@@ -107,16 +100,18 @@ function match(r, g) {
   return g.logic === "OR" ? a.some(Boolean) : a.every(Boolean);
 }
 const filtered = computed(() =>
-  filters.value.rules?.length
-    ? rows.value.filter((x) => match(x, filters.value))
-    : rows.value,
+  filters.value.rules?.length ? rows.value.filter((x) => match(x, filters.value)) : rows.value,
 );
 // La página ya viene cortada del servidor. Asignar el chofer manda el envío a ruta, así que
 // ya no hay una bandeja de "chofer asignado" esperando un despacho aparte.
 const otherRows = computed(() => filtered.value);
 const ETAPAS_TRANSPORTACION = [
-  "ENTREGADO_TRANSPORTACION", "EN_TRANSITO", "RECIBIDO_TRANSPORTACION",
-  "INCIDENCIA_TRANSPORTACION", "DESPACHADO_TECNOLOGIA", "EN_TRANSPORTACION",
+  "ENTREGADO_TRANSPORTACION",
+  "EN_TRANSITO",
+  "RECIBIDO_TRANSPORTACION",
+  "INCIDENCIA_TRANSPORTACION",
+  "DESPACHADO_TECNOLOGIA",
+  "EN_TRANSPORTACION",
 ];
 async function load() {
   loading.value = true;
@@ -139,28 +134,29 @@ async function load() {
       id: x.envioId,
       number: x.numeroEnvio,
       origin:
-        locations.value.find((y) => y.ubicacionId === x.ubicacionOrigenId)
-          ?.nombre || `Ubicación #${x.ubicacionOrigenId}`,
+        locations.value.find((y) => y.ubicacionId === x.ubicacionOrigenId)?.nombre ||
+        `Ubicación #${x.ubicacionOrigenId}`,
       destination:
-        locations.value.find((y) => y.ubicacionId === x.ubicacionDestinoId)
-          ?.nombre || `Ubicación #${x.ubicacionDestinoId}`,
-      status:
-        states.value.find((y) => y.estadoEnvioId === x.estadoEnvioId)?.codigo ||
-        "",
+        locations.value.find((y) => y.ubicacionId === x.ubicacionDestinoId)?.nombre ||
+        `Ubicación #${x.ubicacionDestinoId}`,
+      status: states.value.find((y) => y.estadoEnvioId === x.estadoEnvioId)?.codigo || "",
       estadoEnvioId: x.estadoEnvioId,
       ubicacionOrigenId: x.ubicacionOrigenId,
       ubicacionDestinoId: x.ubicacionDestinoId,
       numeroEnvio: x.numeroEnvio,
       direccion: String(x.direccion),
-      canConfirm: states.value.find((y) => y.estadoEnvioId === x.estadoEnvioId)?.codigo === "EN_TRANSITO" && Boolean(x.estrategiaTransporte),
+      canConfirm:
+        states.value.find((y) => y.estadoEnvioId === x.estadoEnvioId)?.codigo === "EN_TRANSITO" &&
+        Boolean(x.estrategiaTransporte),
       confirmTitle: "Confirmar llegada a Tecnología",
     }));
-    if (route.query.estado) filters.value = { logic: "AND", rules: [{ field: "status", operator: "equals", value: String(route.query.estado) }] };
+    if (route.query.estado)
+      filters.value = {
+        logic: "AND",
+        rules: [{ field: "status", operator: "equals", value: String(route.query.estado) }],
+      };
   } catch (e) {
-    ui.notify(
-      e.userMessage || "No fue posible cargar transportación.",
-      "error",
-    );
+    ui.notify(e.userMessage || "No fue posible cargar transportación.", "error");
   } finally {
     loading.value = false;
   }
@@ -176,10 +172,20 @@ function clear() {
   load();
 }
 async function confirmArrival(row) {
-  const accepted = await confirmAction({ title: "Confirmar llegada a Transportación", text: `¿Confirmas que el envío ${row.number} llegó a Transportación? Pasará a espera de Tecnología.`, confirmText: "Confirmar llegada" });
+  const accepted = await confirmAction({
+    title: "Confirmar llegada a Transportación",
+    text: `¿Confirmas que el envío ${row.number} llegó a Transportación? Pasará a espera de Tecnología.`,
+    confirmText: "Confirmar llegada",
+  });
   if (!accepted) return;
-  try { await envioService.confirmTransportArrival(row.id); notifyNotificationsChanged(); ui.notify("Llegada confirmada. Tecnología recibió el aviso."); await load(); }
-  catch (e) { ui.notify(e.userMessage || "No fue posible confirmar la llegada.", "error"); }
+  try {
+    await envioService.confirmTransportArrival(row.id);
+    notifyNotificationsChanged();
+    ui.notify("Llegada confirmada. Tecnología recibió el aviso.");
+    await load();
+  } catch (e) {
+    ui.notify(e.userMessage || "No fue posible confirmar la llegada.", "error");
+  }
 }
 onMounted(load);
 // Al volver a esta pestaña los datos pueden haber cambiado en otra máquina.
@@ -189,9 +195,7 @@ watch(page, load);
 </script>
 <template>
   <div>
-    <PageHeader
-      title="Transportación"
-      subtitle="Control de confirmaciones, tránsito y recepciones"
+    <PageHeader title="Transportación" subtitle="Control de confirmaciones, tránsito y recepciones"
       ><button class="btn btn-ghost" @click="load">
         <RefreshCw :size="15" /> Actualizar
       </button></PageHeader
@@ -206,6 +210,17 @@ watch(page, load);
       @search="search"
       @clear="clear"
     />
-    <BaseCard title="Seguimiento y confirmaciones" :padded="false"><BaseTable :columns="columns" :rows="otherRows" :loading="loading" @confirm="confirmArrival" @view="(row) => router.push(`/envios/${row.id}`)" /><Pagination :page="page" :total="totalItems" :page-size="pageSize" @update:page="page = $event" /></BaseCard>
+    <BaseCard title="Seguimiento y confirmaciones" :padded="false"
+      ><BaseTable
+        :columns="columns"
+        :rows="otherRows"
+        :loading="loading"
+        @confirm="confirmArrival"
+        @view="(row) => router.push(`/envios/${row.id}`)" /><Pagination
+        :page="page"
+        :total="totalItems"
+        :page-size="pageSize"
+        @update:page="page = $event"
+    /></BaseCard>
   </div>
 </template>

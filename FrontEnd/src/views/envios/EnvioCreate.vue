@@ -10,7 +10,7 @@ import ShipmentEquipmentSection from "@/components/shipments/ShipmentEquipmentSe
 import ShipmentSummary from "@/components/shipments/ShipmentSummary.vue";
 import { catalogoService } from "@/services/catalogoService";
 import { casoService } from "@/services/casoService";
-import { filas } from '@/services/paginacion';
+import { filas } from "@/services/paginacion";
 import { equipoService } from "@/services/equipoService";
 import { envioService } from "@/services/envioService";
 import { transporteService } from "@/services/transporteService";
@@ -79,7 +79,10 @@ const item = reactive({
 });
 
 // Cubre tanto elegir del combo como escribir un serial que coincide con un equipo existente.
-watch(() => item.existingId, (equipoId) => heredarTicket(equipoId ? Number(equipoId) : null));
+watch(
+  () => item.existingId,
+  (equipoId) => heredarTicket(equipoId ? Number(equipoId) : null),
+);
 const itemErrors = reactive({
   typeId: "",
   brand: "",
@@ -89,14 +92,16 @@ const itemErrors = reactive({
 });
 const editing = computed(() => Boolean(route.params.id));
 const technologyMode = computed(() => route.name === "technology-shipment-create");
-const origin = computed(() =>
-  locations.value.find((x) => x.ubicacionId === Number(form.originId)),
-);
+const origin = computed(() => locations.value.find((x) => x.ubicacionId === Number(form.originId)));
 const destination = computed(() =>
   locations.value.find((x) => x.ubicacionId === Number(form.destinationId)),
 );
-const selectedTransportType = computed(() => transportTypes.value.find((x) => x.tipoTransporteId === Number(form.transportTypeId)));
-const selectedDriver = computed(() => drivers.value.find((x) => x.choferInternoId === Number(form.internalDriverId)));
+const selectedTransportType = computed(() =>
+  transportTypes.value.find((x) => x.tipoTransporteId === Number(form.transportTypeId)),
+);
+const selectedDriver = computed(() =>
+  drivers.value.find((x) => x.choferInternoId === Number(form.internalDriverId)),
+);
 const isTechnology = (location) =>
   location?.tipo === 2 || String(location?.tipo).toLowerCase() === "tecnologia";
 const destinationLocations = computed(() =>
@@ -110,15 +115,16 @@ const destinationLocations = computed(() =>
 // quede en memoria de una selección anterior.
 const availableEquipment = computed(() =>
   form.originId
-    ? registeredEquipment.value.filter(
-        (x) => Number(x.ubicacionActualId) === Number(form.originId),
-      )
+    ? registeredEquipment.value.filter((x) => Number(x.ubicacionActualId) === Number(form.originId))
     : [],
 );
 
 /** Recarga el inventario disponible cuando cambia el origen del envío. */
 async function cargarEquiposDelOrigen(ubicacionId) {
-  if (!ubicacionId) { registeredEquipment.value = []; return; }
+  if (!ubicacionId) {
+    registeredEquipment.value = [];
+    return;
+  }
   try {
     registeredEquipment.value = filas(
       await equipoService.list({ pageSize: 100, ubicacionActualId: Number(ubicacionId) }),
@@ -148,7 +154,9 @@ function resetItem() {
 const destinoFijado = computed(() => {
   if (!isTechnology(origin.value)) return "";
   const conCaso = form.equipment.find((x) => x.ticketHeredado && x.casoFilialId);
-  return conCaso ? locations.value.find((x) => x.ubicacionId === conCaso.casoFilialId)?.nombre || "" : "";
+  return conCaso
+    ? locations.value.find((x) => x.ubicacionId === conCaso.casoFilialId)?.nombre || ""
+    : "";
 });
 
 /**
@@ -187,8 +195,7 @@ function lookup() {
     a = item.assetCode?.trim().toLowerCase(),
     m = registeredEquipment.value.find(
       (e) =>
-        (s && e.numeroSerie?.toLowerCase() === s) ||
-        (a && e.codigoActivo?.toLowerCase() === a),
+        (s && e.numeroSerie?.toLowerCase() === s) || (a && e.codigoActivo?.toLowerCase() === a),
     );
   if (m) fill(m);
 }
@@ -257,18 +264,12 @@ async function addEquipment() {
   }
   const duplicate =
     (item.existingId &&
-      form.equipment.some(
-        (e) => Number(e.existingId) === Number(item.existingId),
-      )) ||
+      form.equipment.some((e) => Number(e.existingId) === Number(item.existingId))) ||
     (item.serial &&
-      form.equipment.some(
-        (e) => e.serial?.toLowerCase() === item.serial.toLowerCase(),
-      )) ||
+      form.equipment.some((e) => e.serial?.toLowerCase() === item.serial.toLowerCase())) ||
     form.equipment.some((e) => e.ticket === item.ticket) ||
     (item.assetCode &&
-      form.equipment.some(
-        (e) => e.assetCode?.toLowerCase() === item.assetCode.toLowerCase(),
-      ));
+      form.equipment.some((e) => e.assetCode?.toLowerCase() === item.assetCode.toLowerCase()));
   if (duplicate) {
     ui.notify("Este equipo ya fue agregado a este envío.", "warning");
     return;
@@ -291,8 +292,8 @@ async function addEquipment() {
       casoFilialId: item.casoFilialId,
       notes: item.notes,
       typeName:
-        types.value.find((x) => x.tipoEquipoId === Number(item.typeId))
-          ?.nombre || `Tipo #${item.typeId}`,
+        types.value.find((x) => x.tipoEquipoId === Number(item.typeId))?.nombre ||
+        `Tipo #${item.typeId}`,
     });
     // El destino de un equipo con caso lo decide el caso, venga por donde venga: agregarlo
     // por primera vez o volver a agregarlo tras editarlo. Así la regla no depende del camino.
@@ -392,9 +393,7 @@ async function load() {
       // Una vez entregado a Transportación el envío ya no se toca. Sin esta comprobación se
       // podía volver al formulario por URL o con el botón atrás del navegador, editarlo y
       // recién enterarse del rechazo al guardar.
-      const codigo = estados.find(
-        (x) => x.estadoEnvioId === r.data.estadoEnvioId,
-      )?.codigo;
+      const codigo = estados.find((x) => x.estadoEnvioId === r.data.estadoEnvioId)?.codigo;
       if (!["EN_FILIAL", "PREPARACION_TECNOLOGIA"].includes(codigo)) {
         ui.notify("El envío ya salió y no admite cambios.", "warning");
         router.replace(`/envios/${route.params.id}`);
@@ -409,7 +408,8 @@ async function load() {
       // Los equipos ya asociados se cargan al formulario. Se guarda envioEquipoId para poder
       // distinguir después qué se agregó, qué cambió y qué se quitó.
       form.equipment = filas(asociaciones).map((asociacion) => {
-        const equipo = registeredEquipment.value.find((x) => x.equipoId === asociacion.equipoId) || {};
+        const equipo =
+          registeredEquipment.value.find((x) => x.equipoId === asociacion.equipoId) || {};
         return {
           id: `existente-${asociacion.envioEquipoId}`,
           envioEquipoId: asociacion.envioEquipoId,
@@ -450,7 +450,12 @@ async function load() {
         transporteExistente.value = null;
       }
     } else if (technologyMode.value) {
-      const headquarters = locations.value.find((x) => isTechnology(x) && (/centro\s*sede/i.test(x.nombre || "") || /tecnolog/i.test(x.nombre || ""))) || locations.value.find(isTechnology);
+      const headquarters =
+        locations.value.find(
+          (x) =>
+            isTechnology(x) &&
+            (/centro\s*sede/i.test(x.nombre || "") || /tecnolog/i.test(x.nombre || "")),
+        ) || locations.value.find(isTechnology);
       if (headquarters) form.originId = headquarters.ubicacionId;
     } else {
       // El token trae la filial del usuario, así que el envío nace con su filial como origen
@@ -489,26 +494,19 @@ function validate() {
         ? "Selecciona el chofer."
         : "";
     errors.privateName =
-      isPrivateTransport(selected?.estrategia) && !form.privateName
-        ? "Indica el nombre."
-        : "";
+      isPrivateTransport(selected?.estrategia) && !form.privateName ? "Indica el nombre." : "";
     errors.relationship =
-      isPrivateTransport(selected?.estrategia) && !form.relationship
-        ? "Indica el parentesco."
-        : "";
+      isPrivateTransport(selected?.estrategia) && !form.relationship ? "Indica el parentesco." : "";
     errors.privateId =
       isPrivateTransport(selected?.estrategia) && !/^\d{11}$/.test(form.privateId)
         ? "La cédula debe tener 11 dígitos."
         : "";
     errors.vehiclePlate =
-      isPrivateTransport(selected?.estrategia) && !form.vehiclePlate
-        ? "Indica la placa."
-        : "";
+      isPrivateTransport(selected?.estrategia) && !form.vehiclePlate ? "Indica la placa." : "";
   }
   // También al editar: un envío sin equipos no se puede despachar, así que guardarlo así
   // lo dejaría en un callejón sin salida.
-  if (!form.equipment.length)
-    ui.notify("Agrega al menos un equipo antes de guardar.", "warning");
+  if (!form.equipment.length) ui.notify("Agrega al menos un equipo antes de guardar.", "warning");
   return !Object.values(errors).some(Boolean) && Boolean(form.equipment.length);
 }
 async function submit() {
@@ -528,7 +526,10 @@ async function submit() {
   );
   const duplicateIndex = availability.findIndex((response) => response.data !== true);
   if (duplicateIndex >= 0) {
-    ui.notify(`El ticket ${porVerificar[duplicateIndex].ticket} ya está asociado a otro equipo o envío.`, "error");
+    ui.notify(
+      `El ticket ${porVerificar[duplicateIndex].ticket} ya está asociado a otro equipo o envío.`,
+      "error",
+    );
     return;
   }
   const transportLabel = selectedTransportType.value?.nombre || "Sin indicar";
@@ -536,7 +537,12 @@ async function submit() {
     ? selectedDriver.value?.nombreCompleto || "Sin indicar"
     : `${form.privateName || "Sin indicar"} · ${form.vehiclePlate || "Sin placa"}`;
   const equipmentHtml = form.equipment.length
-    ? form.equipment.map((equipment, index) => `<div style="border:1px solid #e1e6ee;border-radius:6px;padding:9px;margin:7px 0"><strong>${index + 1}. ${escapeHtml(equipment.typeName)}</strong><br><small>${escapeHtml(equipment.brand)} ${escapeHtml(equipment.model)} · Serial: ${escapeHtml(equipment.serial)} · Activo: ${escapeHtml(equipment.assetCode)} · Ticket: ${escapeHtml(equipment.ticket)}</small></div>`).join("")
+    ? form.equipment
+        .map(
+          (equipment, index) =>
+            `<div style="border:1px solid #e1e6ee;border-radius:6px;padding:9px;margin:7px 0"><strong>${index + 1}. ${escapeHtml(equipment.typeName)}</strong><br><small>${escapeHtml(equipment.brand)} ${escapeHtml(equipment.model)} · Serial: ${escapeHtml(equipment.serial)} · Activo: ${escapeHtml(equipment.assetCode)} · Ticket: ${escapeHtml(equipment.ticket)}</small></div>`,
+        )
+        .join("")
     : "<p>Los equipos asociados se conservarán sin cambios.</p>";
   const accepted = await confirmAction({
     title: editing.value ? "Confirmar actualización" : "Confirmar nuevo envío",
@@ -564,27 +570,25 @@ async function save() {
           ubicacionOrigenId: Number(form.originId),
           ubicacionDestinoId: Number(form.destinationId),
           observaciones: form.notes || null,
-          equipos: form.equipment.map((e) => ({ equipoId: Number(e.existingId), numeroTicket: e.ticket, observaciones: e.notes || "Equipo asociado al envío." })),
+          equipos: form.equipment.map((e) => ({
+            equipoId: Number(e.existingId),
+            numeroTicket: e.ticket,
+            observaciones: e.notes || "Equipo asociado al envío.",
+          })),
         });
     const id = editing.value ? route.params.id : r.data.envioId;
     if (!editing.value && !technologyMode.value) {
       await transporteService.create({
         envioId: Number(id),
         tipoTransporteId: Number(form.transportTypeId),
-        choferInternoId: form.internalDriverId
-          ? Number(form.internalDriverId)
-          : null,
+        choferInternoId: form.internalDriverId ? Number(form.internalDriverId) : null,
         nombreResponsable: form.privateName || null,
         parentesco: form.relationship || null,
         cedulaResponsable: form.privateId || null,
         placaVehiculo: form.vehiclePlate || null,
       });
     }
-    ui.notify(
-      editing.value
-        ? "Envío actualizado correctamente."
-        : "Envío creado correctamente.",
-    );
+    ui.notify(editing.value ? "Envío actualizado correctamente." : "Envío creado correctamente.");
     router.push(`/envios/${id}`);
   } catch (e) {
     ui.notify(e.userMessage || "No fue posible guardar el envío.", "error");
@@ -597,15 +601,14 @@ watch(
   () => {
     if (
       form.destinationId &&
-      !destinationLocations.value.some(
-        (x) => x.ubicacionId === Number(form.destinationId),
-      )
+      !destinationLocations.value.some((x) => x.ubicacionId === Number(form.destinationId))
     )
       form.destinationId = "";
     if (!editing.value && origin.value && !isTechnology(origin.value)) {
-      const technologyHeadquarters = locations.value.find((location) =>
-        isTechnology(location) &&
-        (/centro\s*sede/i.test(location.nombre || "") || /tecnolog/i.test(location.nombre || "")),
+      const technologyHeadquarters = locations.value.find(
+        (location) =>
+          isTechnology(location) &&
+          (/centro\s*sede/i.test(location.nombre || "") || /tecnolog/i.test(location.nombre || "")),
       );
       if (technologyHeadquarters) form.destinationId = technologyHeadquarters.ubicacionId;
     }
@@ -626,18 +629,9 @@ onMounted(load);
     <PageHeader
       :title="editing ? 'Editar envío' : 'Crear envío'"
       subtitle="Registra la información logística y los equipos asociados"
-      ><button
-        class="btn btn-secondary"
-        type="button"
-        @click="router.push('/envios')"
-      >
+      ><button class="btn btn-secondary" type="button" @click="router.push('/envios')">
         <ArrowLeft :size="16" /> Cancelar</button
-      ><button
-        class="btn btn-primary"
-        type="button"
-        :disabled="saving || loading"
-        @click="submit"
-      >
+      ><button class="btn btn-primary" type="button" :disabled="saving || loading" @click="submit">
         <Save :size="16" /> {{ saving ? "Guardando…" : "Guardar envío" }}
       </button></PageHeader
     >
@@ -679,12 +673,7 @@ onMounted(load);
         :flow-label="flowLabel"
       />
     </form>
-    <div
-      v-if="confirmOpen"
-      class="confirm-overlay"
-      role="dialog"
-      aria-modal="true"
-    >
+    <div v-if="confirmOpen" class="confirm-overlay" role="dialog" aria-modal="true">
       <div class="confirm-dialog">
         <button
           class="confirm-close"
@@ -728,35 +717,20 @@ onMounted(load);
         </dl>
         <div v-if="form.equipment.length" class="confirm-equipment-list">
           <h3>Equipos a asociar</h3>
-          <article
-            v-for="(equipment, index) in form.equipment"
-            :key="equipment.id"
-          >
+          <article v-for="(equipment, index) in form.equipment" :key="equipment.id">
             <strong>{{ index + 1 }}. {{ equipment.typeName }}</strong
-            ><span
-              >Marca / modelo: {{ equipment.brand }} {{ equipment.model }}</span
+            ><span>Marca / modelo: {{ equipment.brand }} {{ equipment.model }}</span
             ><span
               >Serial: {{ equipment.serial || "No indicado" }} · Código:
               {{ equipment.assetCode || "No indicado" }}</span
             ><span>Ticket: {{ equipment.ticket }}</span
-            ><span v-if="equipment.notes"
-              >Observación: {{ equipment.notes }}</span
-            >
+            ><span v-if="equipment.notes">Observación: {{ equipment.notes }}</span>
           </article>
         </div>
         <div class="confirm-actions">
-          <button
-            class="btn btn-secondary"
-            type="button"
-            @click="confirmOpen = false"
-          >
+          <button class="btn btn-secondary" type="button" @click="confirmOpen = false">
             Cancelar</button
-          ><button
-            class="btn btn-primary"
-            type="button"
-            :disabled="saving"
-            @click="save"
-          >
+          ><button class="btn btn-primary" type="button" :disabled="saving" @click="save">
             <Save :size="15" /> Confirmar y guardar
           </button>
         </div>

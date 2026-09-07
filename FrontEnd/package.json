@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "format": "prettier --write \"src/**/*.{vue,js}\" \"*.js\"",
+    "format:check": "prettier --check \"src/**/*.{vue,js}\" \"*.js\""
   },
   "dependencies": {
     "@vitejs/plugin-vue": "latest",
@@ -20,5 +22,8 @@
     "vue": "latest",
     "vue-router": "latest",
     "vue3-apexcharts": "^1.11.1"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.6"
   }
 }

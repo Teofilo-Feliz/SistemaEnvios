@@ -3,18 +3,18 @@
 // de consumir un listado, y ninguna trae la tabla entera de una sola vez.
 
 /** Página vacía, para inicializar sin casos especiales en las vistas. */
-export const paginaVacia = { items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0 }
+export const paginaVacia = { items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0 };
 
 /** Normaliza la respuesta del API a una página, tolerando un cuerpo inesperado. */
 export function aPagina(response) {
-  const data = response?.data
-  if (!data || !Array.isArray(data.items)) return { ...paginaVacia }
-  return data
+  const data = response?.data;
+  if (!data || !Array.isArray(data.items)) return { ...paginaVacia };
+  return data;
 }
 
 /** Solo las filas, para cuando la vista maneja el total por separado. */
 export function filas(response) {
-  return aPagina(response).items
+  return aPagina(response).items;
 }
 
 /**
@@ -23,11 +23,11 @@ export function filas(response) {
  * sin control se traiga entero por descuido.
  */
 export async function todasLasPaginas(consulta, { pageSize = 100, maxPaginas = 20 } = {}) {
-  const acumulado = []
+  const acumulado = [];
   for (let page = 1; page <= maxPaginas; page += 1) {
-    const pagina = aPagina(await consulta({ page, pageSize }))
-    acumulado.push(...pagina.items)
-    if (acumulado.length >= pagina.totalItems || pagina.items.length === 0) break
+    const pagina = aPagina(await consulta({ page, pageSize }));
+    acumulado.push(...pagina.items);
+    if (acumulado.length >= pagina.totalItems || pagina.items.length === 0) break;
   }
-  return acumulado
+  return acumulado;
 }

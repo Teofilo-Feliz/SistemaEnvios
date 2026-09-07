@@ -68,9 +68,10 @@ const columns = [
 async function load() {
   loading.value = true;
   try {
-    const consulta = props.modo === "custodia"
-      ? transporteService.pendingCustody
-      : transporteService.pendingArrival;
+    const consulta =
+      props.modo === "custodia"
+        ? transporteService.pendingCustody
+        : transporteService.pendingArrival;
     const pagina = await consulta({ page: page.value, pageSize });
     totalItems.value = aPagina(pagina).totalItems;
     rows.value = filas(pagina).map((item) => ({
@@ -118,7 +119,13 @@ onMounted(load);
 useRefrescoAlVolver(load);
 watch(page, load);
 // Las dos bandejas comparten componente: al cambiar de una a otra hay que volver a empezar.
-watch(() => props.modo, () => { page.value = 1; load(); });
+watch(
+  () => props.modo,
+  () => {
+    page.value = 1;
+    load();
+  },
+);
 </script>
 
 <template>
@@ -138,7 +145,12 @@ watch(() => props.modo, () => { page.value = 1; load(); });
         @confirm="confirmar"
         @view="(row) => router.push(`/envios/${row.envioId}`)"
       />
-      <Pagination :page="page" :total="totalItems" :page-size="pageSize" @update:page="page = $event" />
+      <Pagination
+        :page="page"
+        :total="totalItems"
+        :page-size="pageSize"
+        @update:page="page = $event"
+      />
     </BaseCard>
   </div>
 </template>

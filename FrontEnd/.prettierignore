@@ -1,0 +1,5 @@
+node_modules
+dist
+# El CSS viene minificado en una sola linea a proposito: reformatearlo generaria un diff de
+# miles de lineas sin relacion con el trabajo de codigo.
+src/assets/styles

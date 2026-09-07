@@ -19,10 +19,15 @@ const router = useRouter(),
   saving = ref(false),
   shipments = ref([]),
   transportTypes = ref([]),
-  drivers = ref([]), shipmentStates = ref({});
-const selectedShipment = computed(() => shipments.value.find(x => x.envioId === Number(form.shipmentId)));
+  drivers = ref([]),
+  shipmentStates = ref({});
+const selectedShipment = computed(() =>
+  shipments.value.find((x) => x.envioId === Number(form.shipmentId)),
+);
 // Desde esta bandeja Transportación siempre asigna un vehículo institucional.
-const availableTransportTypes = computed(() => transportTypes.value.filter(x => isInternalTransport(x.estrategia)));
+const availableTransportTypes = computed(() =>
+  transportTypes.value.filter((x) => isInternalTransport(x.estrategia)),
+);
 const errors = reactive({
   shipment: "",
   transportType: "",
@@ -51,11 +56,11 @@ async function load() {
       catalogoService.allInternalDrivers(),
       catalogoService.allStates(),
     ]);
-    shipmentStates.value = Object.fromEntries(states.map(x => [x.estadoEnvioId, x.codigo]));
-    shipments.value = filas(e).filter(x => !x.tipoTransporteId);
+    shipmentStates.value = Object.fromEntries(states.map((x) => [x.estadoEnvioId, x.codigo]));
+    shipments.value = filas(e).filter((x) => !x.tipoTransporteId);
     transportTypes.value = t;
     drivers.value = d;
-    const internal = transportTypes.value.find(x => isInternalTransport(x.estrategia));
+    const internal = transportTypes.value.find((x) => isInternalTransport(x.estrategia));
     if (internal) form.transportTypeId = internal.tipoTransporteId;
   } catch (e) {
     ui.notify(e.userMessage || "No fue posible cargar los catálogos.", "error");
@@ -63,13 +68,19 @@ async function load() {
     loading.value = false;
   }
 }
-watch(() => form.shipmentId, () => {
-  if (selectedShipment.value && shipmentStates.value[selectedShipment.value.estadoEnvioId] === "EN_TRANSPORTACION") {
-    const internal = transportTypes.value.find(x => isInternalTransport(x.estrategia));
-    if (internal) form.transportTypeId = internal.tipoTransporteId;
-    form.privateName = form.relationship = form.privateId = form.vehiclePlate = "";
-  }
-});
+watch(
+  () => form.shipmentId,
+  () => {
+    if (
+      selectedShipment.value &&
+      shipmentStates.value[selectedShipment.value.estadoEnvioId] === "EN_TRANSPORTACION"
+    ) {
+      const internal = transportTypes.value.find((x) => isInternalTransport(x.estrategia));
+      if (internal) form.transportTypeId = internal.tipoTransporteId;
+      form.privateName = form.relationship = form.privateId = form.vehiclePlate = "";
+    }
+  },
+);
 async function save() {
   const selected = transportTypes.value.find(
     (x) => x.tipoTransporteId === Number(form.transportTypeId),
@@ -83,9 +94,7 @@ async function save() {
   errors.privateName =
     isPrivateTransport(selected?.estrategia) && !form.privateName ? "Indica el nombre." : "";
   errors.relationship =
-    isPrivateTransport(selected?.estrategia) && !form.relationship
-      ? "Indica el parentesco."
-      : "";
+    isPrivateTransport(selected?.estrategia) && !form.relationship ? "Indica el parentesco." : "";
   errors.privateId =
     isPrivateTransport(selected?.estrategia) && !/^\d{11}$/.test(form.privateId)
       ? "Cédula inválida."
@@ -93,16 +102,18 @@ async function save() {
   errors.vehiclePlate =
     isPrivateTransport(selected?.estrategia) && !form.vehiclePlate ? "Indica la placa." : "";
   if (Object.values(errors).some(Boolean)) return;
-  const accepted = await confirmAction({ title: "Confirmar transporte", text: "¿Deseas guardar la asignación de transporte para este envío?", confirmText: "Guardar transporte" });
+  const accepted = await confirmAction({
+    title: "Confirmar transporte",
+    text: "¿Deseas guardar la asignación de transporte para este envío?",
+    confirmText: "Guardar transporte",
+  });
   if (!accepted) return;
   saving.value = true;
   try {
     await transporteService.create({
       envioId: Number(form.shipmentId),
       tipoTransporteId: Number(form.transportTypeId),
-      choferInternoId: form.internalDriverId
-        ? Number(form.internalDriverId)
-        : null,
+      choferInternoId: form.internalDriverId ? Number(form.internalDriverId) : null,
       nombreResponsable: form.privateName || null,
       parentesco: form.relationship || null,
       cedulaResponsable: form.privateId || null,
@@ -112,10 +123,7 @@ async function save() {
     ui.notify("Transporte registrado correctamente.");
     router.push(`/envios/${form.shipmentId}`);
   } catch (e) {
-    ui.notify(
-      e.userMessage || "No fue posible registrar el transporte.",
-      "error",
-    );
+    ui.notify(e.userMessage || "No fue posible registrar el transporte.", "error");
   } finally {
     saving.value = false;
   }
@@ -127,16 +135,9 @@ onMounted(load);
     <PageHeader
       title="Asignar transporte"
       subtitle="Asigna el chofer al envío entregado por Tecnología"
-      ><button
-        class="btn btn-secondary"
-        @click="router.push('/transportacion')"
-      >
+      ><button class="btn btn-secondary" @click="router.push('/transportacion')">
         <ArrowLeft :size="16" /> Cancelar</button
-      ><button
-        class="btn btn-primary"
-        :disabled="saving || loading"
-        @click="save"
-      >
+      ><button class="btn btn-primary" :disabled="saving || loading" @click="save">
         <Save :size="16" /> Guardar registro
       </button></PageHeader
     >
@@ -147,16 +148,10 @@ onMounted(load);
           ><label
             >Envío *<select v-model="form.shipmentId" class="form-control">
               <option value="">Seleccionar</option>
-              <option
-                v-for="x in shipments"
-                :key="x.envioId"
-                :value="x.envioId"
-              >
+              <option v-for="x in shipments" :key="x.envioId" :value="x.envioId">
                 {{ x.numeroEnvio }}
               </option></select
-            ><small v-if="errors.shipment" class="field-error">{{
-              errors.shipment
-            }}</small></label
+            ><small v-if="errors.shipment" class="field-error">{{ errors.shipment }}</small></label
           ></ShipmentSection
         ><ShipmentSection title="Datos de transporte"
           ><ShipmentTransportSection

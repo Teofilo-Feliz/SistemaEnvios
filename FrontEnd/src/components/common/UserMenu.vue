@@ -1,2 +1,12 @@
-<script setup>import { LogOut, Settings, UserRound } from 'lucide-vue-next'; import { useAuthStore } from '@/stores/authStore'; const auth = useAuthStore()</script>
-<template><div class="dropdown-panel user-menu"><RouterLink to="/perfil"><UserRound :size="17" /> Mi perfil</RouterLink><RouterLink to="/preferencias"><Settings :size="17" /> Preferencias</RouterLink><button @click="auth.logout"><LogOut :size="17" /> Cerrar sesión</button></div></template>
+<script setup>
+import { LogOut, Settings, UserRound } from "lucide-vue-next";
+import { useAuthStore } from "@/stores/authStore";
+const auth = useAuthStore();
+</script>
+<template>
+  <div class="dropdown-panel user-menu">
+    <RouterLink to="/perfil"><UserRound :size="17" /> Mi perfil</RouterLink
+    ><RouterLink to="/preferencias"><Settings :size="17" /> Preferencias</RouterLink
+    ><button @click="auth.logout"><LogOut :size="17" /> Cerrar sesión</button>
+  </div>
+</template>

@@ -2,7 +2,13 @@
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import {
-  AlertTriangle, ClipboardList, Laptop, PackageCheck, RefreshCw, Send, Truck,
+  AlertTriangle,
+  ClipboardList,
+  Laptop,
+  PackageCheck,
+  RefreshCw,
+  Send,
+  Truck,
 } from "lucide-vue-next";
 import PageHeader from "@/components/common/PageHeader.vue";
 import BaseCard from "@/components/common/BaseCard.vue";
@@ -16,7 +22,13 @@ const router = useRouter();
 const ui = useUiStore();
 const auth = useAuthStore();
 const loading = ref(true);
-const datos = ref({ filialNombre: "", porEtapa: [], equiposEnFilial: 0, equiposFuera: 0, casoMasAntiguoEnDias: 0 });
+const datos = ref({
+  filialNombre: "",
+  porEtapa: [],
+  equiposEnFilial: 0,
+  equiposFuera: 0,
+  casoMasAntiguoEnDias: 0,
+});
 
 const HACIA_TECNOLOGIA = 1;
 const HACIA_FILIAL = 2;
@@ -25,22 +37,47 @@ const HACIA_FILIAL = 2;
 // filial, que es lo único que le importa: qué tengo por mandar, qué va en camino, qué me llega.
 function contar(codigos, direccion) {
   return datos.value.porEtapa
-    .filter((x) => codigos.includes(x.codigo) && (direccion === undefined || x.direccion === direccion))
+    .filter(
+      (x) => codigos.includes(x.codigo) && (direccion === undefined || x.direccion === direccion),
+    )
     .reduce((total, x) => total + x.total, 0);
 }
 
 const porSalir = computed(() => contar(["EN_FILIAL"]));
-const enCamino = computed(() =>
-  contar(["ENTREGADO_TRANSPORTACION", "DESPACHADO_TRANSPORTE_PRIVADO", "RECIBIDO_TRANSPORTACION"]) +
-  contar(["EN_TRANSITO"], HACIA_TECNOLOGIA));
+const enCamino = computed(
+  () =>
+    contar([
+      "ENTREGADO_TRANSPORTACION",
+      "DESPACHADO_TRANSPORTE_PRIVADO",
+      "RECIBIDO_TRANSPORTACION",
+    ]) + contar(["EN_TRANSITO"], HACIA_TECNOLOGIA),
+);
 const enTecnologia = computed(() => contar(["ESPERA_TECNOLOGIA", "EN_REVISION"]));
 const porRecibir = computed(() => contar(["EN_TRANSITO"], HACIA_FILIAL));
 
 const tarjetas = computed(() => [
-  { title: "Por entregar a Transportación", value: porSalir.value, icon: ClipboardList, tone: "amber", ruta: "/envios?estado=EN_FILIAL" },
-  { title: "En camino a Tecnología", value: enCamino.value, icon: Truck, tone: "blue", ruta: "/envios" },
+  {
+    title: "Por entregar a Transportación",
+    value: porSalir.value,
+    icon: ClipboardList,
+    tone: "amber",
+    ruta: "/envios?estado=EN_FILIAL",
+  },
+  {
+    title: "En camino a Tecnología",
+    value: enCamino.value,
+    icon: Truck,
+    tone: "blue",
+    ruta: "/envios",
+  },
   { title: "En Tecnología", value: enTecnologia.value, icon: Send, tone: "blue", ruta: "/envios" },
-  { title: "Por recibir en la filial", value: porRecibir.value, icon: PackageCheck, tone: "green", ruta: "/filial/recepciones" },
+  {
+    title: "Por recibir en la filial",
+    value: porRecibir.value,
+    icon: PackageCheck,
+    tone: "green",
+    ruta: "/filial/recepciones",
+  },
 ]);
 
 const subtitulo = computed(() =>

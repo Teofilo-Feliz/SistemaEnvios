@@ -36,9 +36,8 @@ const pending = computed(() => {
   return shipments.value
     .filter(
       (x) =>
-        ["EN_TRANSITO", "RECIBIDO_FILIAL"].includes(
-          porId[x.estadoEnvioId]?.codigo,
-        ) && esHaciaFilial(x),
+        ["EN_TRANSITO", "RECIBIDO_FILIAL"].includes(porId[x.estadoEnvioId]?.codigo) &&
+        esHaciaFilial(x),
     )
     .map((x) => ({
       id: x.envioId,
@@ -65,7 +64,7 @@ async function load() {
       envioService.paged({
         page: page.value,
         pageSize,
-        estadoCodigos: ['EN_TRANSITO', 'RECIBIDO_FILIAL'],
+        estadoCodigos: ["EN_TRANSITO", "RECIBIDO_FILIAL"],
       }),
       catalogoService.allStates(),
     ]);
@@ -107,7 +106,12 @@ watch(page, load);
         @confirm="recibir"
         @view="(row) => router.push(`/envios/${row.envioId}`)"
       />
-      <Pagination :page="page" :total="totalItems" :page-size="pageSize" @update:page="page = $event" />
+      <Pagination
+        :page="page"
+        :total="totalItems"
+        :page-size="pageSize"
+        @update:page="page = $event"
+      />
     </BaseCard>
   </div>
 </template>

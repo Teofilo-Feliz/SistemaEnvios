@@ -41,7 +41,13 @@ const titulo = computed(() =>
 );
 
 const fecha = (valor) =>
-  valor ? new Date(valor).toLocaleDateString("es-DO", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+  valor
+    ? new Date(valor).toLocaleDateString("es-DO", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    : "—";
 
 async function load() {
   loading.value = true;
@@ -94,7 +100,17 @@ watch(viajesPage, loadViajes);
       <button class="btn btn-ghost" type="button" @click="router.push('/equipos')">
         <ArrowLeft :size="15" /> Volver a equipos
       </button>
-      <button class="btn btn-ghost" type="button" :disabled="loading" @click="() => { load(); loadViajes(); }">
+      <button
+        class="btn btn-ghost"
+        type="button"
+        :disabled="loading"
+        @click="
+          () => {
+            load();
+            loadViajes();
+          }
+        "
+      >
         <RefreshCw :size="15" /> Actualizar
       </button>
     </PageHeader>
@@ -109,9 +125,7 @@ watch(viajesPage, loadViajes);
 
       <BaseCard title="Historial de viajes">
         <LoadingSpinner v-if="viajesLoading" />
-        <div v-else-if="!viajes.length" class="empty-state">
-          Este equipo todavía no ha viajado.
-        </div>
+        <div v-else-if="!viajes.length" class="empty-state">Este equipo todavía no ha viajado.</div>
         <ol v-else class="viajes">
           <li v-for="viaje in viajes" :key="viaje.envioId">
             <div class="viaje-linea">

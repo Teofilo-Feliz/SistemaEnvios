@@ -20,9 +20,7 @@ import { grupoVisible } from "@/config/modulos";
 const route = useRoute();
 const ui = useUiStore();
 const auth = useAuthStore();
-const opened = ref(
-  JSON.parse(localStorage.getItem("sidebar_groups") || '["envios"]'),
-);
+const opened = ref(JSON.parse(localStorage.getItem("sidebar_groups") || '["envios"]'));
 const groups = [
   {
     key: "envios",
@@ -85,12 +83,20 @@ const groups = [
     icon: ClipboardCheck,
     items: [
       { label: "Notificaciones", to: "/tecnologia/notificaciones" },
-      { label: "Nuevo envío a filial", to: "/tecnologia/envios/nuevo", permission: "canCreateShipment" },
+      {
+        label: "Nuevo envío a filial",
+        to: "/tecnologia/envios/nuevo",
+        permission: "canCreateShipment",
+      },
       { label: "Equipos pendientes", to: "/tecnologia?view=pending" },
       { label: "En revisión", to: "/tecnologia?view=review" },
       { label: "Revisados", to: "/tecnologia?view=completed" },
       { label: "Equipos en Tecnología", to: "/tecnologia?view=casos" },
-      { label: "Descarte de equipos", to: "/tecnologia/descartes", permission: "equipos.gestionar" },
+      {
+        label: "Descarte de equipos",
+        to: "/tecnologia/descartes",
+        permission: "equipos.gestionar",
+      },
       { label: "Incidencias", to: "/incidencias" },
     ],
   },
@@ -111,17 +117,12 @@ const groups = [
     icon: Building2,
     permission: "canManageCatalogs",
     items: [
-      ...[
-        "Filiales",
-        "Ubicaciones",
-        "Tipos de equipos",
-        "Marcas",
-        "Modelos",
-        "Estados",
-      ].map((label) => ({
-        label,
-        to: `/catalogos/${label.toLowerCase().replaceAll(" ", "-")}`,
-      })),
+      ...["Filiales", "Ubicaciones", "Tipos de equipos", "Marcas", "Modelos", "Estados"].map(
+        (label) => ({
+          label,
+          to: `/catalogos/${label.toLowerCase().replaceAll(" ", "-")}`,
+        }),
+      ),
     ],
   },
   {
@@ -143,49 +144,35 @@ function toggle(key) {
   localStorage.setItem("sidebar_groups", JSON.stringify(opened.value));
 }
 function active(to) {
-  return (
-    route.fullPath === to || (to === "/envios" && route.path === "/envios")
-  );
+  return route.fullPath === to || (to === "/envios" && route.path === "/envios");
 }
 </script>
 <template>
   <aside class="sidebar" :class="{ open: ui.mobileOpen }">
     <div class="sidebar-brand">
       <div class="brand-mark"><img :src="logo" alt="LogiTrack" /></div>
-      <div class="brand-copy">
-        <strong>LogiTrack</strong><span>Gestión tecnológica</span>
-      </div>
+      <div class="brand-copy"><strong>LogiTrack</strong><span>Gestión tecnológica</span></div>
       <button class="icon-btn mobile-only" @click="ui.mobileOpen = false">
         <X :size="20" />
       </button>
     </div>
     <nav class="sidebar-nav" aria-label="Navegación principal">
-      <RouterLink
-        class="nav-main"
-        to="/dashboard"
-        title="Dashboard"
-        @click="ui.mobileOpen = false"
+      <RouterLink class="nav-main" to="/dashboard" title="Dashboard" @click="ui.mobileOpen = false"
         ><CircleGauge :size="19" /><span>Dashboard</span></RouterLink
       ><template v-for="group in groups" :key="group.key"
-        ><div v-if="grupoVisible(auth.perfilNombre, group.key) && auth.can(group.permission)" class="nav-group">
-          <button
-            class="nav-group-button"
-            :title="group.label"
-            @click="toggle(group.key)"
-          >
-            <component :is="group.icon" :size="19" /><span>{{
-              group.label
-            }}</span
+        ><div
+          v-if="grupoVisible(auth.perfilNombre, group.key) && auth.can(group.permission)"
+          class="nav-group"
+        >
+          <button class="nav-group-button" :title="group.label" @click="toggle(group.key)">
+            <component :is="group.icon" :size="19" /><span>{{ group.label }}</span
             ><ChevronDown
               class="nav-chevron"
               :class="{ rotated: opened.includes(group.key) }"
               :size="15"
             />
           </button>
-          <div
-            v-show="opened.includes(group.key) && !ui.collapsed"
-            class="nav-submenu"
-          >
+          <div v-show="opened.includes(group.key) && !ui.collapsed" class="nav-submenu">
             <RouterLink
               v-for="item in group.items.filter((i) => auth.can(i.permission))"
               :key="item.to"
@@ -198,8 +185,6 @@ function active(to) {
         </div></template
       >
     </nav>
-    <div class="sidebar-footer">
-      <BarChart3 :size="17" /><span>LogiTrack · 2026</span>
-    </div>
+    <div class="sidebar-footer"><BarChart3 :size="17" /><span>LogiTrack · 2026</span></div>
   </aside>
 </template>

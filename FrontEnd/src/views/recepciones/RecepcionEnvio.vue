@@ -7,7 +7,7 @@ import BaseCard from "@/components/common/BaseCard.vue";
 import LoadingSpinner from "@/components/common/LoadingSpinner.vue";
 import { envioService } from "@/services/envioService";
 import { catalogoService } from "@/services/catalogoService";
-import { filas } from '@/services/paginacion'
+import { filas } from "@/services/paginacion";
 import { equipoService } from "@/services/equipoService";
 import { recepcionService } from "@/services/recepcionService";
 import { useUiStore } from "@/stores/uiStore";
@@ -90,7 +90,13 @@ async function completar() {
   const texto = conIncidencia.value
     ? "El envío quedará como <strong>Recibido por Tecnología con incidencia</strong>. Es un estado final: no admite cambios posteriores."
     : "El envío quedará como <strong>Recibido por Tecnología</strong>. Es un estado final: no admite cambios posteriores.";
-  if (!(await confirmAction({ title: "Completar recepción", html: `<p>${texto}</p>`, confirmText: "Completar recepción" })))
+  if (
+    !(await confirmAction({
+      title: "Completar recepción",
+      html: `<p>${texto}</p>`,
+      confirmText: "Completar recepción",
+    }))
+  )
     return;
 
   saving.value = true;

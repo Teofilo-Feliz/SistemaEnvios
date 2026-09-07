@@ -1,56 +1,61 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue'
-import { Paperclip, RefreshCw } from 'lucide-vue-next'
-import PageHeader from '@/components/common/PageHeader.vue'
-import BaseCard from '@/components/common/BaseCard.vue'
-import Pagination from '@/components/common/Pagination.vue'
-import StatusBadge from '@/components/common/StatusBadge.vue'
-import { incidenciaService } from '@/services/incidenciaService'
-import { aPagina, filas } from '@/services/paginacion'
-import { useUiStore } from '@/stores/uiStore'
+import { onMounted, ref, watch } from "vue";
+import { Paperclip, RefreshCw } from "lucide-vue-next";
+import PageHeader from "@/components/common/PageHeader.vue";
+import BaseCard from "@/components/common/BaseCard.vue";
+import Pagination from "@/components/common/Pagination.vue";
+import StatusBadge from "@/components/common/StatusBadge.vue";
+import { incidenciaService } from "@/services/incidenciaService";
+import { aPagina, filas } from "@/services/paginacion";
+import { useUiStore } from "@/stores/uiStore";
 
-const ui = useUiStore()
-const filter = ref('')
-const loading = ref(true)
-const rows = ref([])
-const page = ref(1)
-const pageSize = 10
-const totalItems = ref(0)
+const ui = useUiStore();
+const filter = ref("");
+const loading = ref(true);
+const rows = ref([]);
+const page = ref(1);
+const pageSize = 10;
+const totalItems = ref(0);
 
 // Una petición por página. Antes esta pantalla pedía todos los envíos y luego una consulta de
 // incidencias por cada uno: con 300 envíos eran 301 llamadas para dibujar una tabla.
 async function load() {
-  loading.value = true
+  loading.value = true;
   try {
     const pagina = await incidenciaService.list({
       page: page.value,
       pageSize,
       search: filter.value.trim() || undefined,
-    })
-    rows.value = filas(pagina)
-    totalItems.value = aPagina(pagina).totalItems
+    });
+    rows.value = filas(pagina);
+    totalItems.value = aPagina(pagina).totalItems;
   } catch (error) {
-    ui.notify(error.userMessage || 'No fue posible cargar las incidencias.', 'error')
+    ui.notify(error.userMessage || "No fue posible cargar las incidencias.", "error");
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 // La búsqueda vuelve a la primera página: quedarse en la página 7 de un resultado nuevo
 // muestra una tabla vacía que parece "no hay incidencias".
 function buscar() {
-  page.value = 1
-  load()
+  page.value = 1;
+  load();
 }
 
-onMounted(load)
-watch(page, load)
+onMounted(load);
+watch(page, load);
 </script>
 
 <template>
   <div>
-    <PageHeader title="Incidencias" subtitle="Registro y seguimiento de novedades en envíos y equipos">
-      <button class="btn btn-ghost" :disabled="loading" @click="load"><RefreshCw :size="16" /> Actualizar</button>
+    <PageHeader
+      title="Incidencias"
+      subtitle="Registro y seguimiento de novedades en envíos y equipos"
+    >
+      <button class="btn btn-ghost" :disabled="loading" @click="load">
+        <RefreshCw :size="16" /> Actualizar
+      </button>
     </PageHeader>
     <div class="simple-toolbar">
       <input
@@ -67,19 +72,26 @@ watch(page, load)
       <BaseCard v-for="item in rows" :key="item.incidenciaId">
         <div class="incident-head">
           <div>
-            <strong>INC-{{ item.incidenciaId }} · Envío {{ item.numeroEnvio || item.envioId }}</strong>
-            <span>Equipo asociado: {{ item.envioEquipoId || 'General' }}</span>
+            <strong
+              >INC-{{ item.incidenciaId }} · Envío {{ item.numeroEnvio || item.envioId }}</strong
+            >
+            <span>Equipo asociado: {{ item.envioEquipoId || "General" }}</span>
           </div>
           <StatusBadge status="open" />
         </div>
         <p>{{ item.descripcion }}</p>
         <div class="incident-meta">
-          <span>{{ new Date(item.fechaCreacion).toLocaleString('es-DO') }}</span>
+          <span>{{ new Date(item.fechaCreacion).toLocaleString("es-DO") }}</span>
           <span v-if="item.usuarioCreacionId">Usuario: {{ item.usuarioCreacionId }}</span>
           <span><Paperclip :size="14" /> Registro API</span>
         </div>
       </BaseCard>
     </div>
-    <Pagination :page="page" :total="totalItems" :page-size="pageSize" @update:page="page = $event" />
+    <Pagination
+      :page="page"
+      :total="totalItems"
+      :page-size="pageSize"
+      @update:page="page = $event"
+    />
   </div>
 </template>

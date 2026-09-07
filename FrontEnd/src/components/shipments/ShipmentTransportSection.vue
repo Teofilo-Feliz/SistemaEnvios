@@ -8,23 +8,27 @@ const props = defineProps({
   errors: { type: Object, default: () => ({}) },
 });
 const selected = computed(() =>
-  props.transportTypes.find(
-    (x) => x.tipoTransporteId === Number(props.form.transportTypeId),
-  ),
+  props.transportTypes.find((x) => x.tipoTransporteId === Number(props.form.transportTypeId)),
 );
 const internal = computed(() => isInternalTransport(selected.value?.estrategia));
-watch(() => props.form.transportTypeId, () => {
-  if (internal.value) Object.assign(props.form, { privateName: "", relationship: "", privateId: "", vehiclePlate: "" });
-  else props.form.internalDriverId = "";
-});
+watch(
+  () => props.form.transportTypeId,
+  () => {
+    if (internal.value)
+      Object.assign(props.form, {
+        privateName: "",
+        relationship: "",
+        privateId: "",
+        vehiclePlate: "",
+      });
+    else props.form.internalDriverId = "";
+  },
+);
 </script>
 <template>
   <div class="form-grid">
     <label
-      >Tipo de transporte *<select
-        v-model="form.transportTypeId"
-        class="form-control"
-      >
+      >Tipo de transporte *<select v-model="form.transportTypeId" class="form-control">
         <option value="">Seleccionar</option>
         <option
           v-for="type in transportTypes"
@@ -39,10 +43,7 @@ watch(() => props.form.transportTypeId, () => {
     >
     <template v-if="selected && internal"
       ><label
-        >Chofer interno *<select
-          v-model="form.internalDriverId"
-          class="form-control"
-        >
+        >Chofer interno *<select v-model="form.internalDriverId" class="form-control">
           <option value="">Seleccionar chofer</option>
           <option
             v-for="driver in drivers"
@@ -54,7 +55,8 @@ watch(() => props.form.transportTypeId, () => {
         ><small v-if="errors.internalDriver" class="field-error">{{
           errors.internalDriver
         }}</small></label
-      ></template>
+      ></template
+    >
     <template v-else-if="selected"
       ><label
         >Nombre del responsable *<input
@@ -83,16 +85,13 @@ watch(() => props.form.transportTypeId, () => {
           maxlength="11"
           inputmode="numeric"
           class="form-control"
-        /><small v-if="errors.privateId" class="field-error">{{
-          errors.privateId
-        }}</small></label
+        /><small v-if="errors.privateId" class="field-error">{{ errors.privateId }}</small></label
       ><label
-        >Placa del vehículo *<input
-          v-model.trim="form.vehiclePlate"
-          class="form-control"
-        /><small v-if="errors.vehiclePlate" class="field-error">{{
-          errors.vehiclePlate
-        }}</small></label
+        >Placa del vehículo *<input v-model.trim="form.vehiclePlate" class="form-control" /><small
+          v-if="errors.vehiclePlate"
+          class="field-error"
+          >{{ errors.vehiclePlate }}</small
+        ></label
       ></template
     >
   </div>

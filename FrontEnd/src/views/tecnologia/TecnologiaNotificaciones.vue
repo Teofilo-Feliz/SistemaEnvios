@@ -53,12 +53,27 @@ watch(page, load);
 
 <template>
   <div>
-    <PageHeader title="Notificaciones de Tecnología" subtitle="Avisos de envíos que Transportación ya recibió y están listos para retirar">
-      <button class="btn btn-ghost" :disabled="loading" @click="load"><RefreshCw :size="15" /> Actualizar</button>
+    <PageHeader
+      title="Notificaciones de Tecnología"
+      subtitle="Avisos de envíos que Transportación ya recibió y están listos para retirar"
+    >
+      <button class="btn btn-ghost" :disabled="loading" @click="load">
+        <RefreshCw :size="15" /> Actualizar
+      </button>
     </PageHeader>
     <BaseCard title="Avisos recibidos" :padded="false">
-      <BaseTable :columns="columns" :rows="rows" :loading="loading" @view="(row) => router.push(`/envios/${row.envioId}`)" />
-      <Pagination :page="page" :total="totalItems" :page-size="pageSize" @update:page="page = $event" />
+      <BaseTable
+        :columns="columns"
+        :rows="rows"
+        :loading="loading"
+        @view="(row) => router.push(`/envios/${row.envioId}`)"
+      />
+      <Pagination
+        :page="page"
+        :total="totalItems"
+        :page-size="pageSize"
+        @update:page="page = $event"
+      />
     </BaseCard>
   </div>
 </template>

@@ -78,7 +78,5 @@ export const statusMap = {
 };
 
 export function getStatus(status) {
-  return (
-    statusMap[status] || { label: status || "Sin estado", tone: "neutral" }
-  );
+  return statusMap[status] || { label: status || "Sin estado", tone: "neutral" };
 }

@@ -53,7 +53,8 @@ const filas_ = computed(() =>
     serial: x.numeroSerie || x.codigoActivo || "—",
     filial: x.filialNombre,
     vueltas: x.movimientos,
-    antiguedad: x.diasAbierto === 0 ? "hoy" : `${x.diasAbierto} día${x.diasAbierto === 1 ? "" : "s"}`,
+    antiguedad:
+      x.diasAbierto === 0 ? "hoy" : `${x.diasAbierto} día${x.diasAbierto === 1 ? "" : "s"}`,
     filialNombre: x.filialNombre,
     numeroTicket: x.numeroTicket,
     marca: x.marca,
@@ -177,8 +178,8 @@ watch(page, load);
         <p class="descarte-aviso">
           <PackageX :size="16" />
           El ticket <strong>{{ seleccionado.numeroTicket }}</strong> se cerrará y
-          <strong>{{ seleccionado.filialNombre }}</strong> dejará de ser dueña de este equipo.
-          Esta acción no se revierte.
+          <strong>{{ seleccionado.filialNombre }}</strong> dejará de ser dueña de este equipo. Esta
+          acción no se revierte.
         </p>
         <label>
           Motivo del descarte

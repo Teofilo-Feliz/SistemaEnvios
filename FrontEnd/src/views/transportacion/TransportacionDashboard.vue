@@ -30,15 +30,40 @@ function contar(codigo, direccion) {
 // Solo etapas que Transportación custodia. RECIBIDO_FILIAL quedó fuera a propósito: ese
 // estado ya no está en su alcance, así que la tarjeta marcaba cero siempre.
 const flujoDesdeFilial = computed(() => [
-  { code: "ENTREGADO_TRANSPORTACION", title: "Entregados por la filial", icon: PackageCheck, value: contar("ENTREGADO_TRANSPORTACION") },
-  { code: "EN_TRANSITO", title: "En tránsito a Tecnología", icon: Truck, value: contar("EN_TRANSITO", HACIA_TECNOLOGIA) },
-  { code: "RECIBIDO_TRANSPORTACION", title: "En punto logístico", icon: Warehouse, value: contar("RECIBIDO_TRANSPORTACION") },
+  {
+    code: "ENTREGADO_TRANSPORTACION",
+    title: "Entregados por la filial",
+    icon: PackageCheck,
+    value: contar("ENTREGADO_TRANSPORTACION"),
+  },
+  {
+    code: "EN_TRANSITO",
+    title: "En tránsito a Tecnología",
+    icon: Truck,
+    value: contar("EN_TRANSITO", HACIA_TECNOLOGIA),
+  },
+  {
+    code: "RECIBIDO_TRANSPORTACION",
+    title: "En punto logístico",
+    icon: Warehouse,
+    value: contar("RECIBIDO_TRANSPORTACION"),
+  },
 ]);
 
 const flujoDesdeTecnologia = computed(() => [
   // Es la bandeja de trabajo de Transportación: lo que está parado esperando un chofer.
-  { code: "EN_TRANSPORTACION", title: "Esperan asignación de chofer", icon: UserRound, value: contar("EN_TRANSPORTACION") },
-  { code: "EN_TRANSITO", title: "En tránsito a la filial", icon: Send, value: contar("EN_TRANSITO", 2) },
+  {
+    code: "EN_TRANSPORTACION",
+    title: "Esperan asignación de chofer",
+    icon: UserRound,
+    value: contar("EN_TRANSPORTACION"),
+  },
+  {
+    code: "EN_TRANSITO",
+    title: "En tránsito a la filial",
+    icon: Send,
+    value: contar("EN_TRANSITO", 2),
+  },
 ]);
 
 // El listado llega ordenado por fecha de creación descendente: los primeros son los recientes.
@@ -64,8 +89,12 @@ const porTipoTransporte = computed(() =>
 );
 
 const ETAPAS_TRANSPORTACION = [
-  "ENTREGADO_TRANSPORTACION", "EN_TRANSITO", "RECIBIDO_TRANSPORTACION",
-  "INCIDENCIA_TRANSPORTACION", "DESPACHADO_TECNOLOGIA", "EN_TRANSPORTACION",
+  "ENTREGADO_TRANSPORTACION",
+  "EN_TRANSITO",
+  "RECIBIDO_TRANSPORTACION",
+  "INCIDENCIA_TRANSPORTACION",
+  "DESPACHADO_TECNOLOGIA",
+  "EN_TRANSPORTACION",
 ];
 async function load() {
   loading.value = true;
@@ -133,7 +162,8 @@ useRefrescoAlVolver(load);
       <div class="transport-mini-card">
         <h4>Envíos recientes</h4>
         <div v-for="item in recientes" :key="item.number" class="mini-row">
-          <span>{{ item.number }}</span><small>{{ item.status }}</small>
+          <span>{{ item.number }}</span
+          ><small>{{ item.status }}</small>
         </div>
         <p v-if="!recientes.length">Sin envíos registrados.</p>
       </div>
@@ -141,7 +171,8 @@ useRefrescoAlVolver(load);
       <div class="transport-mini-card">
         <h4>Por tipo de transporte</h4>
         <div v-for="[nombre, total] in porTipoTransporte" :key="nombre" class="mini-row">
-          <span>{{ nombre }}</span><small>{{ total }}</small>
+          <span>{{ nombre }}</span
+          ><small>{{ total }}</small>
         </div>
         <p v-if="!porTipoTransporte.length">Sin envíos registrados.</p>
       </div>

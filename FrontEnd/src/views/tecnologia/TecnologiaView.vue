@@ -1,7 +1,14 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
-import { Bell, CheckCircle2, CircleDashed, ClipboardCheck, RefreshCw, Wrench } from "lucide-vue-next";
+import {
+  Bell,
+  CheckCircle2,
+  CircleDashed,
+  ClipboardCheck,
+  RefreshCw,
+  Wrench,
+} from "lucide-vue-next";
 import PageHeader from "@/components/common/PageHeader.vue";
 import Pagination from "@/components/common/Pagination.vue";
 import { aPagina, filas } from "@/services/paginacion";
@@ -49,7 +56,8 @@ const casosFilas = computed(() =>
     ticket: x.numeroTicket,
     filial: x.filialNombre,
     vueltas: x.movimientos,
-    antiguedad: x.diasAbierto === 0 ? "hoy" : `${x.diasAbierto} día${x.diasAbierto === 1 ? "" : "s"}`,
+    antiguedad:
+      x.diasAbierto === 0 ? "hoy" : `${x.diasAbierto} día${x.diasAbierto === 1 ? "" : "s"}`,
   })),
 );
 
@@ -62,14 +70,18 @@ const idDe = (codigo) => states.value.find((x) => x.codigo === codigo)?.estadoEn
 // El flujo interno llega hasta RECIBIDO_TRANSPORTACION y desde ahí Tecnología hace la
 // recepción. El privado no pasa por Transportación y conserva ESPERA_TECNOLOGIA → EN_REVISION.
 const waitingId = computed(() => idDe("ESPERA_TECNOLOGIA"));
-const queue = computed(() => shipments.value.filter((x) => x.estadoEnvioId === waitingId.value).map((x) => ({
-  id: x.envioId,
-  number: x.numeroEnvio,
-  transport: x.nombreTipoTransporte || "Sin indicar",
-  status: "ESPERA_TECNOLOGIA",
-  canConfirm: true,
-  confirmTitle: "Recibir equipos",
-})));
+const queue = computed(() =>
+  shipments.value
+    .filter((x) => x.estadoEnvioId === waitingId.value)
+    .map((x) => ({
+      id: x.envioId,
+      number: x.numeroEnvio,
+      transport: x.nombreTipoTransporte || "Sin indicar",
+      status: "ESPERA_TECNOLOGIA",
+      canConfirm: true,
+      confirmTitle: "Recibir equipos",
+    })),
+);
 // Listos para verificar equipo por equipo y cerrar en Recibido o Recibido con incidencia.
 const listosParaVerificar = computed(() => {
   const codigos = [idDe("RECIBIDO_TRANSPORTACION"), idDe("EN_REVISION")].filter(Boolean);
@@ -96,8 +108,18 @@ const reviewColumns = [
 ];
 const stats = computed(() => [
   { title: "Esperando Tecnología", value: queue.value.length, icon: CircleDashed, tone: "blue" },
-  { title: "Pendientes de verificar", value: inReview.value.length, icon: ClipboardCheck, tone: "amber" },
-  { title: "Disponibles para retirar", value: queue.value.length, icon: CheckCircle2, tone: "green" },
+  {
+    title: "Pendientes de verificar",
+    value: inReview.value.length,
+    icon: ClipboardCheck,
+    tone: "amber",
+  },
+  {
+    title: "Disponibles para retirar",
+    value: queue.value.length,
+    icon: CheckCircle2,
+    tone: "green",
+  },
   { title: "Equipos en Tecnología", value: casosTotal.value, icon: Wrench, tone: "blue" },
 ]);
 
@@ -124,7 +146,7 @@ async function load() {
       envioService.paged({
         page: page.value,
         pageSize,
-        estadoCodigos: ['ESPERA_TECNOLOGIA', 'RECIBIDO_TRANSPORTACION', 'EN_REVISION'],
+        estadoCodigos: ["ESPERA_TECNOLOGIA", "RECIBIDO_TRANSPORTACION", "EN_REVISION"],
       }),
       catalogoService.allStates(),
       notificacionService.listTechnology({ pageSize: 1 }),
@@ -144,10 +166,16 @@ async function load() {
 async function receiveShipment(row) {
   try {
     const associations = filas(await envioService.equipment(row.id, { pageSize: 100 }));
-    const equipment = await Promise.all(associations.map(async (association) => {
-      const { data } = await equipoService.get(association.equipoId);
-      return { ...data, ticket: association.numeroTicket, observations: association.observaciones };
-    }));
+    const equipment = await Promise.all(
+      associations.map(async (association) => {
+        const { data } = await equipoService.get(association.equipoId);
+        return {
+          ...data,
+          ticket: association.numeroTicket,
+          observations: association.observaciones,
+        };
+      }),
+    );
     const details = equipment.length
       ? `<div style="text-align:left;max-height:330px;overflow:auto">${equipment.map((item) => `<div style="border:1px solid #e1e6ee;border-radius:6px;padding:10px;margin:8px 0"><strong>${escapeHtml(item.marca)} ${escapeHtml(item.modelo)}</strong><br><small>Serial: ${escapeHtml(item.numeroSerie)} · Activo: ${escapeHtml(item.codigoActivo)} · Ticket: ${escapeHtml(item.ticket)}</small><br><small>${escapeHtml(item.observations)}</small></div>`).join("")}</div>`
       : "<p>Este envío no tiene equipos asociados.</p>";
@@ -159,7 +187,10 @@ async function receiveShipment(row) {
     if (!confirmed) return;
     const reviewState = states.value.find((state) => state.codigo === "EN_REVISION");
     if (!reviewState) throw new Error("El estado EN_REVISION no está configurado.");
-    await envioService.changeState(row.id, { estadoDestinoId: reviewState.estadoEnvioId, observaciones: "Equipos recibidos y verificados por Tecnología." });
+    await envioService.changeState(row.id, {
+      estadoDestinoId: reviewState.estadoEnvioId,
+      observaciones: "Equipos recibidos y verificados por Tecnología.",
+    });
     ui.notify("Recepción confirmada. El envío pasó a revisión.", "success");
     notifyNotificationsChanged();
     await load();
@@ -183,12 +214,25 @@ watch(casosPage, loadCasos);
 <template>
   <div>
     <PageHeader title="Tecnología" subtitle="Retiro desde Transportación y revisión técnica">
-      <RouterLink class="btn btn-ghost" to="/tecnologia/notificaciones"><Bell :size="15" /> Notificaciones <strong v-if="notificationCount">{{ notificationCount }}</strong></RouterLink>
-      <button class="btn btn-ghost" :disabled="loading" @click="cargarTodo"><RefreshCw :size="15" /> Actualizar</button>
+      <RouterLink class="btn btn-ghost" to="/tecnologia/notificaciones"
+        ><Bell :size="15" /> Notificaciones
+        <strong v-if="notificationCount">{{ notificationCount }}</strong></RouterLink
+      >
+      <button class="btn btn-ghost" :disabled="loading" @click="cargarTodo">
+        <RefreshCw :size="15" /> Actualizar
+      </button>
     </PageHeader>
-    <div class="module-stats"><StatCard v-for="item in stats" :key="item.title" v-bind="item" /></div>
+    <div class="module-stats">
+      <StatCard v-for="item in stats" :key="item.title" v-bind="item" />
+    </div>
     <BaseCard title="Envíos disponibles para retirar de Transportación" :padded="false">
-      <BaseTable :columns="columns" :rows="queue" :loading="loading" @confirm="receiveShipment" @view="(row) => router.push(`/envios/${row.id}`)" />
+      <BaseTable
+        :columns="columns"
+        :rows="queue"
+        :loading="loading"
+        @confirm="receiveShipment"
+        @view="(row) => router.push(`/envios/${row.id}`)"
+      />
     </BaseCard>
     <BaseCard title="Listos para verificar equipos" :padded="false">
       <BaseTable
@@ -199,7 +243,12 @@ watch(casosPage, loadCasos);
         @view="(row) => router.push(`/envios/${row.id}`)"
       />
     </BaseCard>
-    <Pagination :page="page" :total="totalItems" :page-size="pageSize" @update:page="page = $event" />
+    <Pagination
+      :page="page"
+      :total="totalItems"
+      :page-size="pageSize"
+      @update:page="page = $event"
+    />
 
     <BaseCard title="Equipos en Tecnología" :padded="false">
       <BaseTable

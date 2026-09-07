@@ -43,7 +43,14 @@ async function load() {
 async function createType() {
   if (!typeForm.codigo.trim() || !typeForm.nombre.trim())
     return ui.notify("Completa el código y nombre del tipo.", "warning");
-  if (!(await confirmAction({ title: "Crear tipo de transporte", text: `¿Deseas crear el tipo ${typeForm.nombre}?`, confirmText: "Crear tipo" }))) return;
+  if (
+    !(await confirmAction({
+      title: "Crear tipo de transporte",
+      text: `¿Deseas crear el tipo ${typeForm.nombre}?`,
+      confirmText: "Crear tipo",
+    }))
+  )
+    return;
   savingType.value = true;
   try {
     await catalogoService.createTransportType({
@@ -64,7 +71,14 @@ async function createType() {
 async function createDriver() {
   if (!driverForm.nombreCompleto.trim() || !driverForm.numeroEmpleado.trim())
     return ui.notify("Completa el nombre y número de empleado.", "warning");
-  if (!(await confirmAction({ title: "Crear chofer interno", text: `¿Deseas registrar a ${driverForm.nombreCompleto}?`, confirmText: "Crear chofer" }))) return;
+  if (
+    !(await confirmAction({
+      title: "Crear chofer interno",
+      text: `¿Deseas registrar a ${driverForm.nombreCompleto}?`,
+      confirmText: "Crear chofer",
+    }))
+  )
+    return;
   savingDriver.value = true;
   try {
     await catalogoService.createInternalDriver({
@@ -81,7 +95,14 @@ async function createDriver() {
   }
 }
 async function toggleType(x) {
-  if (!(await confirmAction({ title: `${x.activo ? "Deshabilitar" : "Habilitar"} tipo`, text: `¿Deseas cambiar el estado de ${x.nombre}?`, confirmText: x.activo ? "Deshabilitar" : "Habilitar" }))) return;
+  if (
+    !(await confirmAction({
+      title: `${x.activo ? "Deshabilitar" : "Habilitar"} tipo`,
+      text: `¿Deseas cambiar el estado de ${x.nombre}?`,
+      confirmText: x.activo ? "Deshabilitar" : "Habilitar",
+    }))
+  )
+    return;
   try {
     await catalogoService.toggleTransportType(x.tipoTransporteId, !x.activo);
     await load();
@@ -90,7 +111,14 @@ async function toggleType(x) {
   }
 }
 async function toggleDriver(x) {
-  if (!(await confirmAction({ title: `${x.activo ? "Deshabilitar" : "Habilitar"} chofer`, text: `¿Deseas cambiar el estado de ${x.nombreCompleto}?`, confirmText: x.activo ? "Deshabilitar" : "Habilitar" }))) return;
+  if (
+    !(await confirmAction({
+      title: `${x.activo ? "Deshabilitar" : "Habilitar"} chofer`,
+      text: `¿Deseas cambiar el estado de ${x.nombreCompleto}?`,
+      confirmText: x.activo ? "Deshabilitar" : "Habilitar",
+    }))
+  )
+    return;
   try {
     await catalogoService.toggleInternalDriver(x.choferInternoId, !x.activo);
     await load();
@@ -115,20 +143,11 @@ watch([typePage, driverPage], load);
       <BaseCard title="Tipos de transporte"
         ><form class="form-grid" @submit.prevent="createType">
           <label
-            >Código *<input
-              v-model="typeForm.codigo"
-              class="form-control"
-              maxlength="30" /></label
+            >Código *<input v-model="typeForm.codigo" class="form-control" maxlength="30" /></label
           ><label
-            >Nombre *<input
-              v-model="typeForm.nombre"
-              class="form-control"
-              maxlength="100" /></label
+            >Nombre *<input v-model="typeForm.nombre" class="form-control" maxlength="100" /></label
           ><label
-            >Estrategia *<select
-              v-model="typeForm.estrategia"
-              class="form-control"
-            >
+            >Estrategia *<select v-model="typeForm.estrategia" class="form-control">
               <option :value="1">Transportación institucional</option>
               <option :value="2">Entrega directa a Tecnología</option>
             </select></label
@@ -143,9 +162,7 @@ watch([typePage, driverPage], load);
               ><small
                 >{{ item.codigo }} ·
                 {{
-                  isInternalTransport(item.estrategia)
-                    ? "Institucional"
-                    : "Directo a Tecnología"
+                  isInternalTransport(item.estrategia) ? "Institucional" : "Directo a Tecnología"
                 }}</small
               ></span
             ><button class="btn btn-secondary" @click="toggleType(item)">
@@ -153,7 +170,11 @@ watch([typePage, driverPage], load);
             </button>
           </article>
         </div>
-        <Pagination :page="typePage" :total="typeTotal" :page-size="pageSize" @update:page="typePage = $event" /></BaseCard
+        <Pagination
+          :page="typePage"
+          :total="typeTotal"
+          :page-size="pageSize"
+          @update:page="typePage = $event" /></BaseCard
       ><BaseCard title="Choferes internos"
         ><form class="form-grid" @submit.prevent="createDriver">
           <label
@@ -175,16 +196,19 @@ watch([typePage, driverPage], load);
             <span
               ><strong>{{ item.nombreCompleto }}</strong
               ><small
-                >{{ item.numeroEmpleado }} ·
-                {{ item.activo ? "Activo" : "Inactivo" }}</small
+                >{{ item.numeroEmpleado }} · {{ item.activo ? "Activo" : "Inactivo" }}</small
               ></span
             ><button class="btn btn-secondary" @click="toggleDriver(item)">
               {{ item.activo ? "Deshabilitar" : "Habilitar" }}
             </button>
           </article>
         </div>
-        <Pagination :page="driverPage" :total="driverTotal" :page-size="pageSize" @update:page="driverPage = $event" /></BaseCard
-      >
+        <Pagination
+          :page="driverPage"
+          :total="driverTotal"
+          :page-size="pageSize"
+          @update:page="driverPage = $event"
+      /></BaseCard>
     </div>
   </div>
 </template>

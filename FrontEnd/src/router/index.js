@@ -5,11 +5,27 @@ import { rutaPermitida } from "@/config/modulos";
 import { userManager } from "@/services/authService";
 const PlaceholderView = () => import("@/views/PlaceholderView.vue");
 const routes = [
-  { path: "/callback", name: "Callback", component: () => import("@/views/auth/OidcCallbackView.vue") },
-  { path: "/silent-renew", name: "SilentRenew", component: () => import("@/views/auth/OidcSilentRenewView.vue") },
-  { path: "/signed-out", name: "SignedOut", component: () => import("@/views/auth/SignedOutView.vue") },
+  {
+    path: "/callback",
+    name: "Callback",
+    component: () => import("@/views/auth/OidcCallbackView.vue"),
+  },
+  {
+    path: "/silent-renew",
+    name: "SilentRenew",
+    component: () => import("@/views/auth/OidcSilentRenewView.vue"),
+  },
+  {
+    path: "/signed-out",
+    name: "SignedOut",
+    component: () => import("@/views/auth/SignedOutView.vue"),
+  },
   { path: "/logout", name: "Logout", component: () => import("@/views/auth/LogoutView.vue") },
-  { path: "/unauthorized", name: "Unauthorized", component: () => import("@/views/auth/UnauthorizedView.vue") },
+  {
+    path: "/unauthorized",
+    name: "Unauthorized",
+    component: () => import("@/views/auth/UnauthorizedView.vue"),
+  },
   {
     path: "/login",
     name: "login",
@@ -20,7 +36,11 @@ const routes = [
   // el destino equivocado. Ahora solo aterriza, y el guard —que sí tiene el perfil— redirige.
   // El guard siempre redirige desde aquí, así que este componente no llega a verse; es solo
   // para que la ruta resuelva. No puede ser una pantalla con lógica propia.
-  { path: "/", name: "inicio", component: { template: '<div class="page-loading">Entrando…</div>' } },
+  {
+    path: "/",
+    name: "inicio",
+    component: { template: '<div class="page-loading">Entrando…</div>' },
+  },
   {
     path: "/",
     component: AppLayout,
@@ -88,22 +108,19 @@ const routes = [
       {
         path: "transportacion",
         name: "transportacion",
-        component: () =>
-          import("@/views/transportacion/TransportacionDashboard.vue"),
+        component: () => import("@/views/transportacion/TransportacionDashboard.vue"),
         meta: { permission: "envios.consultar" },
       },
       {
         path: "transportacion/operaciones",
         name: "transportacion-operations",
-        component: () =>
-          import("@/views/transportacion/TransportacionView.vue"),
+        component: () => import("@/views/transportacion/TransportacionView.vue"),
         meta: { permission: "envios.consultar" },
       },
       {
         path: "transportacion/nuevo",
         name: "transportacion-create",
-        component: () =>
-          import("@/views/transportacion/TransportacionCreate.vue"),
+        component: () => import("@/views/transportacion/TransportacionCreate.vue"),
         meta: { permission: "transportes.gestionar" },
       },
       {
@@ -112,8 +129,7 @@ const routes = [
         // 'transportes.gestionar' es otra cosa y lo tienen las filiales para sus envíos.
         path: "transportacion/catalogos",
         name: "transportacion-catalogos",
-        component: () =>
-          import("@/views/transportacion/TransportesCatalogos.vue"),
+        component: () => import("@/views/transportacion/TransportesCatalogos.vue"),
         meta: { permission: "transportes.administrar" },
       },
       {
@@ -127,8 +143,7 @@ const routes = [
       {
         path: "tecnologia/notificaciones",
         name: "tecnologia-notifications",
-        component: () =>
-          import("@/views/tecnologia/TecnologiaNotificaciones.vue"),
+        component: () => import("@/views/tecnologia/TecnologiaNotificaciones.vue"),
         meta: { permission: "envios.consultar" },
       },
       // Una sola pantalla de recepción para las dos direcciones del flujo: el backend ya
@@ -198,7 +213,11 @@ const routes = [
     ],
   },
   // Igual que la raíz: una URL inexistente aterriza y el guard decide con el perfil ya cargado.
-  { path: "/:pathMatch(.*)*", name: "no-encontrado", component: { template: '<div class="page-loading">Entrando…</div>' } },
+  {
+    path: "/:pathMatch(.*)*",
+    name: "no-encontrado",
+    component: { template: '<div class="page-loading">Entrando…</div>' },
+  },
 ];
 // Dos bandejas en vez de una: mezclar "el chofer recibió el equipo" con "el envío llegó" se
 // prestaba a confusión, porque son momentos distintos del mismo traslado. Comparten componente
@@ -236,7 +255,10 @@ router.beforeEach(async (to) => {
   if (auth.isAuthenticated && !auth.perfil) await auth.cargarPerfil();
   if (to.name === "login") return true;
   if (!auth.isAuthenticated) {
-    if (userManager) { await auth.forceLogoutAndRedirectToLogin(to.fullPath); return false; }
+    if (userManager) {
+      await auth.forceLogoutAndRedirectToLogin(to.fullPath);
+      return false;
+    }
     return { name: "login" };
   }
   if (to.name === "Unauthorized") return true;
