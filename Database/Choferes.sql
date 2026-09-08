@@ -1,4 +1,4 @@
-/*
+﻿/*
     Choferes internos de Transportación.
 
     Va aparte de DatosPrueba.sql a proposito: los choferes son datos operativos reales, no de

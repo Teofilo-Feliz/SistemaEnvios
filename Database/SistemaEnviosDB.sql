@@ -1,4 +1,4 @@
-
+﻿
 -- Script base de datos ADRTrack. Contiene la estructura de tablas y relaciones, y los datos iniciales de referencia.
 --
 -- ATENCIÓN: este script RECREA la base por completo. Hace DROP DATABASE antes de crearla, así
@@ -14,7 +14,15 @@ BEGIN
 END;
 GO
 
-CREATE DATABASE ADRTrack;
+-- La colación se fija explícitamente y no se hereda del servidor. En la máquina de desarrollo
+-- el servidor es Modern_Spanish_CI_AS, pero una imagen de SQL Server para Linux arranca con
+-- SQL_Latin1_General_CP1_CI_AS: la base saldría distinta según dónde se cree.
+--
+-- El "_AS" (accent sensitive) no es un detalle: PerfilesPorPosicion.Posicion es la clave
+-- primaria, y AuthManager emite la misma posición con y sin tilde ('Soporte Técnico' y
+-- 'Soporte Tecnico'). Con una colación acento-insensible esas dos filas colisionarían y la
+-- migración del perfil de Tecnología fallaría al insertarlas.
+CREATE DATABASE ADRTrack COLLATE Modern_Spanish_CI_AS;
 GO
 
 USE ADRTrack;

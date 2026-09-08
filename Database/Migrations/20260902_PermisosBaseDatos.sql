@@ -1,4 +1,4 @@
--- Endurecimiento de permisos de base de datos (hallazgo S-3).
+﻿-- Endurecimiento de permisos de base de datos (hallazgo S-3).
 --
 -- Al mover la autoridad de permisos desde el token hacia las tablas PerfilesPorPosicion y
 -- PermisosPorPosicion, quien pueda escribir en ellas se otorga a sí mismo alcance Global. El

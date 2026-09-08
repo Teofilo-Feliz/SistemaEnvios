@@ -1,4 +1,4 @@
-/*
+﻿/*
     Datos de PRUEBA para recorrer el flujo. No se ejecuta en una instalacion real: los datos
     operativos son las ubicaciones (script base) y los choferes (Choferes.sql).
 

@@ -1,4 +1,4 @@
--- Perfil 4 = Tecnología (soporte técnico).
+﻿-- Perfil 4 = Tecnología (soporte técnico).
 --
 -- Hasta ahora Tecnología y el administrador compartían el perfil Global: mismo alcance de datos
 -- y, por tanto, el mismo módulo de entrada. Soporte técnico debe entrar directo a /tecnologia y

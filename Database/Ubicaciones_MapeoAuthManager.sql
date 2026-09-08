@@ -1,4 +1,4 @@
--- Mapeo de cada ubicacion con el id de filial que AuthManager emite en el claim "affiliate".
+﻿-- Mapeo de cada ubicacion con el id de filial que AuthManager emite en el claim "affiliate".
 -- Idempotente: se puede volver a ejecutar sin efectos secundarios.
 --
 -- Casos que no coinciden por nombre:
