@@ -18,37 +18,33 @@ ALTER TABLE dbo.PerfilesPorPosicion
     ADD CONSTRAINT CK_PerfilPosicion_Perfil CHECK (Perfil IN (1, 2, 3, 4));
 GO
 
--- 2) Mapee aquí la posición o el rol exacto que AuthManager emite para soporte técnico.
---    El valor tiene que coincidir letra por letra, acentos incluidos: la colación de SQL Server
---    distingue acentos y una tilde de más deja al usuario cayendo en el perfil de respaldo.
---    Si no lo conoce, entre una vez con ese usuario y búsquelo en el log del API:
---    "Perfil sin mapear: posición '...'; roles ..." — o léalo en la pantalla /unauthorized.
-DECLARE @PosicionSoporteTecnico NVARCHAR(150) = NULL;   -- <-- p. ej. N'Soporte Técnico'
-
-IF @PosicionSoporteTecnico IS NULL
-BEGIN
-    PRINT N'Defina @PosicionSoporteTecnico antes de ejecutar el paso 2. El CHECK ya admite el perfil 4.';
-    RETURN;
-END
+-- 2) Las claves de soporte técnico, tal como las emite AuthManager.
+--
+--    Se registran LAS DOS grafías a propósito. AuthManager envía la posición unas veces con
+--    tilde y otras sin ella, y la colación de esta base (Modern_Spanish_CI_AS) ignora
+--    mayúsculas pero DISTINGUE acentos: para SQL Server son dos claves diferentes. Con una sola
+--    fila, la mitad del equipo entraría por el módulo equivocado y el síntoma sería "a unos les
+--    funciona y a otros no", que es de los más difíciles de perseguir.
+--
+--    La tilde se escribe con NCHAR(233) y no como carácter literal para que la codificación con
+--    la que se ejecute el script no guarde un carácter corrupto que luego no empareje.
+DECLARE @ConTilde NVARCHAR(150) = N'Soporte T' + NCHAR(233) + N'cnico';
+DECLARE @SinTilde NVARCHAR(150) = N'Soporte Tecnico';
 
 MERGE dbo.PerfilesPorPosicion AS destino
-USING (SELECT @PosicionSoporteTecnico AS Posicion, CAST(4 AS TINYINT) AS Perfil) AS origen
+USING (SELECT @ConTilde AS Posicion UNION ALL SELECT @SinTilde) AS origen
     ON destino.Posicion = origen.Posicion
-WHEN MATCHED THEN UPDATE SET Perfil = origen.Perfil
-WHEN NOT MATCHED THEN INSERT (Posicion, Perfil) VALUES (origen.Posicion, origen.Perfil);
-GO
+WHEN MATCHED THEN UPDATE SET Perfil = 4
+WHEN NOT MATCHED THEN INSERT (Posicion, Perfil) VALUES (origen.Posicion, 4);
 
 -- 3) Permisos de soporte técnico. Sin filas aquí el usuario entra sin poder hacer nada y todas
 --    las pantallas responden 403. Se dejan fuera a propósito 'catalogos.administrar' y
 --    'transportes.administrar': administrar el sistema y la flota no es su trabajo.
-DECLARE @PosicionSoporteTecnico NVARCHAR(150) = NULL;   -- <-- el mismo valor del paso 2
-
-IF @PosicionSoporteTecnico IS NULL RETURN;
-
 MERGE dbo.PermisosPorPosicion AS destino
 USING (
-    SELECT @PosicionSoporteTecnico AS Posicion, Permiso
-    FROM (VALUES
+    SELECT p.Posicion, q.Permiso
+    FROM (SELECT @ConTilde AS Posicion UNION ALL SELECT @SinTilde) AS p
+    CROSS JOIN (VALUES
         (N'envios.consultar'),
         (N'envios.crear'),
         (N'envios.editar'),
@@ -56,8 +52,14 @@ USING (
         (N'equipos.gestionar'),
         (N'recepciones.gestionar'),
         (N'incidencias.gestionar')
-    ) AS p(Permiso)
+    ) AS q(Permiso)
 ) AS origen
     ON destino.Posicion = origen.Posicion AND destino.Permiso = origen.Permiso
 WHEN NOT MATCHED THEN INSERT (Posicion, Permiso) VALUES (origen.Posicion, origen.Permiso);
+GO
+
+-- Comprobación: deben salir dos filas con Perfil = 4, y el carácter 10 de una debe ser 233 (é).
+SELECT Posicion, Perfil, UNICODE(SUBSTRING(Posicion, 10, 1)) AS CodigoCaracter10
+FROM dbo.PerfilesPorPosicion
+WHERE Perfil = 4;
 GO

@@ -209,10 +209,17 @@ const routes = [
         redirect: { name: "transportacion-catalogos" },
       },
       {
+        path: "catalogos/filiales",
+        name: "catalogos-filiales",
+        component: () => import("@/views/catalogos/FilialesCatalogo.vue"),
+        meta: { permission: "catalogos.administrar", title: "Filiales" },
+      },
+      {
+        // Filiales es el único catálogo con pantalla; el resto de secciones que existían
+        // llevaban al "módulo en construcción". Cualquier otra URL bajo /catalogos aterriza
+        // aquí en vez de mostrar una pantalla vacía.
         path: "catalogos/:section?",
-        name: "catalogos",
-        component: PlaceholderView,
-        meta: { permission: "catalogos.administrar", title: "Catálogos" },
+        redirect: { name: "catalogos-filiales" },
       },
       {
         path: "administracion/:section?",

@@ -78,6 +78,10 @@ export const useAuthStore = defineStore("auth", () => {
   const perfil = ref(null);
   const perfilNombre = computed(() => perfil.value?.perfil || null);
   const esGlobal = computed(() => perfil.value?.perfil === "Global");
+  // Espeja EsTecnologia() del backend: Global y Tecnologia mandan sobre todo el sistema, y lo
+  // que las separa son las pantallas, no los datos. Sin esto, soporte técnico no veía el botón
+  // de editar un envío en preparación que el backend sí le permite.
+  const mandaEnTodo = computed(() => ["Global", "Tecnologia"].includes(perfil.value?.perfil));
   const esFilial = computed(() => perfil.value?.perfil === "Filial");
   // Dónde aterriza este usuario al entrar: su propio módulo, no el tablero general.
   const moduloInicio = computed(() => inicioDe(perfilNombre.value));
@@ -216,6 +220,7 @@ export const useAuthStore = defineStore("auth", () => {
     perfil,
     perfilNombre,
     esGlobal,
+    mandaEnTodo,
     esFilial,
     moduloInicio,
     puedeFiltrarPorFilial,

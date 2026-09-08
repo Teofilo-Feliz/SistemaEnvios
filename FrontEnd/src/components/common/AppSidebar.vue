@@ -116,14 +116,9 @@ const groups = [
     label: "Catálogos",
     icon: Building2,
     permission: "canManageCatalogs",
-    items: [
-      ...["Filiales", "Ubicaciones", "Tipos de equipos", "Marcas", "Modelos", "Estados"].map(
-        (label) => ({
-          label,
-          to: `/catalogos/${label.toLowerCase().replaceAll(" ", "-")}`,
-        }),
-      ),
-    ],
+    // Solo filiales. Las demás entradas apuntaban a la pantalla de "módulo en construcción":
+    // ofrecían un catálogo que no existía y no había forma de saberlo hasta entrar.
+    items: [{ label: "Filiales", to: "/catalogos/filiales" }],
   },
   {
     key: "admin",

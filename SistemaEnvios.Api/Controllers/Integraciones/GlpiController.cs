@@ -21,11 +21,11 @@ public sealed class GlpiController(IGlpiClient glpi) : ControllerBase
     public Task<IActionResult> ComputadoraExiste(int id, CancellationToken ct) =>
         ExisteAsync("Computer", id, ct);
 
-    
-    [HttpGet("{itemType}/{id:int}/existe")]
-    [Authorize(Policy = PermissionNames.EnviosConsultar)]
-    public Task<IActionResult> ItemExiste(string itemType, int id, CancellationToken ct) =>
-        ExisteAsync(itemType, id, ct);
+    // Aquí había una ruta comodín /{itemType}/{id}/existe. Con solo 'envios.consultar' —que
+    // tienen todos los perfiles— cualquiera podía preguntar por User, Contract, Supplier o
+    // Problem y enumerar la instancia interna de GLPI por id, además de consumir la sesión y el
+    // cortacircuitos que usa la validación real de tickets. El frontend solo llama a 'ticket';
+    // las dos rutas explícitas cubren lo que el sistema necesita.
 
     private async Task<IActionResult> ExisteAsync(string itemType, int id, CancellationToken ct)
     {

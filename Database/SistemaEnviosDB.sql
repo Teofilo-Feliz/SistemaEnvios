@@ -1,26 +1,23 @@
-/*
-    Sistema de Envíos REH
-    Esquema oficial alineado con el modelo EF Core.
-    SQL Server 2019 o superior.
 
-    Este script recrea por completo la base de datos. No debe ejecutarse
-    sobre una base con información que deba conservarse.
-*/
-
+-- Script base de datos ADRTrack. Contiene la estructura de tablas y relaciones, y los datos iniciales de referencia.
+--
+-- ATENCIÓN: este script RECREA la base por completo. Hace DROP DATABASE antes de crearla, así
+-- que ejecutarlo sobre un entorno con datos los borra sin aviso. No lo use para actualizar una
+-- base existente: para eso están los scripts de Database/Migrations.
 USE master;
 GO
 
-IF DB_ID(N'SistemaEnviosDB') IS NOT NULL
+IF DB_ID(N'ADRTrack') IS NOT NULL
 BEGIN
-    ALTER DATABASE SistemaEnviosDB SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-    DROP DATABASE SistemaEnviosDB;
+    ALTER DATABASE ADRTrack SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE ADRTrack;
 END;
 GO
 
-CREATE DATABASE SistemaEnviosDB;
+CREATE DATABASE ADRTrack;
 GO
 
-USE SistemaEnviosDB;
+USE ADRTrack;
 GO
 
 SET ANSI_NULLS ON;

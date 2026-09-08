@@ -48,13 +48,11 @@ public sealed class EnvioService(
 
         // Se comprueban todos contra GLPI antes de tocar la base: si uno no existe, el envío no
         // llega a crearse a medias. Solo los nuevos; los heredados de un caso ya están fuera de
-        // esta lista por construcción.
-        foreach (var ticket in ticketsNuevos)
-        {
-            var enGlpi = await ticketsGlpi.ValidarAsync(ticket!, cancellationToken);
-            if (enGlpi.IsFailure)
-                return Result<EnvioResponse>.Failure(enGlpi.Error!, enGlpi.ErrorType);
-        }
+        // esta lista por construcción. En paralelo y con tope: en serie, tres tickets con GLPI
+        // lento pasaban del minuto y el navegador abandonaba antes.
+        var enGlpi = await ticketsGlpi.ValidarVariosAsync([.. ticketsNuevos!], cancellationToken);
+        if (enGlpi.IsFailure)
+            return Result<EnvioResponse>.Failure(enGlpi.Error!, enGlpi.ErrorType);
         if (userContext.UserId is not Guid usuarioId)
             return Result<EnvioResponse>.Failure("No fue posible identificar al usuario autenticado.", ErrorType.Unauthorized);
         // Todo se arma en memoria y se guarda con un único SaveChanges, que ya es atómico.

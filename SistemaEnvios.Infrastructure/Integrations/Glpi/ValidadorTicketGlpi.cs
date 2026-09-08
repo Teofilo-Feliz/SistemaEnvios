@@ -9,15 +9,60 @@ public sealed class ValidadorTicketGlpi(
     IGlpiClient glpi,
     ILogger<ValidadorTicketGlpi> logger) : IValidadorTicketGlpi
 {
+    /// <summary>
+    /// Tope para comprobar todos los tickets de un envío. Se queda por debajo de los 20 s que
+    /// espera el navegador (axios) a propósito: pasarse significa que el usuario ve un error
+    /// mientras el servidor sigue y termina creando el envío igual.
+    /// </summary>
+    private static readonly TimeSpan Presupuesto = TimeSpan.FromSeconds(10);
+
+    public async Task<Result> ValidarVariosAsync(
+        IReadOnlyCollection<string> numerosTicket, CancellationToken ct = default)
+    {
+        if (numerosTicket is null || numerosTicket.Count == 0) return Result.Success();
+
+        using var limite = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        limite.CancelAfter(Presupuesto);
+
+        try
+        {
+            var resultados = await Task.WhenAll(
+                numerosTicket.Select(x => ValidarAsync(x, limite.Token)));
+            return Array.Find(resultados, x => x.IsFailure) ?? Result.Success();
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // Se agotó el presupuesto, no lo canceló quien llamó. Misma política que una caída de
+            // GLPI: se deja pasar y queda el aviso, porque bloquear aquí pararía la operación de
+            // todas las filiales por una mesa de ayuda lenta.
+            logger.LogWarning(
+                "La comprobación de {Cuantos} ticket(s) contra GLPI superó los {Segundos}s. Se dejan pasar sin validar.",
+                numerosTicket.Count, Presupuesto.TotalSeconds);
+            return Result.Success();
+        }
+    }
+
     public async Task<Result> ValidarAsync(string numeroTicket, CancellationToken ct = default)
     {
         var ticket = numeroTicket?.Trim();
         // El formato ya lo cubren los validadores de cada request; esto es la red de abajo, para
         // que un llamador nuevo no termine pidiéndole a GLPI un id que no es un número.
+        if (!NumeroTicket.EsValido(ticket))
+        {
+            return Result.Failure(NumeroTicket.MensajeFormato, ErrorType.Validation);
+        }
+
+        // El campo admite hasta 50 dígitos pero un id de GLPI es un entero: un número más largo
+        // no puede existir allá. Antes esto se colaba como "no es un número entero positivo",
+        // un mensaje que no describía la restricción real. Se trata como los demás fallos de la
+        // integración —se deja pasar y se avisa— en vez de bloquear el envío por un formato que
+        // los validadores sí aceptan.
         if (!int.TryParse(ticket, out var id) || id <= 0)
         {
-            return Result.Failure(
-                "El número de ticket debe ser un número entero positivo.", ErrorType.Validation);
+            logger.LogWarning(
+                "El ticket {Ticket} no cabe en un id de GLPI, así que no se pudo verificar. Se deja pasar.",
+                ticket);
+            return Result.Success();
         }
 
         var resultado = await glpi.ItemExistsAsync("Ticket", id, ct);

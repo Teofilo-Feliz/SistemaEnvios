@@ -45,8 +45,10 @@ public sealed class EdicionTicketHeredadoTests
     }
 
     [Fact]
-    public async Task LaContinuacionNoCambiaDeTicketAunqueSeEnvieOtro()
+    public async Task IntentarCambiarleElTicketAUnaContinuacionSeRechaza()
     {
+        // Antes se ignoraba en silencio y se devolvía éxito: el usuario corregía el ticket, veía
+        // "guardado" y al recargar seguía igual, sin explicación.
         await using var db = CrearContexto();
         var (apertura, continuacion) = await SembrarAsync(db);
 
@@ -57,7 +59,8 @@ public sealed class EdicionTicketHeredadoTests
             Observaciones = "Intento de cambiarle el ticket a la devolución.",
         });
 
-        Assert.True(resultado.IsSuccess, resultado.Error);
+        Assert.True(resultado.IsFailure);
+        Assert.Equal(ErrorType.Validation, resultado.ErrorType);
         Assert.Equal(apertura.NumeroTicket,
             (await db.EnvioEquipos.FindAsync(continuacion.EnvioEquipoId))!.NumeroTicket);
     }

@@ -185,6 +185,15 @@ public sealed class EnvioEquipoService(
         var esApertura = detalle.EnvioEquipoOrigenId is null;
         var ticket = esApertura ? request.NumeroTicket.Trim() : detalle.NumeroTicket;
 
+        // Una continuación conserva el ticket de su caso, pero antes se ignoraba en silencio lo
+        // que viniera en la solicitud y se devolvía éxito: el usuario corregía el ticket, veía
+        // "guardado" y al recargar seguía igual, sin explicación. Mejor decirlo.
+        if (!esApertura && request.NumeroTicket.Trim() != detalle.NumeroTicket)
+            return Result.Failure(
+                "El ticket de un equipo devuelto es el del caso que lo abrió y no se cambia aquí: " +
+                "el equipo vuelve a la filial con el mismo ticket con que llegó.",
+                ErrorType.Validation);
+
         if (esApertura)
         {
             // Solo las aperturas estrenan un ticket, así que la comparación va contra ellas.

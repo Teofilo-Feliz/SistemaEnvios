@@ -27,6 +27,10 @@ export const catalogoService = {
   allInternalDrivers: (params = {}) =>
     todasLasPaginas((p) => api.get("/choferes-internos", { params: { ...params, ...p } })),
 
+  createLocation: (data) => api.post("/ubicaciones", data),
+  updateLocation: (id, data) => api.put(`/ubicaciones/${id}`, data),
+  toggleLocation: (id, activo) => api.patch(`/ubicaciones/${id}/activo`, { activo }),
+
   createTransportType: (data) => api.post("/tipos-transporte", data),
   updateTransportType: (id, data) => api.put(`/tipos-transporte/${id}`, data),
   toggleTransportType: (id, activo) => api.patch(`/tipos-transporte/${id}/activo`, { activo }),

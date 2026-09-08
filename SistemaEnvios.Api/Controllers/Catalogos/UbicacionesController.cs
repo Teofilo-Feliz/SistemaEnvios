@@ -47,7 +47,11 @@ public sealed class UbicacionesController(IUbicacionService service) : Controlle
             UbicacionId = ubicacionId,
             Nombre = request.Nombre,
             CodigoCentro = request.CodigoCentro,
-            Tipo = request.Tipo
+            Tipo = request.Tipo,
+            // Sin copiarlo, el validador —que exige el id de AuthManager en una filial— fallaba
+            // siempre y editar una filial era imposible. El servicio no lo escribe: solo lo
+            // compara contra el guardado para rechazar un intento de re-apuntarla.
+            FilialExternaId = request.FilialExternaId
         };
         return (await service.ActualizarAsync(command, cancellationToken)).ToActionResult(this);
     }

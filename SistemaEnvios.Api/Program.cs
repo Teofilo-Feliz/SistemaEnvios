@@ -89,39 +89,54 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 app.UseCors("Frontend");
 app.UseAuthentication();
-// Sin audiencia configurada el API queda abierto a tokens de otras aplicaciones. No se puede
-// adivinar el valor, así que se registra el que traen los tokens que sí entran: con eso se
-// llena 'Authentication:Audiences' y el aviso desaparece.
-if (!AudienciaToken.EstaValidada(app.Configuration))
+
+// AuthManager firma con la misma llave los tokens de toda la institución, así que validar solo
+// el emisor deja entrar el token de RRHH igual que el propio. Se comprobó contra la instancia
+// real: NO emite el claim "aud" para este cliente, de modo que 'Authentication:Audiences' no
+// sirve —configurarla rechazaría todos los tokens—. Lo que sí viaja es "client_id", que
+// identifica la aplicación para la que se emitió el token. Es por ahí por donde se cierra.
+var clientesAdmitidos = ClienteToken.Configurados(app.Configuration);
+if (clientesAdmitidos.Length > 0)
+{
+    app.Use(async (context, next) =>
+    {
+        if (context.User.Identity?.IsAuthenticated == true &&
+            !ClienteToken.Autorizado(context.User, clientesAdmitidos))
+        {
+            // Se registra el client_id visto —no es un secreto, identifica a la aplicación y no
+            // a la persona— porque si esta lista se configura mal, el síntoma es "nadie entra"
+            // y sin esta línea no habría forma de saber qué valor poner.
+            var vistos = ClienteToken.DelPrincipal(context.User);
+            app.Logger.LogWarning(
+                "Token rechazado: fue emitido para {Cliente}, que no está en '{Seccion}'.",
+                vistos.Count == 0 ? "(sin client_id)" : string.Join(", ", vistos), ClienteToken.Seccion);
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+        await next();
+    });
+}
+else
 {
     app.Logger.LogWarning(
-        "La audiencia del token no está validada: este API acepta cualquier token emitido por {Emisor}, incluidos los de otras aplicaciones. Configure '{Seccion}'.",
-        app.Configuration["Authentication:Authority"], AudienciaToken.Seccion);
+        "El API acepta cualquier token emitido por {Emisor}, incluidos los de otras aplicaciones de la institución. Configure '{Seccion}' con el client_id de esta aplicación.",
+        app.Configuration["Authentication:Authority"], ClienteToken.Seccion);
+}
+
+// Descubrimiento de la audiencia. Se conserva por si algún día AuthManager empieza a emitirla:
+// entonces se podría validar también por ahí, que es lo estándar.
+if (!AudienciaToken.EstaValidada(app.Configuration))
+{
     var audienciasVistas = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
-    var sinAudienciaVisto = 0;
     app.Use(async (context, next) =>
     {
         if (context.User.Identity?.IsAuthenticated == true)
         {
-            var audiencias = AudienciaToken.DelPrincipal(context.User);
-            foreach (var audiencia in audiencias)
+            foreach (var audiencia in AudienciaToken.DelPrincipal(context.User))
                 if (audienciasVistas.TryAdd(audiencia, 0))
-                    app.Logger.LogWarning(
-                        "Token aceptado con audiencia '{Audiencia}'. Agréguela a '{Seccion}' para que el API deje de aceptar tokens de otras aplicaciones.",
+                    app.Logger.LogInformation(
+                        "El token ahora trae audiencia '{Audiencia}'. Puede validarse también por '{Seccion}'.",
                         audiencia, AudienciaToken.Seccion);
-
-            // Un token sin audiencia no se puede validar por audiencia: configurarla dejaría
-            // fuera a todo el mundo. Cuando pasa, lo que hace falta saber es qué claims trae
-            // realmente, para ver si viene con otro nombre o si AuthManager no la emite.
-            // Solo los NOMBRES de los claims: los valores identifican a la persona.
-            if (audiencias.Count == 0 && Interlocked.Exchange(ref sinAudienciaVisto, 1) == 0)
-            {
-                var tipos = context.User.Claims.Select(x => x.Type).Distinct(StringComparer.Ordinal).Order();
-                app.Logger.LogWarning(
-                    "Token aceptado SIN audiencia. Claims presentes: {Claims}. Si 'aud' no aparece, " +
-                    "AuthManager no la emite para este cliente y configurar '{Seccion}' rechazaría todos los tokens.",
-                    string.Join(", ", tipos), AudienciaToken.Seccion);
-            }
         }
         await next();
     });

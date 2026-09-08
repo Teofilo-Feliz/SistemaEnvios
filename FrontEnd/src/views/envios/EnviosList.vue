@@ -30,7 +30,7 @@ const locations = ref([]);
 const filialSeleccionada = ref("");
 const filiales = computed(() => locations.value.filter((x) => x.tipo === 1 || x.tipo === "Filial"));
 const alcanceTexto = computed(() => {
-  if (auth.esGlobal) {
+  if (auth.mandaEnTodo) {
     const filial = filiales.value.find(
       (x) => String(x.ubicacionId) === String(filialSeleccionada.value),
     );
@@ -79,7 +79,7 @@ function stateCode(id) {
 }
 function puedeEditar(item) {
   const codigo = stateCode(item.estadoEnvioId);
-  if (codigo === "PREPARACION_TECNOLOGIA") return auth.esGlobal;
+  if (codigo === "PREPARACION_TECNOLOGIA") return auth.mandaEnTodo;
   return codigo === "EN_FILIAL";
 }
 function mapRow(item) {

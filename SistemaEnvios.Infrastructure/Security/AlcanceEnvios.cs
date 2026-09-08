@@ -188,7 +188,7 @@ public sealed class AlcanceEnvios(
         registro.LogWarning(
             "Perfil sin mapear: posición '{Posicion}'; roles {Roles}. Se aplicó el respaldo {Respaldo}, " +
             "así que este usuario aterriza en el módulo equivocado. Inserte la clave exacta en " +
-            "dbo.PerfilesPorPosicion (Perfil: 1=Global, 2=Transportacion, 3=Filial).",
+            "dbo.PerfilesPorPosicion (Perfil: 1=Global, 2=Transportacion, 3=Filial, 4=Tecnologia).",
             posicion, partesRoles, respaldo);
     }
 

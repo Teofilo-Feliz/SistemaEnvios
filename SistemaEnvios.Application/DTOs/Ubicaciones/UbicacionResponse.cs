@@ -7,4 +7,5 @@ public sealed record UbicacionResponse(
     string Nombre,
     string CodigoCentro,
     TipoUbicacionEnum Tipo,
-    bool Activo);
+    bool Activo,
+    int? FilialExternaId);

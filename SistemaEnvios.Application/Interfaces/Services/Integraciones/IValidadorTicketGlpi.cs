@@ -18,4 +18,15 @@ public interface IValidadorTicketGlpi
     /// mesa de ayuda no puede detener la creación de envíos en todas las filiales.
     /// </summary>
     Task<Result> ValidarAsync(string numeroTicket, CancellationToken ct = default);
+
+    /// <summary>
+    /// Valida varios tickets a la vez y devuelve el primer rechazo.
+    /// </summary>
+    /// <remarks>
+    /// Existe porque en serie no cabían: cada consulta admite hasta 45 s entre reintentos y el
+    /// navegador abandona a los 20 s. Con tres tickets el usuario veía un error mientras el
+    /// servidor seguía trabajando y acababa creando el envío, así que al reintentar lo duplicaba
+    /// o chocaba con "el ticket ya fue utilizado". Aquí van en paralelo y bajo un tope común.
+    /// </remarks>
+    Task<Result> ValidarVariosAsync(IReadOnlyCollection<string> numerosTicket, CancellationToken ct = default);
 }
