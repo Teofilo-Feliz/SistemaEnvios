@@ -1,0 +1,35 @@
+# Node
+**/node_modules
+FrontEnd/dist
+
+# .NET
+**/bin
+**/obj
+SistemaEnvios.Tests/
+
+# Solo el .env local, que apunta a localhost y a QA: Vite lo carga en todos los modos, así que
+# dentro de la imagen enmascararía un BUILD_MODE mal escrito en vez de dejar fallar el build.
+# Los .env.development, .env.qa y .env.production SÍ entran: son la configuración del build.
+FrontEnd/.env
+
+# appsettings.Development.json SÍ entra: es el que usa el despliegue de QA, que corre con
+# ASPNETCORE_ENVIRONMENT=Development. Excluirlo dejaría a QA sin emisor y sin arrancar.
+
+# Herramientas y ruido
+.git
+.gitignore
+.gitattributes
+# El pipeline no se construye dentro de la imagen, y si entra al contexto cada cambio suyo
+# invalida la caché de capas de un build que no depende de él.
+.teamcity
+.vs
+.vscode
+*.user
+*.log
+Dockerfile
+.dockerignore
+docker-stack.yml
+
+# No se despliegan con la aplicación: se aplican una vez contra el servidor de base de datos.
+Database/
+README.md

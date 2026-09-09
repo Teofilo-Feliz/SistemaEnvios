@@ -1,0 +1,60 @@
+version: "3.8"
+
+services:
+  app:
+    image: ${APP_IMAGE}
+    environment:
+      # Solo hay dos: Development (que usa el despliegue de QA) y Production. El default es
+      # Production porque es el que no se puede equivocar: sin la variable, un despliegue
+      # caeria en Development y validaria los tokens contra el AuthManager de QA. Debe
+      # coincidir en mayusculas con el nombre del archivo; en Linux distingue.
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
+      # Solo secretos. El emisor y el client_id viven en appsettings.Development.json y
+      # appsettings.Production.json: las variables de entorno tienen mayor precedencia que los
+      # archivos, así que declararlas aquí anularía esa segmentación, y sin exportarlas se
+      # expanden a cadena vacía y tumban el arranque.
+      - ConnectionStrings__SistemaEnvios=${SISTEMA_ENVIOS_CONNECTION}
+      - Glpi__AppToken=${GLPI_APP_TOKEN}
+      - Glpi__Username=${GLPI_USERNAME}
+      - Glpi__Password=${GLPI_PASSWORD}
+      - TZ=America/Santo_Domingo
+    volumes:
+      - dataprotection-keys:/app/.aspnet/DataProtection-Keys
+    deploy:
+      replicas: ${REPLICAS:-2}
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 15s
+        order: start-first
+        failure_action: rollback
+        monitor: 45s
+      rollback_config:
+        parallelism: 0
+        delay: 0s
+        order: stop-first
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1024M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    networks:
+      - adr_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  dataprotection-keys:
+    driver: local
+
+networks:
+  adr_network:
+    external: true

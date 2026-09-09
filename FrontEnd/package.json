@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:qa": "vite build --mode qa",
     "preview": "vite preview",
     "format": "prettier --write \"src/**/*.{vue,js}\" \"*.js\"",
     "format:check": "prettier --check \"src/**/*.{vue,js}\" \"*.js\""

@@ -5,10 +5,21 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>SistemaEnvios.Api-ADR</UserSecretsId>
+    <!-- El frontend se publica dentro de este proyecto: un solo artefacto, un solo origen.
+         El Dockerfile lo deja vacío (/p:SpaRoot="") porque allá el SPA ya viene compilado de
+         su propia etapa, y así la imagen del SDK no necesita tener Node instalado. -->
+    <SpaRoot>..\FrontEnd\</SpaRoot>
+    <!-- En Development, SpaProxy levanta Vite en SpaRoot y espera a que responda antes de
+         soltar el navegador. Es lo que hace que F5 arranque los dos procesos y no solo el API.
+         El puerto es el mismo que fija vite.config.js y el que ya permite el CORS de
+         appsettings.Development.json; si se cambia uno hay que cambiar los tres. -->
+    <SpaProxyServerUrl>http://localhost:5173</SpaProxyServerUrl>
+    <SpaProxyLaunchCommand>npm run dev</SpaProxyLaunchCommand>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.SpaProxy" Version="10.0.11" />
     <PackageReference Include="OpenIddict.Validation.AspNetCore" Version="7.5.0" />
     <PackageReference Include="OpenIddict.Validation.SystemNetHttp" Version="7.5.0" />
   </ItemGroup>
@@ -17,5 +28,21 @@
     <ProjectReference Include="..\SistemaEnvios.Application\SistemaEnvios.Application.csproj" />
     <ProjectReference Include="..\SistemaEnvios.Infrastructure\SistemaEnvios.Infrastructure.csproj" />
   </ItemGroup>
+
+  <!-- Solo en publish: 'dotnet build' y 'dotnet test' no dependen de tener Node, y en
+       desarrollo el frontend se sirve desde Vite en el 5173 contra el CORS de
+       appsettings.Development.json. -->
+  <Target Name="CompilarSpa" AfterTargets="ComputeFilesToPublish" Condition="'$(SpaRoot)' != ''">
+    <Exec Command="npm ci" WorkingDirectory="$(SpaRoot)" Condition="!Exists('$(SpaRoot)node_modules')" />
+    <Exec Command="npm run build" WorkingDirectory="$(SpaRoot)" />
+    <ItemGroup>
+      <ArchivosSpa Include="$(SpaRoot)dist\**" />
+      <ResolvedFileToPublish Include="@(ArchivosSpa->'%(FullPath)')" Exclude="@(ResolvedFileToPublish)">
+        <RelativePath>wwwroot\%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
 
 </Project>
