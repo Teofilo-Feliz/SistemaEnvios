@@ -4,6 +4,29 @@
 -- ATENCIÓN: este script RECREA la base por completo. Hace DROP DATABASE antes de crearla, así
 -- que ejecutarlo sobre un entorno con datos los borra sin aviso. No lo use para actualizar una
 -- base existente: para eso están los scripts de Database/Migrations.
+--
+-- ---------------------------------------------------------------------------------------------
+-- ORDEN DE EJECUCIÓN para levantar un entorno nuevo. Los tres, en este orden:
+--
+--   1. Database/SistemaEnviosDB.sql              <- este archivo. Estructura y datos de
+--                                                   referencia, incluidos los accesos por
+--                                                   posición. Termina comprobándose a sí mismo.
+--   2. Migrations/20260908_UsuarioDelApi.sql     <- el login del servidor y el usuario de la
+--                                                   base con que se conecta el API. Va después
+--                                                   porque la base tiene que existir, y aparte
+--                                                   porque el login vive fuera de ella y no lo
+--                                                   arrastra el DROP DATABASE de arriba.
+--                                                   CAMBIE LA CONTRASEÑA antes de ejecutarlo.
+--   3. Migrations/20260902_PermisosBaseDatos.sql <- quita al usuario del API la escritura sobre
+--                                                   las tablas de autoridad. Va al final porque
+--                                                   necesita que ese usuario ya exista.
+--
+-- Las demás migraciones NO hacen falta en una base nueva: reparan bases ya creadas. Sus datos
+-- ya están en los INSERT de este archivo.
+--
+-- Si el paso 1 termina con un error rojo en vez de "Comprobacion final OK", la base quedó
+-- incompleta. Léalo: dice exactamente qué fila falta. No siga a los pasos 2 y 3.
+-- ---------------------------------------------------------------------------------------------
 USE master;
 GO
 
@@ -688,4 +711,125 @@ GO
 
 INSERT INTO dbo.TiposEquipo (Nombre, Activo)
 VALUES (N'Laptop', 1), (N'Computadora de escritorio', 1), (N'Monitor', 1), (N'Impresora', 1), (N'Otro', 1);
+GO
+
+/* ============================================================================
+   COMPROBACIÓN FINAL — no la borre ni la salte
+
+   Existe por un incidente concreto. El CHECK de PerfilesPorPosicion se amplió
+   para admitir el perfil 4 (soporte técnico) y el bloque de INSERT de más arriba
+   no se actualizó: la base nacía soportando el perfil y sin sus datos. Nada falló
+   al crearla. El síntoma apareció semanas después, en producción de QA, como un
+   mensaje que hablaba de ubicaciones sin mapear y no de una fila que faltaba.
+
+   Esa es la forma que tienen de fallar estas tablas: en silencio y tarde. Un
+   usuario sin fila no recibe un error, cae al respaldo "tiene affiliate, luego es
+   Filial" y aterriza en el módulo equivocado con los datos de otro alcance.
+
+   Por eso el script se comprueba a sí mismo antes de darse por bueno. Todo va en
+   un solo lote (sin GO) porque @Problemas es una variable de tabla.
+   ============================================================================ */
+DECLARE @Problemas TABLE (Comprobacion NVARCHAR(70), Detalle NVARCHAR(400));
+
+-- 1) El acceso vive en DOS tablas y hacen cosas distintas: PermisosPorPosicion dice QUÉ puede
+--    hacer y PerfilesPorPosicion dice SOBRE CUÁLES envíos. Tener la fila en una sola es el peor
+--    estado posible, porque no se parece a un fallo de configuración:
+--
+--      * permisos sin perfil -> entra, el menú se ve bien, y su alcance es el equivocado.
+--      * perfil sin permisos -> entra al módulo correcto y todas las pantallas responden 403.
+INSERT INTO @Problemas
+SELECT N'Posicion con permisos pero sin perfil', pp.Posicion
+FROM (SELECT DISTINCT Posicion FROM dbo.PermisosPorPosicion) AS pp
+LEFT JOIN dbo.PerfilesPorPosicion AS pf ON pf.Posicion = pp.Posicion
+WHERE pf.Posicion IS NULL;
+
+INSERT INTO @Problemas
+SELECT N'Posicion con perfil pero sin permisos', pf.Posicion
+FROM dbo.PerfilesPorPosicion AS pf
+LEFT JOIN dbo.PermisosPorPosicion AS pp ON pp.Posicion = pf.Posicion
+WHERE pp.Posicion IS NULL;
+
+-- 2) Cada perfil que el CHECK admite tiene que tener al menos una posición. Esta es exactamente
+--    la comprobación que habría atrapado el incidente el día que se escribió, en vez de semanas
+--    después: ampliar el CHECK y olvidar el INSERT deja de pasar desapercibido.
+INSERT INTO @Problemas
+SELECT N'Perfil admitido por el CHECK y sin ninguna posicion',
+       N'Perfil ' + CAST(p.Perfil AS NVARCHAR(3)) + N' (1=Global, 2=Transportacion, 3=Filial, 4=Tecnologia)'
+FROM (VALUES (1), (2), (3), (4)) AS p(Perfil)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.PerfilesPorPosicion x WHERE x.Perfil = p.Perfil);
+
+-- 3) Un permiso mal escrito no otorga nada y no avisa: PermisosPorPosicionTransformation
+--    descarta del token lo que no reconoce, así que 'envios.consutar' se comporta igual que no
+--    haber puesto la fila. Esta lista es la de PermissionNames.cs y debe moverse con ella.
+INSERT INTO @Problemas
+SELECT N'Permiso que no existe en PermissionNames.cs', pp.Permiso
+FROM (SELECT DISTINCT Permiso FROM dbo.PermisosPorPosicion) AS pp
+WHERE pp.Permiso NOT IN (
+    N'envios.consultar', N'envios.crear', N'envios.editar', N'envios.despachar',
+    N'equipos.gestionar', N'recepciones.gestionar', N'incidencias.gestionar',
+    N'transportes.gestionar', N'transportes.confirmar', N'transportes.administrar',
+    N'catalogos.administrar');
+
+-- 4) Una clave con un espacio de sobra se ve idéntica en pantalla y no empareja nunca, porque el
+--    código compara contra el claim ya pasado por Trim().
+--
+--    Se compara por DATALENGTH y no con <>: SQL Server ignora los espacios finales al comparar
+--    cadenas, así que 'Programador Senior ' <> 'Programador Senior' da FALSO y el problema pasa
+--    de largo. Por lo mismo la clave primaria tampoco protege —las dos filas le parecen la misma
+--    y aun así entran—, y esta comprobación es lo único que lo detecta.
+INSERT INTO @Problemas
+SELECT N'Posicion con espacios sobrantes', N'[' + Posicion + N']'
+FROM dbo.PerfilesPorPosicion WHERE DATALENGTH(Posicion) <> DATALENGTH(LTRIM(RTRIM(Posicion)))
+UNION ALL
+SELECT N'Permiso con espacios sobrantes', N'[' + Permiso + N']'
+FROM dbo.PermisosPorPosicion WHERE DATALENGTH(Permiso) <> DATALENGTH(LTRIM(RTRIM(Permiso)))
+UNION ALL
+SELECT N'Posicion con espacios sobrantes', N'[' + Posicion + N']'
+FROM dbo.PermisosPorPosicion WHERE DATALENGTH(Posicion) <> DATALENGTH(LTRIM(RTRIM(Posicion)));
+
+-- 5) FilialExternaId es la otra llave del alcance: cruza el claim "affiliate" con la ubicación.
+--    Una filial sin él no la alcanza nadie, y el fallo tampoco aparece al crearla sino el día que
+--    entra alguien de esa filial. Tecnología es la excepción y va sin id a propósito: lleva el
+--    30 en AuthManager, y usarlo aquí le daría alcance de filial a toda la sede.
+INSERT INTO @Problemas
+SELECT N'Filial sin FilialExternaId (no la alcanza nadie)', Nombre + N' / ' + CodigoCentro
+FROM dbo.Ubicaciones WHERE Tipo = 1 AND FilialExternaId IS NULL;
+
+INSERT INTO @Problemas
+SELECT N'Ubicacion de Tecnologia con FilialExternaId', Nombre + N' / ' + CodigoCentro
+FROM dbo.Ubicaciones WHERE Tipo = 2 AND FilialExternaId IS NOT NULL;
+
+INSERT INTO @Problemas
+SELECT N'Debe existir exactamente una ubicacion de Tecnologia',
+       N'Encontradas: ' + CAST(COUNT(*) AS NVARCHAR(10))
+FROM dbo.Ubicaciones WHERE Tipo = 2
+HAVING COUNT(*) <> 1;
+
+/* ------------------------------- Resultado ------------------------------- */
+
+SELECT N'Ubicaciones'          AS Tabla, COUNT(*) AS Filas FROM dbo.Ubicaciones
+UNION ALL SELECT N'EstadosEnvio',        COUNT(*) FROM dbo.EstadosEnvio
+UNION ALL SELECT N'TransicionesEstado',  COUNT(*) FROM dbo.TransicionesEstadoEnvio
+UNION ALL SELECT N'TiposTransporte',     COUNT(*) FROM dbo.TiposTransporte
+UNION ALL SELECT N'TiposEquipo',         COUNT(*) FROM dbo.TiposEquipo
+UNION ALL SELECT N'PerfilesPorPosicion', COUNT(*) FROM dbo.PerfilesPorPosicion
+UNION ALL SELECT N'PermisosPorPosicion', COUNT(*) FROM dbo.PermisosPorPosicion;
+
+SELECT Posicion,
+       CASE Perfil WHEN 1 THEN N'Global' WHEN 2 THEN N'Transportacion'
+                   WHEN 3 THEN N'Filial' WHEN 4 THEN N'Tecnologia' END AS Perfil,
+       (SELECT COUNT(*) FROM dbo.PermisosPorPosicion p WHERE p.Posicion = pf.Posicion) AS Permisos,
+       -- Con tilde debe salir 233 en el carácter 10 y sin ella 101. Si sale otro número, el
+       -- archivo se ejecutó con una codificación que corrompió la clave y no emparejará jamás.
+       UNICODE(SUBSTRING(Posicion, 10, 1)) AS Caracter10
+FROM dbo.PerfilesPorPosicion pf
+ORDER BY Perfil, Posicion;
+
+IF EXISTS (SELECT 1 FROM @Problemas)
+BEGIN
+    SELECT Comprobacion, Detalle FROM @Problemas ORDER BY Comprobacion, Detalle;
+    RAISERROR(N'La base quedó creada pero INCOMPLETA. Revise la lista de arriba: cada fila es un acceso que fallará en silencio, no al arrancar. Corrija los INSERT de este script y vuelva a ejecutarlo.', 16, 1);
+END
+ELSE
+    PRINT N'Comprobacion final OK: cada posicion tiene perfil y permisos, cada perfil del CHECK esta poblado, y el mapeo de filiales esta completo.';
 GO
