@@ -118,7 +118,11 @@ var app = builder.Build();
 app.UseForwardedHeaders();
 app.UseExceptionHandler();
 // Antes que nada, para que también viajen en las respuestas de error y en las de health.
-app.Use(async (context, next) => { CabecerasSeguridad.Aplicar(context); await next(); });
+//
+// La política del SPA solo se arma cuando este proceso sirve el SPA. Si no lo sirve, todo
+// conserva la del API, que prohíbe cargar cualquier cosa: es lo correcto para JSON.
+var cspSpa = sirveSpa ? CabecerasSeguridad.PoliticaSpa(emisor) : null;
+app.Use(async (context, next) => { CabecerasSeguridad.Aplicar(context, cspSpa); await next(); });
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

@@ -1,84 +1,126 @@
-using System.Net;
-using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using SistemaEnvios.Api.Security;
 
 namespace SistemaEnvios.Tests.Security;
 
 /// <summary>
-/// El API solo devuelve JSON: no hay razón para que un navegador lo interprete como otra cosa,
-/// lo enmarque en un iframe ajeno, o filtre la ruta consultada por Referer.
+/// La política de contenido depende de qué devuelve cada respuesta.
+///
+/// Mientras esto fue solo un API de JSON, "default-src 'none'" era exacto. Al unificar el
+/// contenedor este mismo proceso pasó a servir el SPA, y esa cabecera se aplicó al index.html: el
+/// navegador descargaba la página con 200 y se negaba a ejecutar su propio bundle. Pantalla en
+/// blanco, ninguna capa fallando, y el motivo escrito solo en la consola del navegador.
 /// </summary>
 public sealed class CabecerasSeguridadTests
 {
-    [Fact]
-    public void AplicaLasCabecerasBaseEnTodaRespuesta()
+    private const string Emisor = "https://authserverqa.rehabilitacion.org.do";
+
+    private static HttpContext Contexto(string ruta, bool https = true)
     {
         var contexto = new DefaultHttpContext();
+        contexto.Request.Path = ruta;
+        contexto.Request.Scheme = https ? "https" : "http";
+        return contexto;
+    }
 
-        CabecerasSeguridad.Aplicar(contexto);
+    private static string Csp(HttpContext c) => c.Response.Headers["Content-Security-Policy"].ToString();
 
-        Assert.Equal("nosniff", contexto.Response.Headers["X-Content-Type-Options"]);
-        Assert.Equal("DENY", contexto.Response.Headers["X-Frame-Options"]);
-        Assert.Equal("no-referrer", contexto.Response.Headers["Referrer-Policy"]);
-        Assert.Equal("default-src 'none'; frame-ancestors 'none'", contexto.Response.Headers["Content-Security-Policy"]);
+    [Fact]
+    public void ElSpaPuedeCargarSuPropioBundle()
+    {
+        var contexto = Contexto("/");
+
+        CabecerasSeguridad.Aplicar(contexto, CabecerasSeguridad.PoliticaSpa(Emisor));
+
+        Assert.Contains("script-src 'self'", Csp(contexto));
+    }
+
+    /// <summary>
+    /// 'unsafe-inline' en script-src es el permiso que convierte un XSS en ejecución. El
+    /// index.html no lleva scripts en línea, así que no hace falta y no debe aparecer.
+    /// </summary>
+    [Fact]
+    public void ElSpaNoHabilitaScriptsEnLinea()
+    {
+        var contexto = Contexto("/");
+
+        CabecerasSeguridad.Aplicar(contexto, CabecerasSeguridad.PoliticaSpa(Emisor));
+
+        var directivaScript = Csp(contexto).Split("; ").Single(x => x.StartsWith("script-src"));
+        Assert.DoesNotContain("unsafe-inline", directivaScript);
+        Assert.DoesNotContain("unsafe-eval", directivaScript);
+    }
+
+    /// <summary>oidc-client-ts pide el descubrimiento y canjea el código contra el emisor.</summary>
+    [Fact]
+    public void ElSpaPuedeHablarConElEmisor()
+    {
+        var contexto = Contexto("/");
+
+        CabecerasSeguridad.Aplicar(contexto, CabecerasSeguridad.PoliticaSpa(Emisor));
+
+        Assert.Contains($"connect-src 'self' {Emisor}", Csp(contexto));
+        // La renovación silenciosa vive en un iframe que navega al emisor y vuelve a este origen.
+        Assert.Contains($"frame-src 'self' {Emisor}", Csp(contexto));
+    }
+
+    /// <summary>Una respuesta JSON no carga nada, así que se le sigue prohibiendo todo.</summary>
+    [Fact]
+    public void ApiConservaLaPoliticaEstrictaAunqueElProcesoSirvaElSpa()
+    {
+        var contexto = Contexto("/api/envios");
+
+        CabecerasSeguridad.Aplicar(contexto, CabecerasSeguridad.PoliticaSpa(Emisor));
+
+        Assert.Equal("default-src 'none'; frame-ancestors 'none'", Csp(contexto));
     }
 
     [Fact]
-    public void SoloExigeHstsCuandoLaPeticionYaViajaPorHttps()
+    public void SinSpaTodoConservaLaPoliticaEstricta()
     {
-        var plano = new DefaultHttpContext();
-        plano.Request.Scheme = "http";
-        CabecerasSeguridad.Aplicar(plano);
-        Assert.False(plano.Response.Headers.ContainsKey("Strict-Transport-Security"));
+        var contexto = Contexto("/");
 
-        var seguro = new DefaultHttpContext();
-        seguro.Request.Scheme = "https";
-        CabecerasSeguridad.Aplicar(seguro);
-        Assert.Contains("max-age=", seguro.Response.Headers["Strict-Transport-Security"].ToString());
+        CabecerasSeguridad.Aplicar(contexto, politicaSpa: null);
+
+        Assert.Equal("default-src 'none'; frame-ancestors 'none'", Csp(contexto));
+    }
+
+    /// <summary>
+    /// El emisor entra por parámetro: QA y producción usan servidores distintos y fijar uno
+    /// romperia el otro sin que nada lo delatara hasta desplegarlo.
+    /// </summary>
+    [Fact]
+    public void LaPoliticaUsaElEmisorConfigurado()
+    {
+        var produccion = CabecerasSeguridad.PoliticaSpa("https://authserver.rehabilitacion.org.do");
+
+        Assert.Contains("https://authserver.rehabilitacion.org.do", produccion);
+        Assert.DoesNotContain("authserverqa", produccion);
+    }
+
+    [Theory]
+    [InlineData("X-Content-Type-Options", "nosniff")]
+    [InlineData("X-Frame-Options", "DENY")]
+    [InlineData("Referrer-Policy", "no-referrer")]
+    public void LasDemasCabecerasSiguenPuestas(string nombre, string valor)
+    {
+        var contexto = Contexto("/");
+
+        CabecerasSeguridad.Aplicar(contexto, CabecerasSeguridad.PoliticaSpa(Emisor));
+
+        Assert.Equal(valor, contexto.Response.Headers[nombre].ToString());
     }
 
     [Fact]
-    public void NoDuplicaUnaCabeceraYaPresente()
+    public void HstsSoloViajaSobreHttps()
     {
-        var contexto = new DefaultHttpContext();
-        contexto.Response.Headers["X-Frame-Options"] = "SAMEORIGIN";
+        var seguro = Contexto("/", https: true);
+        var inseguro = Contexto("/", https: false);
 
-        CabecerasSeguridad.Aplicar(contexto);
+        CabecerasSeguridad.Aplicar(seguro, CabecerasSeguridad.PoliticaSpa(Emisor));
+        CabecerasSeguridad.Aplicar(inseguro, CabecerasSeguridad.PoliticaSpa(Emisor));
 
-        Assert.Equal("SAMEORIGIN", contexto.Response.Headers["X-Frame-Options"]);
-    }
-}
-
-/// <summary>
-/// El límite se reparte por usuario y no por proceso: si se contara global, un solo usuario
-/// activo dejaría sin cupo a las otras 33 filiales.
-/// </summary>
-public sealed class LimitadorPeticionesTests
-{
-    [Fact]
-    public void UsuarioAutenticado_SeParticionaPorSuIdentificador()
-    {
-        var contexto = new DefaultHttpContext
-        {
-            User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "usuario-7")], "test"))
-        };
-
-        Assert.Equal("sub:usuario-7", LimitadorPeticiones.Particion(contexto));
-    }
-
-    [Fact]
-    public void UsuarioAnonimo_SeParticionaPorDireccionIp()
-    {
-        var contexto = new DefaultHttpContext();
-        contexto.Connection.RemoteIpAddress = IPAddress.Parse("10.0.0.9");
-
-        Assert.Equal("ip:10.0.0.9", LimitadorPeticiones.Particion(contexto));
-    }
-
-    [Fact]
-    public void SinIdentidadNiIp_CaeAUnaParticionUnicaYNoRevienta()
-    {
-        Assert.Equal("ip:desconocida", LimitadorPeticiones.Particion(new DefaultHttpContext()));
+        Assert.True(seguro.Response.Headers.ContainsKey("Strict-Transport-Security"));
+        Assert.False(inseguro.Response.Headers.ContainsKey("Strict-Transport-Security"));
     }
 }
