@@ -89,7 +89,13 @@ public sealed class RecepcionService(
         var enAlcanceEnvio = await alcance.VerificarAsync(envio.EnvioId, cancellationToken);
         if (enAlcanceEnvio.IsFailure) return Result<int>.Failure(enAlcanceEnvio.Error!, enAlcanceEnvio.ErrorType);
 
-        if (!PermiteCrearRecepcion(envio.Direccion, envio.EstadoEnvio.Codigo))
+        // La estrategia decide si un EN_TRANSITO ya se puede recibir: el privado llega solo.
+        var estrategiaEnvio = await db.Transportes
+            .Where(x => x.EnvioId == envio.EnvioId)
+            .Select(x => (EstrategiaTransporteEnum?)x.TipoTransporte.Estrategia)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (!PermiteCrearRecepcion(envio.Direccion, envio.EstadoEnvio.Codigo, estrategiaEnvio))
             return Result<int>.Failure("El estado actual del envío no permite iniciar la recepción.", ErrorType.Conflict);
 
         if (await db.Recepciones.AnyAsync(x => x.EnvioId == request.EnvioId, cancellationToken))
@@ -148,7 +154,13 @@ public sealed class RecepcionService(
         if (recepcion.EstadoRecepcion is EstadoRecepcionEnum.Completada or EstadoRecepcionEnum.CompletadaConIncidencia)
             return Result.Failure("La recepción ya fue completada.", ErrorType.Conflict);
 
-        if (!PermiteVerificar(recepcion.Envio.Direccion, recepcion.Envio.EstadoEnvio.Codigo))
+        // La estrategia decide si un EN_TRANSITO se puede recibir ya: el privado llega solo.
+        var estrategia = await db.Transportes
+            .Where(x => x.EnvioId == recepcion.EnvioId)
+            .Select(x => (EstrategiaTransporteEnum?)x.TipoTransporte.Estrategia)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (!PermiteVerificar(recepcion.Envio.Direccion, recepcion.Envio.EstadoEnvio.Codigo, estrategia))
             return Result.Failure("El estado actual del envío no permite verificar equipos.", ErrorType.Conflict);
 
         var equipoValido = await db.EnvioEquipos.AnyAsync(
@@ -346,15 +358,25 @@ public sealed class RecepcionService(
         return Result.Success();
     }
 
-    private static bool PermiteCrearRecepcion(DireccionEnvioEnum direccion, string codigoEstado) =>
+    private static bool PermiteCrearRecepcion(
+        DireccionEnvioEnum direccion,
+        string codigoEstado,
+        EstrategiaTransporteEnum? estrategia) =>
         direccion switch
         {
-            // Interno: la recepción arranca en RECIBIDO_TRANSPORTACION. Privado: conserva su
-            // ruta por ESPERA_TECNOLOGIA y EN_REVISION, que no cambió.
+            // Interno: la recepción arranca en RECIBIDO_TRANSPORTACION, cuando Transportación
+            // confirma la llegada. Privado: llega solo desde la filial, así que no hay un "llegó"
+            // separado del "lo recibí" —los hace Tecnología en el mismo momento, igual que la
+            // filial en el sentido contrario—, y arranca ya en EN_TRANSITO.
+            //
+            // ESPERA_TECNOLOGIA y EN_REVISION se conservan por los envíos que quedaron ahí con el
+            // flujo anterior; ninguno nuevo vuelve a pasar por ellos.
             DireccionEnvioEnum.HaciaTecnologia =>
                 codigoEstado is EstadoEnvioCodigos.RecibidoPorTransportacion
                     or EstadoEnvioCodigos.EnEsperaDeTecnologia
-                    or EstadoEnvioCodigos.EnProcesoDeRevision,
+                    or EstadoEnvioCodigos.EnProcesoDeRevision
+                || (codigoEstado == EstadoEnvioCodigos.EnTransito
+                    && estrategia == EstrategiaTransporteEnum.EntregaDirectaTecnologia),
             // La filial recibe directo desde EN_TRANSITO: no hay un "llegó" separado del
             // "lo recibí", los hacía la misma persona en el mismo momento.
             DireccionEnvioEnum.HaciaFilial =>
@@ -362,12 +384,27 @@ public sealed class RecepcionService(
             _ => false
         };
 
-    private static bool PermiteVerificar(DireccionEnvioEnum direccion, string codigoEstado) =>
+    /// <summary>
+    /// Qué estados admiten verificar equipo por equipo.
+    /// </summary>
+    /// <remarks>
+    /// EN_TRANSITO se admite hacia Tecnología <b>solo si el transporte es privado</b>. Ese envío
+    /// va de la filial directo a Tecnología sin pasar por Transportación, así que nadie confirma
+    /// su llegada por él: cuando Tecnología lo tiene delante, lo recibe. Un institucional en
+    /// EN_TRANSITO sigue en la carretera y es de Transportación, por eso la estrategia decide y
+    /// no basta con el estado.
+    /// </remarks>
+    private static bool PermiteVerificar(
+        DireccionEnvioEnum direccion,
+        string codigoEstado,
+        EstrategiaTransporteEnum? estrategia) =>
         direccion switch
         {
             DireccionEnvioEnum.HaciaTecnologia =>
                 codigoEstado is EstadoEnvioCodigos.RecibidoPorTransportacion
-                    or EstadoEnvioCodigos.EnProcesoDeRevision,
+                    or EstadoEnvioCodigos.EnProcesoDeRevision
+                || (codigoEstado == EstadoEnvioCodigos.EnTransito
+                    && estrategia == EstrategiaTransporteEnum.EntregaDirectaTecnologia),
             DireccionEnvioEnum.HaciaFilial => codigoEstado is EstadoEnvioCodigos.EnTransito or EstadoEnvioCodigos.RecibidoEnFilial,
             _ => false
         };

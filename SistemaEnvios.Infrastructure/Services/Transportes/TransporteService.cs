@@ -34,7 +34,7 @@ public sealed class TransporteService(
         var tipo = await db.TiposTransporte.FirstOrDefaultAsync(x => x.TipoTransporteId == request.TipoTransporteId && x.Activo, cancellationToken);
         if (tipo is null) return Result<int>.Failure("El tipo de transporte no existe o está inactivo.", ErrorType.Validation);
         if (tipo.Estrategia == EstrategiaTransporteEnum.EntregaDirectaTecnologia && envio.Direccion != DireccionEnvioEnum.HaciaTecnologia) return Result<int>.Failure("Los envíos de Tecnología a filial solo utilizan transporte interno.", ErrorType.Validation);
-        var detalle = await ValidarDetalleAsync(tipo.Estrategia, request.ChoferInternoId, request.NombreResponsable, request.Parentesco, request.CedulaResponsable, request.PlacaVehiculo, cancellationToken);
+        var detalle = await ValidarDetalleAsync(tipo.Estrategia, request.ChoferInternoId, request.NombreResponsable, request.Parentesco, request.TipoDocumento ?? TipoDocumentoEnum.Cedula, request.DocumentoResponsable, request.PlacaVehiculo, cancellationToken);
         if (detalle.IsFailure) return Result<int>.Failure(detalle.Error!, detalle.ErrorType);
 
         var fecha = DateTime.UtcNow;
@@ -47,7 +47,7 @@ public sealed class TransporteService(
         }
         else
         {
-            transporte.Privado = new TransportePrivado { NombreResponsable = request.NombreResponsable!.Trim(), Parentesco = request.Parentesco!.Trim(), CedulaResponsable = SoloDigitos(request.CedulaResponsable!), PlacaVehiculo = NormalizarMayuscula(request.PlacaVehiculo)! };
+            transporte.Privado = new TransportePrivado { NombreResponsable = request.NombreResponsable!.Trim(), Parentesco = request.Parentesco!.Trim(), TipoDocumento = request.TipoDocumento ?? TipoDocumentoEnum.Cedula, DocumentoResponsable = FormatosDocumento.Normalizar(request.TipoDocumento ?? TipoDocumentoEnum.Cedula, request.DocumentoResponsable!), PlacaVehiculo = NormalizarMayuscula(request.PlacaVehiculo)! };
         }
         MarcarEnvioModificado(envio, usuarioId);
         // Asignar el chofer ES la salida a ruta: no hay decision intermedia entre nombrar al
@@ -152,7 +152,7 @@ public sealed class TransporteService(
         var tipo = await db.TiposTransporte.FirstOrDefaultAsync(x => x.TipoTransporteId == request.TipoTransporteId && x.Activo, cancellationToken);
         if (tipo is null) return Result.Failure("El tipo de transporte no existe o está inactivo.", ErrorType.Validation);
         if (tipo.Estrategia == EstrategiaTransporteEnum.EntregaDirectaTecnologia && transporte.Envio.Direccion != DireccionEnvioEnum.HaciaTecnologia) return Result.Failure("Los envíos de Tecnología a filial solo utilizan transporte interno.", ErrorType.Validation);
-        var detalle = await ValidarDetalleAsync(tipo.Estrategia, request.ChoferInternoId, request.NombreResponsable, request.Parentesco, request.CedulaResponsable, request.PlacaVehiculo, cancellationToken);
+        var detalle = await ValidarDetalleAsync(tipo.Estrategia, request.ChoferInternoId, request.NombreResponsable, request.Parentesco, request.TipoDocumento ?? TipoDocumentoEnum.Cedula, request.DocumentoResponsable, request.PlacaVehiculo, cancellationToken);
         if (detalle.IsFailure) return detalle;
         if (transporte.Interno is not null) db.TransportesInternos.Remove(transporte.Interno);
         if (transporte.Privado is not null) db.TransportesPrivados.Remove(transporte.Privado);
@@ -162,28 +162,28 @@ public sealed class TransporteService(
             var chofer = await db.ChoferesInternos.SingleAsync(x => x.ChoferInternoId == request.ChoferInternoId, cancellationToken);
             transporte.Interno = new TransporteInterno { ChoferInternoId = chofer.ChoferInternoId, NombreChoferAlMomento = chofer.NombreCompleto, NumeroEmpleadoAlMomento = chofer.NumeroEmpleado };
         }
-        else transporte.Privado = new TransportePrivado { NombreResponsable = request.NombreResponsable!.Trim(), Parentesco = request.Parentesco!.Trim(), CedulaResponsable = SoloDigitos(request.CedulaResponsable!), PlacaVehiculo = NormalizarMayuscula(request.PlacaVehiculo)! };
+        else transporte.Privado = new TransportePrivado { NombreResponsable = request.NombreResponsable!.Trim(), Parentesco = request.Parentesco!.Trim(), TipoDocumento = request.TipoDocumento ?? TipoDocumentoEnum.Cedula, DocumentoResponsable = FormatosDocumento.Normalizar(request.TipoDocumento ?? TipoDocumentoEnum.Cedula, request.DocumentoResponsable!), PlacaVehiculo = NormalizarMayuscula(request.PlacaVehiculo)! };
         await unitOfWork.SaveChangesAsync(cancellationToken); return Result.Success();
     }
 
-    private async Task<Result> ValidarDetalleAsync(EstrategiaTransporteEnum estrategia, int? choferId, string? nombre, string? parentesco, string? cedula, string? placa, CancellationToken ct)
+    private async Task<Result> ValidarDetalleAsync(EstrategiaTransporteEnum estrategia, int? choferId, string? nombre, string? parentesco, TipoDocumentoEnum tipoDocumento, string? documento, string? placa, CancellationToken ct)
     {
         if (estrategia == EstrategiaTransporteEnum.TransportacionInstitucional)
         {
             if (choferId is null || !await db.ChoferesInternos.AnyAsync(x => x.ChoferInternoId == choferId && x.Activo, ct)) return Result.Failure("Debe seleccionar un chofer interno activo.", ErrorType.Validation);
-            if (!string.IsNullOrWhiteSpace(nombre) || !string.IsNullOrWhiteSpace(parentesco) || !string.IsNullOrWhiteSpace(cedula) || !string.IsNullOrWhiteSpace(placa)) return Result.Failure("Un transporte interno no admite datos del transporte privado.", ErrorType.Validation);
+            if (!string.IsNullOrWhiteSpace(nombre) || !string.IsNullOrWhiteSpace(parentesco) || !string.IsNullOrWhiteSpace(documento) || !string.IsNullOrWhiteSpace(placa)) return Result.Failure("Un transporte interno no admite datos del transporte privado.", ErrorType.Validation);
         }
         else
         {
             if (choferId is not null) return Result.Failure("Un transporte privado no admite chofer interno.", ErrorType.Validation);
-            if (string.IsNullOrWhiteSpace(nombre) || string.IsNullOrWhiteSpace(parentesco) || SoloDigitos(cedula ?? "").Length != 11 || string.IsNullOrWhiteSpace(placa)) return Result.Failure("Nombre, parentesco, cédula y placa son obligatorios para el transporte privado.", ErrorType.Validation);
+            if (string.IsNullOrWhiteSpace(nombre) || string.IsNullOrWhiteSpace(parentesco) || !FormatosDocumento.EsValido(tipoDocumento, documento) || string.IsNullOrWhiteSpace(placa)) return Result.Failure("Nombre, parentesco, documento y placa son obligatorios para el transporte privado, y el documento debe cuadrar con su tipo.", ErrorType.Validation);
         }
         return Result.Success();
     }
 
     private Task<bool> TransicionExiste(int origen, int destino, CancellationToken ct) => db.TransicionesEstadoEnvio.AnyAsync(x => x.EstadoOrigenId == origen && x.EstadoDestinoId == destino && x.Activo, ct);
     private void AgregarHistorial(Envio envio, int estadoId, Guid usuario, DateTime fecha, string obs) => db.HistorialEstadosEnvio.Add(new HistorialEstadoEnvio { EnvioId = envio.EnvioId, EstadoEnvioId = estadoId, UbicacionId = envio.UbicacionOrigenId, UsuarioId = usuario, Fecha = fecha, Observaciones = obs, FechaCreacion = fecha, UsuarioCreacionId = usuario });
-    private static TransporteResponse Mapear(Transporte x) => new(x.TransporteId, x.EnvioId, x.TipoTransporteId, x.TipoTransporte.Codigo, x.TipoTransporte.Nombre, x.TipoTransporte.Estrategia, x.Interno?.ChoferInternoId, x.Interno?.NombreChoferAlMomento, x.Interno?.NumeroEmpleadoAlMomento, x.Privado?.NombreResponsable, x.Privado?.Parentesco, x.Privado is null ? null : $"*******{x.Privado.CedulaResponsable[^4..]}", x.Privado?.PlacaVehiculo, x.Interno?.FechaEntregaTransportacion ?? x.Privado?.FechaEntrega, x.Observaciones, x.Interno?.EntregaConfirmada ?? false, x.Interno?.FechaConfirmacionEntrega, x.Interno?.UsuarioConfirmacionId);
+    private static TransporteResponse Mapear(Transporte x) => new(x.TransporteId, x.EnvioId, x.TipoTransporteId, x.TipoTransporte.Codigo, x.TipoTransporte.Nombre, x.TipoTransporte.Estrategia, x.Interno?.ChoferInternoId, x.Interno?.NombreChoferAlMomento, x.Interno?.NumeroEmpleadoAlMomento, x.Privado?.NombreResponsable, x.Privado?.Parentesco, x.Privado?.TipoDocumento, x.Privado is null ? null : Enmascarar(x.Privado.DocumentoResponsable), x.Privado?.PlacaVehiculo, x.Interno?.FechaEntregaTransportacion ?? x.Privado?.FechaEntrega, x.Observaciones, x.Interno?.EntregaConfirmada ?? false, x.Interno?.FechaConfirmacionEntrega, x.Interno?.UsuarioConfirmacionId);
     /// <summary>
     /// Estados en los que todavía se puede asignar transporte. EN_TRANSPORTACION es el envío
     /// que Tecnología ya despachó y espera chofer: es el estado que lista la pantalla de
@@ -202,6 +202,8 @@ public sealed class TransporteService(
     private static bool PuedeModificarTransporte(string codigo) => PuedeAsignarTransporte(codigo);
     private static string? NormalizarOpcional(string? valor) => string.IsNullOrWhiteSpace(valor) ? null : valor.Trim();
     private static string? NormalizarMayuscula(string? valor) => string.IsNullOrWhiteSpace(valor) ? null : valor.Trim().ToUpperInvariant();
-    private static string SoloDigitos(string valor) => new(valor.Where(char.IsDigit).ToArray());
+    /// <summary>Solo los últimos cuatro. Un pasaporte corto no debe quedar casi entero a la vista.</summary>
+    private static string Enmascarar(string documento) =>
+        documento.Length <= 4 ? new string(char.Parse("*"), documento.Length) : new string(char.Parse("*"), documento.Length - 4) + documento[^4..];
     private static void MarcarEnvioModificado(Envio envio, Guid usuarioId) { envio.FechaModificacion = DateTime.UtcNow; envio.UsuarioModificacionId = usuarioId; }
 }

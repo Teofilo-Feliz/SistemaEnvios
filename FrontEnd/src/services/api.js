@@ -4,6 +4,16 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
   timeout: 20000,
   headers: { "Content-Type": "application/json" },
+  // Los arrays viajan como claves repetidas —estadoCodigos=A&estadoCodigos=B— que es la única
+  // forma que ASP.NET Core enlaza a un string[] de la petición.
+  //
+  // Por defecto axios los manda como estadoCodigos[]=A, y eso no falla: el binder devuelve un
+  // array VACÍO en vez de null, así que la condición `EstadoCodigos is { Length: > 0 }` del
+  // servicio da falso y la consulta se ejecuta SIN filtro. El backend responde 200 con todos los
+  // envíos y la pantalla los muestra como si fueran los suyos: /tecnologia/pendientes listaba
+  // envíos recién creados y ya cerrados, y los totales de la paginación eran los de la tabla
+  // entera. Ningún error en ninguna capa.
+  paramsSerializer: { indexes: null },
 });
 
 // El token se pide al store, que lo tiene en memoria y lo renueva si está vencido. No hay

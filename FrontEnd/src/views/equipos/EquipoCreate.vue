@@ -8,7 +8,16 @@ import { catalogoService } from "@/services/catalogoService";
 import { equipoService } from "@/services/equipoService";
 import { useUiStore } from "@/stores/uiStore";
 import { confirmAction } from "@/utils/confirm";
+import { filtrarSoloDigitos } from "@/utils/documento";
 import "@/assets/styles/shipment-create.css";
+
+// El código de activo es numérico. Se filtra al escribir en vez de rechazarlo al guardar: dejar
+// teclear una letra para después devolver un error es hacerle perder el tiempo a quien la escribe.
+function alEscribirActivo(evento) {
+  const limpio = filtrarSoloDigitos(evento.target.value);
+  form.assetCode = limpio;
+  evento.target.value = limpio;
+}
 const router = useRouter(),
   ui = useUiStore(),
   loading = ref(true),
@@ -104,7 +113,11 @@ onMounted(load);
             ><label>Marca<input v-model.trim="form.brand" class="form-control" /></label
             ><label>Modelo<input v-model.trim="form.model" class="form-control" /></label
             ><label
-              >Código de activo<input v-model.trim="form.assetCode" class="form-control" /></label
+              >Código de activo<input
+                :value="form.assetCode"
+                inputmode="numeric"
+                class="form-control"
+                @input="alEscribirActivo" /></label
             ><label
               >Ubicación actual *<select v-model="form.locationId" class="form-control">
                 <option value="">Seleccionar ubicación</option>

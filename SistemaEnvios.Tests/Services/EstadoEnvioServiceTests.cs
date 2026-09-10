@@ -107,7 +107,7 @@ public sealed class EstadoEnvioServiceTests
         db.EnvioEquipos.Add(new EnvioEquipo { Envio = envio, EquipoId = 101, NumeroTicket = "T-101", UsuarioSolicitanteId = UsuarioId, Observaciones = "Prueba" });
         var tipo = new TipoTransporte { Codigo = "PRIVADO", Nombre = "Privado", Estrategia = EstrategiaTransporteEnum.EntregaDirectaTecnologia, Activo = true };
         db.Add(tipo); await db.SaveChangesAsync();
-        db.Transportes.Add(new Transporte { EnvioId = envio.EnvioId, TipoTransporteId = tipo.TipoTransporteId, Privado = new TransportePrivado { NombreResponsable = "Juan Pérez", Parentesco = "Padre", CedulaResponsable = "00112345678", PlacaVehiculo = "A123456" } });
+        db.Transportes.Add(new Transporte { EnvioId = envio.EnvioId, TipoTransporteId = tipo.TipoTransporteId, Privado = new TransportePrivado { NombreResponsable = "Juan Pérez", Parentesco = "Padre", DocumentoResponsable = "00112345678", PlacaVehiculo = "A123456" } });
         db.TransicionesEstadoEnvio.AddRange(
             new TransicionEstadoEnvio { EstadoOrigenId = filial.EstadoEnvioId, EstadoDestinoId = privado.EstadoEnvioId, Activo = true },
             new TransicionEstadoEnvio { EstadoOrigenId = privado.EstadoEnvioId, EstadoDestinoId = transito.EstadoEnvioId, Activo = true },

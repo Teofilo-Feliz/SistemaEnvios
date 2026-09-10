@@ -13,7 +13,7 @@ import { filterFields } from "@/config/filterFields";
 import { envioService } from "@/services/envioService";
 import { catalogoService } from "@/services/catalogoService";
 import { useUiStore } from "@/stores/uiStore";
-import { isInternalTransport } from "@/utils/transport";
+import { isInternalTransport, ESTRATEGIA_PRIVADA } from "@/utils/transport";
 import { confirmAction, notifyNotificationsChanged } from "@/utils/confirm";
 import { useRefrescoAlVolver } from "@/composables/useRefrescoAlVolver";
 const router = useRouter(),
@@ -122,6 +122,11 @@ async function load() {
         page: page.value,
         pageSize,
         estadoCodigos: ETAPAS_TRANSPORTACION,
+        // El privado no pasa por Transportación. La regla estaba solo en el alcance del backend,
+        // que no se aplica a Global ni a Tecnología: abrían este módulo y veían envíos privados.
+        // Se excluye por estrategia, no se exige la institucional: un envío recién despachado por
+        // Tecnología todavía no tiene transporte y es de los que sí hay que atender aquí.
+        excluirEstrategiaTransporte: ESTRATEGIA_PRIVADA,
         estadoEnvioId: undefined,
       }),
       catalogoService.allLocations(),
@@ -145,9 +150,16 @@ async function load() {
       ubicacionDestinoId: x.ubicacionDestinoId,
       numeroEnvio: x.numeroEnvio,
       direccion: String(x.direccion),
+      // Solo el transporte institucional. El privado va directo de la filial a Tecnología y es
+      // Tecnología quien confirma su llegada —así lo exige el endpoint, con recepciones.gestionar,
+      // y así lo resuelve EstadoEnvioService, que manda el privado a ESPERA_TECNOLOGIA.
+      //
+      // Aquí decía `Boolean(x.estrategiaTransporte)`, y la estrategia vale 1 o 2: Boolean(2) es
+      // true, así que la acción se ofrecía también sobre los privados. El helper ya estaba
+      // importado en este archivo, sin usar.
       canConfirm:
         states.value.find((y) => y.estadoEnvioId === x.estadoEnvioId)?.codigo === "EN_TRANSITO" &&
-        Boolean(x.estrategiaTransporte),
+        isInternalTransport(x.estrategiaTransporte),
       confirmTitle: "Confirmar llegada a Tecnología",
     }));
     if (route.query.estado)

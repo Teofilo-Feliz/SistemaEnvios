@@ -11,6 +11,7 @@ import { useUiStore } from "@/stores/uiStore";
 import "@/assets/styles/transport-dashboard.css";
 import TransportationStageCard from "@/components/transportation/TransportationStageCard.vue";
 import { useRefrescoAlVolver } from "@/composables/useRefrescoAlVolver";
+import { ESTRATEGIA_PRIVADA } from "@/utils/transport";
 
 const router = useRouter();
 const ui = useUiStore();
@@ -102,7 +103,13 @@ async function load() {
     // Un agregado para los totales y una página de cinco para la lista de recientes.
     const [resumen, recientesPagina] = await Promise.all([
       dashboardService.transportacion(),
-      envioService.paged({ pageSize: 5, estadoCodigos: ETAPAS_TRANSPORTACION }),
+      // El privado no pasa por Transportación: se excluye en el servidor para que los totales y
+      // el conteo por etapa sean los suyos de verdad, también para quien no tiene alcance acotado.
+      envioService.paged({
+        pageSize: 5,
+        estadoCodigos: ETAPAS_TRANSPORTACION,
+        excluirEstrategiaTransporte: ESTRATEGIA_PRIVADA,
+      }),
     ]);
     totales.value = resumen.data || { porEtapa: [], porTipoTransporte: [], totalEnEtapas: 0 };
     shipments.value = filas(recientesPagina);

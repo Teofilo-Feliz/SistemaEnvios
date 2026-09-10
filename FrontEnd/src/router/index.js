@@ -173,6 +173,15 @@ const routes = [
       // Con ruta propia cada una carga lo suyo y el menu marca la activa sin ambiguedad.
       { path: "tecnologia", redirect: "/tecnologia/pendientes" },
       {
+        // Los envios por transporte privado no pasan por Transportacion: llegan directo desde la
+        // filial, y es Tecnologia quien registra su llegada. Sin esta pantalla el envio quedaba
+        // EN_TRANSITO sin aparecer en ningun modulo.
+        path: "tecnologia/camino",
+        name: "tecnologia-camino",
+        component: () => import("@/views/tecnologia/TecnologiaEnvios.vue"),
+        meta: { permission: "recepciones.gestionar", vista: "camino" },
+      },
+      {
         path: "tecnologia/pendientes",
         name: "tecnologia-pendientes",
         component: () => import("@/views/tecnologia/TecnologiaEnvios.vue"),

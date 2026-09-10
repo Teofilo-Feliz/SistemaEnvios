@@ -43,7 +43,14 @@ const conIncidencia = computed(() => items.value.some((x) => x.estado === CON_IN
 const sinComentario = computed(() =>
   items.value.filter((x) => x.estado === CON_INCIDENCIA && !x.observaciones.trim()),
 );
-const puedeCompletar = computed(() => items.value.length > 0 && sinComentario.value.length === 0);
+// Una recepción ya cerrada no se vuelve a completar. El backend lo rechaza con "La recepción ya
+// fue completada", pero para entonces el usuario ya pulsó y recibió un error por hacer algo que
+// la pantalla le ofrecía. Se comprueba aquí para que no llegue a ofrecerlo: la lista de la filial
+// ya no trae esos envíos, pero a esta pantalla también se llega por URL directa.
+const recepcionCerrada = ref(false);
+const puedeCompletar = computed(
+  () => !recepcionCerrada.value && items.value.length > 0 && sinComentario.value.length === 0,
+);
 
 const resumen = computed(() =>
   conIncidencia.value
@@ -51,17 +58,24 @@ const resumen = computed(() =>
     : `${items.value.length} equipos conformes`,
 );
 
+// Estados finales de la recepción, tal como los emite el API (JsonStringEnumConverter).
+const RECEPCION_CERRADA = ["Completada", "CompletadaConIncidencia"];
+
 async function load() {
   loading.value = true;
   error.value = "";
+  recepcionCerrada.value = false;
   try {
-    const [{ data: envio }, asociacionesPagina, ubicaciones] = await Promise.all([
+    const [{ data: envio }, asociacionesPagina, ubicaciones, recepcion] = await Promise.all([
       envioService.get(envioId),
       envioService.equipment(envioId, { pageSize: 100 }),
       catalogoService.allLocations(),
+      // Todavía no existe mientras nadie haya empezado a recibir, y eso es lo normal, no un fallo.
+      envioService.reception(envioId).catch(() => null),
     ]);
     shipment.value = envio;
     locations.value = ubicaciones;
+    recepcionCerrada.value = RECEPCION_CERRADA.includes(recepcion?.data?.estadoRecepcion);
     items.value = await Promise.all(
       filas(asociacionesPagina).map(async (asociacion) => {
         const { data: equipo } = await equipoService.get(asociacion.equipoId);
@@ -249,8 +263,12 @@ onMounted(load);
                 Falta describir {{ sinComentario.length }}
                 {{ sinComentario.length === 1 ? "incidencia" : "incidencias" }}.
               </small>
+              <small v-if="recepcionCerrada" class="reception-required">
+                Esta recepción ya se completó. El envío quedó cerrado y no admite cambios.
+              </small>
             </div>
             <button
+              v-if="!recepcionCerrada"
               class="btn btn-primary"
               type="button"
               :disabled="!puedeCompletar || saving"

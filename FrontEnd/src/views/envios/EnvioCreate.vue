@@ -15,6 +15,7 @@ import { equipoService } from "@/services/equipoService";
 import { envioService } from "@/services/envioService";
 import { transporteService } from "@/services/transporteService";
 import { isInternalTransport, isPrivateTransport } from "@/utils/transport";
+import { TIPO_CEDULA, errorDocumento } from "@/utils/documento";
 import { useUiStore } from "@/stores/uiStore";
 import { useAuthStore } from "@/stores/authStore";
 import { confirmAction, escapeHtml } from "@/utils/confirm";
@@ -41,6 +42,7 @@ const router = useRouter(),
     internalDriver: "",
     privateName: "",
     relationship: "",
+    documentType: TIPO_CEDULA,
     privateId: "",
     vehiclePlate: "",
   });
@@ -325,7 +327,8 @@ async function guardarTransporte() {
     choferInternoId: form.internalDriverId ? Number(form.internalDriverId) : null,
     nombreResponsable: form.privateName || null,
     parentesco: form.relationship || null,
-    cedulaResponsable: form.privateId || null,
+    tipoDocumento: Number(form.documentType) || TIPO_CEDULA,
+    documentoResponsable: form.privateId || null,
     placaVehiculo: form.vehiclePlate || null,
   };
   if (transporteExistente.value) {
@@ -442,7 +445,8 @@ async function load() {
           form.internalDriverId = transporte.choferInternoId ?? "";
           form.privateName = transporte.nombreResponsable || "";
           form.relationship = transporte.parentesco || "";
-          form.privateId = transporte.cedulaResponsable || "";
+          form.documentType = Number(transporte.tipoDocumento) || TIPO_CEDULA;
+          form.privateId = transporte.documentoResponsable || "";
           form.vehiclePlate = transporte.placaVehiculo || "";
         }
       } catch {
@@ -497,10 +501,12 @@ function validate() {
       isPrivateTransport(selected?.estrategia) && !form.privateName ? "Indica el nombre." : "";
     errors.relationship =
       isPrivateTransport(selected?.estrategia) && !form.relationship ? "Indica el parentesco." : "";
-    errors.privateId =
-      isPrivateTransport(selected?.estrategia) && !/^\d{11}$/.test(form.privateId)
-        ? "La cédula debe tener 11 dígitos."
-        : "";
+    // El formato y el mensaje dependen del tipo de documento: la cédula no admite letras y son
+    // once dígitos exactos; el pasaporte sí las admite. La regla vive en utils/documento.js, que
+    // espeja FormatosDocumento.cs del backend.
+    errors.privateId = isPrivateTransport(selected?.estrategia)
+      ? errorDocumento(form.documentType, form.privateId)
+      : "";
     errors.vehiclePlate =
       isPrivateTransport(selected?.estrategia) && !form.vehiclePlate ? "Indica la placa." : "";
   }
@@ -584,7 +590,8 @@ async function save() {
         choferInternoId: form.internalDriverId ? Number(form.internalDriverId) : null,
         nombreResponsable: form.privateName || null,
         parentesco: form.relationship || null,
-        cedulaResponsable: form.privateId || null,
+        tipoDocumento: Number(form.documentType) || TIPO_CEDULA,
+        documentoResponsable: form.privateId || null,
         placaVehiculo: form.vehiclePlate || null,
       });
     }

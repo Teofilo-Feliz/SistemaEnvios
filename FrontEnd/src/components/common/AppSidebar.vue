@@ -88,7 +88,10 @@ const groups = [
         to: "/tecnologia/envios/nuevo",
         permission: "canCreateShipment",
       },
-      { label: "Equipos pendientes", to: "/tecnologia/pendientes" },
+      // El orden es el del recorrido real de un equipo que llega. Las dos primeras son las dos
+      // formas de recibir: el privado llega solo desde la filial, el institucional llega por
+      // Transportación. Desde cualquiera de las dos se marca conforme o con incidencia.
+      { label: "Por recibir", to: "/tecnologia/camino", permission: "recepciones.gestionar" },
       { label: "En revisión", to: "/tecnologia/revision" },
       { label: "Revisados", to: "/tecnologia/revisados" },
       { label: "Equipos en Tecnología", to: "/tecnologia/equipos" },

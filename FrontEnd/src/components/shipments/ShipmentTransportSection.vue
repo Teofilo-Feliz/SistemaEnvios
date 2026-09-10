@@ -1,6 +1,14 @@
 <script setup>
 import { computed, watch } from "vue";
 import { isInternalTransport } from "@/utils/transport";
+import {
+  TIPOS_DOCUMENTO,
+  TIPO_CEDULA,
+  etiquetaDocumento,
+  filtrarDocumento,
+  largoMaximo,
+  modoEntrada,
+} from "@/utils/documento";
 const props = defineProps({
   form: Object,
   transportTypes: { type: Array, default: () => [] },
@@ -11,6 +19,25 @@ const selected = computed(() =>
   props.transportTypes.find((x) => x.tipoTransporteId === Number(props.form.transportTypeId)),
 );
 const internal = computed(() => isInternalTransport(selected.value?.estrategia));
+
+// El tipo decide qué se puede teclear: la cédula no admite letras, el pasaporte sí.
+const tipoDocumento = computed(() => Number(props.form.documentType) || TIPO_CEDULA);
+const etiqueta = computed(() => etiquetaDocumento(tipoDocumento.value));
+
+// Se filtra al escribir y no solo al enviar: dejar teclear una letra en la cédula para después
+// rechazarla es hacerle perder el tiempo a quien la escribe.
+function alEscribirDocumento(evento) {
+  const limpio = filtrarDocumento(tipoDocumento.value, evento.target.value);
+  props.form.privateId = limpio;
+  evento.target.value = limpio;
+}
+
+// Cambiar de tipo limpia el campo: un número de cédula no es un pasaporte válido y viceversa,
+// así que conservarlo solo produce un error que el usuario no sabe de dónde sale.
+watch(tipoDocumento, () => {
+  props.form.privateId = "";
+});
+
 watch(
   () => props.form.transportTypeId,
   () => {
@@ -18,6 +45,7 @@ watch(
       Object.assign(props.form, {
         privateName: "",
         relationship: "",
+        documentType: TIPO_CEDULA,
         privateId: "",
         vehiclePlate: "",
       });
@@ -80,11 +108,18 @@ watch(
           errors.relationship
         }}</small></label
       ><label
-        >Cédula *<input
-          v-model.trim="form.privateId"
-          maxlength="11"
-          inputmode="numeric"
+        >Tipo de documento *<select v-model="form.documentType" class="form-control">
+          <option v-for="tipo in TIPOS_DOCUMENTO" :key="tipo.valor" :value="tipo.valor">
+            {{ tipo.etiqueta }}
+          </option>
+        </select></label
+      ><label
+        >{{ etiqueta }} *<input
+          :value="form.privateId"
+          :maxlength="largoMaximo(tipoDocumento)"
+          :inputmode="modoEntrada(tipoDocumento)"
           class="form-control"
+          @input="alEscribirDocumento"
         /><small v-if="errors.privateId" class="field-error">{{ errors.privateId }}</small></label
       ><label
         >Placa del vehículo *<input v-model.trim="form.vehiclePlate" class="form-control" /><small

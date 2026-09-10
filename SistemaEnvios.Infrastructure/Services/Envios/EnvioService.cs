@@ -251,6 +251,10 @@ public sealed class EnvioService(
         if (request.UbicacionId.HasValue) query = query.Where(x => x.UbicacionOrigenId == request.UbicacionId || x.UbicacionDestinoId == request.UbicacionId);
         if (request.Direccion is 1 or 2) query = query.Where(x => (int)x.Direccion == request.Direccion);
         if (request.EstadoCodigos is { Length: > 0 } codigos) query = query.Where(x => codigos.Contains(x.EstadoEnvio.Codigo));
+        if (request.EstrategiaTransporte is { } estrategia) query = query.Where(x => x.Transporte != null && x.Transporte.TipoTransporte.Estrategia == estrategia);
+        // Deja pasar los que aún no tienen transporte: el envío que Tecnología despacha espera a
+        // que Transportación le asigne chofer, y hasta entonces no hay transporte que consultar.
+        if (request.ExcluirEstrategiaTransporte is { } excluida) query = query.Where(x => x.Transporte == null || x.Transporte.TipoTransporte.Estrategia != excluida);
         var pagina = await query.OrderByDescending(x => x.FechaCreacion).ThenByDescending(x => x.EnvioId)
             .PaginarAsync(request, x => new EnvioResponse(x.EnvioId,x.NumeroEnvio,x.UbicacionOrigenId,x.UbicacionDestinoId,x.EstadoEnvioId,x.Direccion,x.UsuarioSolicitanteId,x.Observaciones,x.Transporte == null ? null : x.Transporte.TipoTransporteId,x.Transporte == null ? null : x.Transporte.TipoTransporte.Estrategia,x.Transporte == null ? null : x.Transporte.TipoTransporte.Nombre), cancellationToken);
         return Result<PaginaResponse<EnvioResponse>>.Success(pagina);

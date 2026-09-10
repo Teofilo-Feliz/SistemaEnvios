@@ -360,14 +360,32 @@ CREATE TABLE dbo.TransportesPrivados
     TransporteId INT NOT NULL,
     NombreResponsable NVARCHAR(150) NOT NULL,
     Parentesco NVARCHAR(50) NOT NULL,
-    CedulaResponsable VARCHAR(11) NOT NULL,
+    -- 1 = Cédula, 2 = Pasaporte. El responsable puede ser extranjero, y su pasaporte lleva letras.
+    TipoDocumento TINYINT NOT NULL CONSTRAINT DF_TransportesPrivados_TipoDocumento DEFAULT (1),
+    -- 15 es el máximo del pasaporte. La cédula queda acotada a 11 por el CHECK, no por el tipo.
+    DocumentoResponsable NVARCHAR(15) NOT NULL,
     PlacaVehiculo NVARCHAR(20) NOT NULL,
     FechaEntrega DATETIME2(7) NULL,
     UsuarioQueEntregoId UNIQUEIDENTIFIER NULL,
     RowVersion ROWVERSION NOT NULL,
     CONSTRAINT PK_TransportesPrivados PRIMARY KEY (TransporteId),
     CONSTRAINT FK_TransportesPrivados_Transportes FOREIGN KEY (TransporteId) REFERENCES dbo.Transportes(TransporteId) ON DELETE CASCADE,
-    CONSTRAINT CK_TransportesPrivados_Cedula CHECK (CedulaResponsable NOT LIKE '%[^0-9]%' AND LEN(CedulaResponsable)=11)
+    -- Mismos formatos que aplica FormatosDocumento.cs: cédula 11 dígitos, pasaporte 6-15
+    -- alfanumérico en mayúsculas.
+    --
+    -- El rango va con COLLATE Latin1_General_BIN2 y no con la colación de la base. En LIKE,
+    -- '[A-Z]' es un rango en orden de INTERCALACIÓN, y ese orden es a,A,b,B,c,C…, así que con la
+    -- colación normal 'A-Z' incluiría casi todas las minúsculas y el CHECK dejaría entrar
+    -- 'rd1234567'. Con la binaria el rango sí es el ASCII 65-90.
+    CONSTRAINT CK_TransportesPrivados_Documento CHECK
+    (
+        (TipoDocumento = 1
+            AND DocumentoResponsable NOT LIKE '%[^0-9]%'
+            AND LEN(DocumentoResponsable) = 11)
+     OR (TipoDocumento = 2
+            AND DocumentoResponsable COLLATE Latin1_General_BIN2 NOT LIKE '%[^A-Z0-9]%'
+            AND LEN(DocumentoResponsable) BETWEEN 6 AND 15)
+    )
 );
 GO
 
@@ -530,9 +548,18 @@ FROM
         (N'RECIBIDO_TRANSPORTACION', N'RECIBIDO_TECNOLOGIA'),
         (N'EN_TRANSITO', N'INCIDENCIA_TRANSPORTACION'),
         (N'INCIDENCIA_TRANSPORTACION', N'EN_TRANSITO'),
-        -- Privado: no pasa por Transportación y conserva su ruta por espera y revisión.
+        -- Privado: no pasa por Transportación, así que nadie confirma su llegada por él. Cuando
+        -- Tecnología lo tiene delante lo recibe en un solo paso, marcando cada equipo conforme o
+        -- con incidencia, igual que cualquier otra recepción.
+        --
+        -- Que EN_TRANSITO pueda cerrar no lo abre a cualquiera: un envío institucional en ese
+        -- estado sigue en la carretera y es de Transportación. Quien distingue es
+        -- RecepcionService.PermiteVerificar, que admite EN_TRANSITO solo si la estrategia es
+        -- EntregaDirectaTecnologia. Estas filas abren el camino; ese guardia decide quién pasa.
         (N'EN_FILIAL', N'DESPACHADO_TRANSPORTE_PRIVADO'),
         (N'DESPACHADO_TRANSPORTE_PRIVADO', N'EN_TRANSITO'),
+        (N'EN_TRANSITO', N'RECIBIDO_TECNOLOGIA'),
+        (N'EN_TRANSITO', N'RECIBIDO_TECNOLOGIA_INCIDENCIA'),
         (N'EN_TRANSITO', N'ESPERA_TECNOLOGIA'),
         (N'ESPERA_TECNOLOGIA', N'EN_REVISION'),
         (N'EN_REVISION', N'RECIBIDO_TECNOLOGIA'),

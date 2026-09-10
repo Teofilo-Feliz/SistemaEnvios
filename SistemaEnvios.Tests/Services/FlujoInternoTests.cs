@@ -169,7 +169,7 @@ public sealed class FlujoInternoTests
         if (estrategia == EstrategiaTransporteEnum.TransportacionInstitucional)
             transporte.Interno = new TransporteInterno { ChoferInternoId = chofer.ChoferInternoId, NombreChoferAlMomento = "Chofer", NumeroEmpleadoAlMomento = "E-1" };
         else
-            transporte.Privado = new TransportePrivado { NombreResponsable = "R", Parentesco = "P", CedulaResponsable = "1", PlacaVehiculo = "A1" };
+            transporte.Privado = new TransportePrivado { NombreResponsable = "R", Parentesco = "P", DocumentoResponsable = "1", PlacaVehiculo = "A1" };
         db.Transportes.Add(transporte);
         db.EnvioEquipos.Add(new EnvioEquipo { EnvioId = envio.EnvioId, EquipoId = 1, NumeroTicket = "999", Observaciones = "x", UsuarioSolicitanteId = UsuarioId });
         await db.SaveChangesAsync();

@@ -156,7 +156,7 @@ public sealed class BandejasTransportacionTests
         {
             NombreResponsable = "Un familiar",
             Parentesco = "Hermano",
-            CedulaResponsable = "00100000001",
+            DocumentoResponsable = "00100000001",
             PlacaVehiculo = "A123456"
         };
         db.Transportes.AddRange(tEspera, tRuta, tPrivado);

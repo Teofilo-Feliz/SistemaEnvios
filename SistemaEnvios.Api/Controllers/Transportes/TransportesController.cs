@@ -55,7 +55,8 @@ public sealed class TransportesController(ITransporteService service) : Controll
             ChoferInternoId = request.ChoferInternoId,
             NombreResponsable = request.NombreResponsable,
             Parentesco = request.Parentesco,
-            CedulaResponsable = request.CedulaResponsable,
+            TipoDocumento = request.TipoDocumento,
+            DocumentoResponsable = request.DocumentoResponsable,
             PlacaVehiculo = request.PlacaVehiculo,
             Observaciones = request.Observaciones
         };

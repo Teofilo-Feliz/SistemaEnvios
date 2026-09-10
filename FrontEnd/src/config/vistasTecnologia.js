@@ -1,3 +1,5 @@
+import { ESTRATEGIA_PRIVADA } from "@/utils/transport";
+
 /**
  * Las pantallas de envíos del módulo de Tecnología, en un solo lugar.
  *
@@ -10,6 +12,33 @@
  * página. Ahora cada pantalla pagina lo suyo.
  */
 export const VISTAS_TECNOLOGIA = {
+  // El transporte privado va de la filial a Tecnología sin pasar por Transportación, así que en
+  // cuanto la filial lo entrega el envío queda EN_TRANSITO y es Tecnología quien tiene que
+  // registrar su llegada. Ese estado no estaba en ninguna pantalla de este módulo: el envío
+  // quedaba en tierra de nadie —fuera de Transportación por diseño, y sin sitio aquí— y solo se
+  // podía accionar abriendo su detalle, para lo cual había que saberse el número.
+  //
+  // Pide la estrategia privada al servidor: un EN_TRANSITO institucional va camino de
+  // Transportación y no es asunto de esta pantalla.
+  camino: {
+    ruta: "/tecnologia/camino",
+    titulo: "Por recibir",
+    subtitulo: "Envíos por transporte privado que llegan directo desde la filial",
+    estados: ["EN_TRANSITO"],
+    estrategia: ESTRATEGIA_PRIVADA,
+    // Misma acción que el institucional en "En revisión": abre la pantalla de recepción y se
+    // marca cada equipo conforme o con incidencia. Antes esta pantalla solo registraba la
+    // llegada y el envío tenía que recorrer dos pantallas más para poder recibirse de verdad.
+    accion: "verificar",
+    textoAccion: "Recibir equipos",
+    columnas: [
+      { key: "number", label: "Envío" },
+      { key: "description", label: "Descripción" },
+      { key: "transport", label: "Transporte" },
+      { key: "status", label: "Estado" },
+    ],
+  },
+
   pendientes: {
     ruta: "/tecnologia/pendientes",
     titulo: "Equipos pendientes",

@@ -11,6 +11,7 @@ import { transporteService } from "@/services/transporteService";
 import { catalogoService } from "@/services/catalogoService";
 import { useUiStore } from "@/stores/uiStore";
 import { isInternalTransport, isPrivateTransport } from "@/utils/transport";
+import { TIPO_CEDULA, errorDocumento } from "@/utils/documento";
 import { confirmAction } from "@/utils/confirm";
 import "@/assets/styles/shipment-create.css";
 const router = useRouter(),
@@ -34,6 +35,7 @@ const errors = reactive({
   internalDriver: "",
   privateName: "",
   relationship: "",
+  documentType: TIPO_CEDULA,
   privateId: "",
   vehiclePlate: "",
 });
@@ -78,6 +80,7 @@ watch(
       const internal = transportTypes.value.find((x) => isInternalTransport(x.estrategia));
       if (internal) form.transportTypeId = internal.tipoTransporteId;
       form.privateName = form.relationship = form.privateId = form.vehiclePlate = "";
+      form.documentType = TIPO_CEDULA;
     }
   },
 );
@@ -95,10 +98,10 @@ async function save() {
     isPrivateTransport(selected?.estrategia) && !form.privateName ? "Indica el nombre." : "";
   errors.relationship =
     isPrivateTransport(selected?.estrategia) && !form.relationship ? "Indica el parentesco." : "";
-  errors.privateId =
-    isPrivateTransport(selected?.estrategia) && !/^\d{11}$/.test(form.privateId)
-      ? "Cédula inválida."
-      : "";
+  // El formato depende del tipo de documento; la regla vive en utils/documento.js.
+  errors.privateId = isPrivateTransport(selected?.estrategia)
+    ? errorDocumento(form.documentType, form.privateId)
+    : "";
   errors.vehiclePlate =
     isPrivateTransport(selected?.estrategia) && !form.vehiclePlate ? "Indica la placa." : "";
   if (Object.values(errors).some(Boolean)) return;
@@ -116,7 +119,8 @@ async function save() {
       choferInternoId: form.internalDriverId ? Number(form.internalDriverId) : null,
       nombreResponsable: form.privateName || null,
       parentesco: form.relationship || null,
-      cedulaResponsable: form.privateId || null,
+      tipoDocumento: Number(form.documentType) || TIPO_CEDULA,
+      documentoResponsable: form.privateId || null,
       placaVehiculo: form.vehiclePlate || null,
       observaciones: form.notes || null,
     });

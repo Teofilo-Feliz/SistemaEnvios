@@ -37,15 +37,26 @@ const idDe = (codigo) => states.value.find((x) => x.codigo === codigo)?.estadoEn
 const codigoDe = (id) => states.value.find((x) => x.estadoEnvioId === id)?.codigo || "";
 
 const filasEnvios = computed(() =>
-  shipments.value.map((x) => ({
-    id: x.envioId,
-    number: x.numeroEnvio,
-    transport: x.nombreTipoTransporte || "Sin indicar",
-    description: x.observaciones || "Sin descripción",
-    status: codigoDe(x.estadoEnvioId),
-    canConfirm: Boolean(vista.value?.accion),
-    confirmTitle: vista.value?.textoAccion,
-  })),
+  shipments.value.map((x) => {
+    const codigo = codigoDe(x.estadoEnvioId);
+    // El botón depende del estado de ESTA fila, no solo de la pantalla. Antes bastaba con que la
+    // vista tuviera acción para pintarlo en todas, así que la tabla ofrecía una acción cada vez
+    // que llegaba un envío que no tocaba: un filtro que no se aplicó, una fila que cambió de
+    // estado en otra pestaña, o el propio envío justo después de accionarlo y antes de recargar.
+    // El backend lo rechazaba —el guardia de transiciones hace su trabajo—, pero el usuario ya
+    // había pulsado. Una tabla no debe prometer lo que el flujo no permite.
+    const accionable =
+      Boolean(vista.value?.accion) && (vista.value?.estados ?? []).includes(codigo);
+    return {
+      id: x.envioId,
+      number: x.numeroEnvio,
+      transport: x.nombreTipoTransporte || "Sin indicar",
+      description: x.observaciones || "Sin descripción",
+      status: codigo,
+      canConfirm: accionable,
+      confirmTitle: vista.value?.textoAccion,
+    };
+  }),
 );
 
 async function load() {
@@ -55,7 +66,14 @@ async function load() {
     const [enviosPagina, estados, notificaciones] = await Promise.all([
       // Solo los estados de esta pantalla: así el total y la paginación son los suyos y no los
       // de un montón mezclado.
-      envioService.paged({ page: page.value, pageSize, estadoCodigos: vista.value.estados }),
+      envioService.paged({
+        page: page.value,
+        pageSize,
+        estadoCodigos: vista.value.estados,
+        // Solo la pantalla "En camino" la declara: EN_TRANSITO también lo usan los envíos
+        // institucionales, que van camino de Transportación y no son asunto de este módulo.
+        estrategiaTransporte: vista.value.estrategia,
+      }),
       catalogoService.allStates(),
       notificacionService.listTechnology({ pageSize: 1 }),
     ]);

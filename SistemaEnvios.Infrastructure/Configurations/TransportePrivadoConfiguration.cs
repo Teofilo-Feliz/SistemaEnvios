@@ -13,7 +13,9 @@ public sealed class TransportePrivadoConfiguration : IEntityTypeConfiguration<Tr
         b.Property(x => x.RowVersion).IsRowVersion();
         b.Property(x => x.NombreResponsable).HasMaxLength(150).IsRequired();
         b.Property(x => x.Parentesco).HasMaxLength(50).IsRequired();
-        b.Property(x => x.CedulaResponsable).HasMaxLength(11).IsRequired();
+        b.Property(x => x.TipoDocumento).HasConversion<byte>().IsRequired();
+        // 15, que es el máximo del pasaporte; la cédula sigue acotada a 11 por el CHECK.
+        b.Property(x => x.DocumentoResponsable).HasMaxLength(15).IsRequired();
         b.Property(x => x.PlacaVehiculo).HasMaxLength(20).IsRequired();
         b.HasOne(x => x.Transporte).WithOne(x => x.Privado).HasForeignKey<TransportePrivado>(x => x.TransporteId).OnDelete(DeleteBehavior.Cascade);
     }

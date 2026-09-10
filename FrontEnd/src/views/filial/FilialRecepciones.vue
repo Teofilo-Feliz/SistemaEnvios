@@ -31,6 +31,11 @@ const columns = [
 const esHaciaFilial = (x) =>
   x.direccion === 2 || String(x.direccion).toLowerCase() === "haciafilial";
 
+// El único estado que está pendiente de recibir. RECIBIDO_FILIAL sigue apareciendo en la lista
+// —a la filial le sirve ver lo que acaba de llegar— pero es un estado FINAL: cierra el flujo y
+// el caso del equipo. No admite acción, solo consulta.
+const POR_RECIBIR = "EN_TRANSITO";
+
 const pending = computed(() => {
   const porId = Object.fromEntries(states.value.map((x) => [x.estadoEnvioId, x]));
   return shipments.value
@@ -39,16 +44,23 @@ const pending = computed(() => {
         ["EN_TRANSITO", "RECIBIDO_FILIAL"].includes(porId[x.estadoEnvioId]?.codigo) &&
         esHaciaFilial(x),
     )
-    .map((x) => ({
-      id: x.envioId,
-      envioId: x.envioId,
-      numeroEnvio: x.numeroEnvio,
-      descripcion: x.observaciones || "Sin descripción",
-      estadoEnvioCodigo: porId[x.estadoEnvioId]?.codigo,
-      estadoEnvioNombre: porId[x.estadoEnvioId]?.nombre || porId[x.estadoEnvioId]?.codigo,
-      canConfirm: true,
-      confirmTitle: "Verificar equipos y completar recepción",
-    }));
+    .map((x) => {
+      const codigo = porId[x.estadoEnvioId]?.codigo;
+      return {
+        id: x.envioId,
+        envioId: x.envioId,
+        numeroEnvio: x.numeroEnvio,
+        descripcion: x.observaciones || "Sin descripción",
+        estadoEnvioCodigo: codigo,
+        estadoEnvioNombre: porId[x.estadoEnvioId]?.nombre || codigo,
+        // El botón depende del estado de ESTA fila. Antes era `true` para todas, así que un envío
+        // ya recibido —estado final— seguía ofreciendo "completar la recepción": llevaba a la
+        // pantalla de recepción y allí el backend respondía "La recepción ya fue completada".
+        // La validación estaba bien; lo que sobraba era el botón.
+        canConfirm: codigo === POR_RECIBIR,
+        confirmTitle: "Verificar equipos y completar recepción",
+      };
+    });
 });
 
 const subtitulo = computed(() =>

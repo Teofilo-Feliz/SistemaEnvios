@@ -4,6 +4,7 @@ import { Plus } from "lucide-vue-next";
 import ShipmentEquipmentTable from "./ShipmentEquipmentTable.vue";
 import { envioService } from "@/services/envioService";
 import { glpiService } from "@/services/glpiService";
+import { filtrarSoloDigitos } from "@/utils/documento";
 
 const props = defineProps({
   item: Object,
@@ -14,6 +15,16 @@ const props = defineProps({
 });
 const emit = defineEmits(["add", "remove", "edit", "new"]);
 const errors = reactive({ typeId: "", brand: "", model: "", serial: "", ticket: "" });
+
+// El código de activo es numérico. Se filtra al teclear en vez de rechazarlo al guardar: dejar
+// escribir una letra para después devolver un error es hacerle perder el tiempo a quien la escribe.
+function alEscribirActivo(evento) {
+  const limpio = filtrarSoloDigitos(evento.target.value);
+  props.item.assetCode = limpio;
+  // El input no está en v-model, así que si el valor filtrado coincide con el anterior Vue no
+  // vuelve a pintarlo y la letra se quedaría en pantalla. Se fuerza.
+  evento.target.value = limpio;
+}
 
 async function validateAndAdd() {
   errors.typeId = props.item.typeId ? "" : "El tipo de equipo es obligatorio.";
@@ -126,9 +137,11 @@ async function validateAndAdd() {
     >
     <label
       >Código activo<input
-        v-model.trim="item.assetCode"
+        :value="item.assetCode"
         class="form-control"
-        placeholder="Opcional"
+        inputmode="numeric"
+        placeholder="Opcional, solo números"
+        @input="alEscribirActivo"
     /></label>
     <label
       >Ticket *<input

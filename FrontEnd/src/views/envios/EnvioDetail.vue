@@ -17,6 +17,7 @@ import { filas } from "@/services/paginacion";
 import { useUiStore } from "@/stores/uiStore";
 import { useAuthStore } from "@/stores/authStore";
 import { isInternalTransport, isPrivateTransport } from "@/utils/transport";
+import { etiquetaDocumento } from "@/utils/documento";
 import { confirmAction, notifyNotificationsChanged } from "@/utils/confirm";
 import { useRefrescoAlVolver } from "@/composables/useRefrescoAlVolver";
 
@@ -451,8 +452,8 @@ useRefrescoAlVolver(load);
             <dd>{{ transport.parentesco }}</dd>
           </div>
           <div v-if="isPrivateTransport(transport.estrategia)">
-            <dt>Cédula</dt>
-            <dd>{{ transport.cedulaResponsable }}</dd>
+            <dt>{{ etiquetaDocumento(transport.tipoDocumento) }}</dt>
+            <dd>{{ transport.documentoResponsable }}</dd>
           </div>
         </dl>
         <button
@@ -467,23 +468,24 @@ useRefrescoAlVolver(load);
         >
           {{ confirmingTransport ? "Confirmando…" : "Confirmar transportación" }}
         </button>
+        <!--
+          Solo el institucional. El privado se recibe desde Tecnología → Por recibir, que abre la
+          pantalla de recepción y deja marcar cada equipo conforme o con incidencia. Aquí había un
+          segundo camino que solo registraba la llegada, y desde que el privado se recibe en un
+          paso ese camino no llevaba a ninguna parte: dejaba el envío en un estado que ya no
+          continúa el flujo.
+        -->
         <button
           v-if="
             stateCode(shipment.estadoEnvioId) === 'EN_TRANSITO' &&
-            ((isInternalTransport(transport.estrategia) && auth.can('transportes.confirmar')) ||
-              (isPrivateTransport(transport.estrategia) && auth.can('recepciones.gestionar')))
+            isInternalTransport(transport.estrategia) &&
+            auth.can('transportes.confirmar')
           "
           class="btn btn-primary"
           :disabled="registeringArrival"
           @click="registerTechnologyArrival"
         >
-          {{
-            registeringArrival
-              ? "Registrando…"
-              : isInternalTransport(transport.estrategia)
-                ? "Confirmar llegada a Tecnología"
-                : "Confirmar recepción privada"
-          }}
+          {{ registeringArrival ? "Registrando…" : "Confirmar llegada a Tecnología" }}
         </button>
       </div>
       <div v-else class="empty-state">No hay registro de transportación.</div></BaseCard
