@@ -13,6 +13,29 @@
 export const SIN_RESTRICCION = null;
 
 /**
+ * Lo único que no abre ni siquiera un perfil sin restricción.
+ *
+ * "Sin restricción" es cierto para el alcance de datos, pero /filial no es un módulo que se abra
+ * por permiso: es la pantalla "Mi filial", construida sobre el affiliate del usuario. Global
+ * —Tecnología, en la sede— no tiene una filial propia, así que el backend la rechaza
+ * (DashboardService.ObtenerFilialAsync sirve solo a PerfilAlcance.Filial, y de seguir usaría un
+ * AffiliateId que no existe). El menú le ofrecía una entrada que nunca podía funcionar, y al
+ * abrirla solo salía un 403.
+ *
+ * No pierde nada: /dashboard ya le cuenta todos los envíos del sistema —también va por
+ * FiltrarAsync— y /envios le da el desglose por filial con el selector de puedeFiltrarPorFilial.
+ *
+ * Se expresa como exclusión y no enumerando lo que Global sí abre, porque esa es la regla real:
+ * "todo menos lo que pertenece a una filial concreta". Una lista blanca diría lo mismo hoy y se
+ * quedaría obsoleta en silencio al añadir el próximo módulo, dejando fuera justo al perfil que
+ * debería verlo todo; olvidarse aquí, en cambio, solo devuelve el síntoma visible de ahora.
+ */
+export const EXCLUIDO_DE_SIN_RESTRICCION = {
+  rutas: ["/filial"],
+  grupos: ["filial"],
+};
+
+/**
  * Un usuario que el backend no supo clasificar: sin posición mapeada, sin rol de este sistema.
  *
  * Existe porque antes no se distinguía de SIN_RESTRICCION. El backend devuelve el perfil
@@ -75,16 +98,24 @@ export function inicioDe(perfil) {
   return modulosDe(perfil)?.inicio || "/dashboard";
 }
 
+/**
+ * Si alguna de las bases cubre la ruta. Una base cubre su propia ruta y todo lo que cuelga de
+ * ella, pero no a un hermano con el mismo prefijo: "/filial" no debe cubrir "/filiales".
+ */
+function cubre(bases, ruta) {
+  return bases.some((base) => ruta === base || ruta.startsWith(`${base}/`));
+}
+
 /** Si la ruta pertenece a algún módulo que este perfil puede abrir. */
 export function rutaPermitida(perfil, ruta) {
   const modulos = modulosDe(perfil);
-  if (!modulos) return true;
-  return modulos.rutas.some((base) => ruta === base || ruta.startsWith(`${base}/`));
+  if (!modulos) return !cubre(EXCLUIDO_DE_SIN_RESTRICCION.rutas, ruta);
+  return cubre(modulos.rutas, ruta);
 }
 
 /** Si el grupo del menú corresponde a este perfil. */
 export function grupoVisible(perfil, clave) {
   const modulos = modulosDe(perfil);
-  if (!modulos) return true;
+  if (!modulos) return !EXCLUIDO_DE_SIN_RESTRICCION.grupos.includes(clave);
   return modulos.grupos.includes(clave);
 }

@@ -588,7 +588,14 @@ GO
     (qué envíos ve) como los permisos (qué puede hacer). Sin estas filas un usuario entra
     autenticado pero sin permisos, y el sistema responde 403 en todo.
 
-    Perfil: 1 = Global (Tecnología), 2 = Transportación, 3 = Filial.
+    Perfil: 1 = Global (Tecnología), 2 = Transportación, 3 = Filial, 4 = Tecnología (soporte técnico).
+
+    Una posición que falte aquí NO deja al usuario fuera: AlcanceEnvios cae al respaldo
+    "tiene affiliate, luego es Filial". Por eso el síntoma no es un 403 sino que el usuario
+    aterriza en el módulo equivocado, y si su affiliate es el 30 —la sede, que a propósito no
+    está mapeada a ninguna ubicación— el tablero de filial muere con "su filial no está
+    asociada a ninguna ubicación". Ese mensaje casi nunca significa lo que dice: significa que
+    a esta tabla le falta la fila de su posición.
 */
 INSERT INTO dbo.PerfilesPorPosicion (Posicion, Perfil)
 VALUES
@@ -601,7 +608,17 @@ VALUES
     (N'Encargado Transportación',            2),
     (N'Encargado transportacion y mecanica', 2),
     (N'Administrador de Filial',             3),
-    (N'Asistente Administrativo',            3);
+    (N'Asistente Administrativo',            3),
+    -- Soporte técnico. Mismas dos grafías, y por el mismo motivo: AuthManager emite la
+    -- posición unas veces con tilde y otras sin ella, y para esta colación son dos claves
+    -- distintas. Con una sola fila, la mitad del equipo entra por el módulo equivocado y el
+    -- síntoma es "a unos les funciona y a otros no".
+    --
+    -- El CHECK de la tabla admite el 4 desde que soporte técnico se separó de Global, pero
+    -- este seed se quedó sin las filas: la base nacía soportando el perfil y sin sus datos.
+    -- Esa es la causa de que en QA soporte técnico cayera en el tablero de filial.
+    (N'Soporte Técnico',                     4),
+    (N'Soporte Tecnico',                     4);
 GO
 
 INSERT INTO dbo.PermisosPorPosicion (Posicion, Permiso)
@@ -648,7 +665,25 @@ VALUES
     (N'Asistente Administrativo', N'envios.editar'),
     (N'Asistente Administrativo', N'recepciones.gestionar'),
     (N'Asistente Administrativo', N'incidencias.gestionar'),
-    (N'Asistente Administrativo', N'transportes.gestionar');
+    (N'Asistente Administrativo', N'transportes.gestionar'),
+    -- Soporte técnico trabaja el flujo completo del equipo: lo recibe, lo revisa y lo devuelve.
+    -- Quedan fuera a propósito 'catalogos.administrar' y 'transportes.administrar': administrar
+    -- el sistema y la flota no es su trabajo, y es lo único que lo separa de Programador Senior.
+    -- Las dos grafías llevan el mismo juego, igual que en PerfilesPorPosicion.
+    (N'Soporte Técnico', N'envios.consultar'),
+    (N'Soporte Técnico', N'envios.crear'),
+    (N'Soporte Técnico', N'envios.editar'),
+    (N'Soporte Técnico', N'envios.despachar'),
+    (N'Soporte Técnico', N'equipos.gestionar'),
+    (N'Soporte Técnico', N'recepciones.gestionar'),
+    (N'Soporte Técnico', N'incidencias.gestionar'),
+    (N'Soporte Tecnico', N'envios.consultar'),
+    (N'Soporte Tecnico', N'envios.crear'),
+    (N'Soporte Tecnico', N'envios.editar'),
+    (N'Soporte Tecnico', N'envios.despachar'),
+    (N'Soporte Tecnico', N'equipos.gestionar'),
+    (N'Soporte Tecnico', N'recepciones.gestionar'),
+    (N'Soporte Tecnico', N'incidencias.gestionar');
 GO
 
 INSERT INTO dbo.TiposEquipo (Nombre, Activo)
