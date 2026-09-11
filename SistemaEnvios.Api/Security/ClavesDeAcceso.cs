@@ -3,12 +3,14 @@ using System.Security.Claims;
 namespace SistemaEnvios.Api.Security;
 
 /// <summary>
-/// El alcance y los permisos se resuelven cruzando la posición y los roles del token contra las
-/// tablas de acceso. Cuando ninguna clave está mapeada, el usuario entra autenticado pero sin
-/// permisos y todas las pantallas responden 403 sin explicar la causa.
+/// El alcance y los permisos se resuelven cruzando los ROLES del token contra las tablas de
+/// acceso. Cuando ningún rol está mapeado, el usuario entra autenticado pero sin permisos y todas
+/// las pantallas responden 403 sin explicar la causa.
 ///
 /// Esto describe las claves exactas que trajo el token para poder mapearlas. Es la diferencia
-/// entre saber qué fila insertar y tener que adivinar cómo escribe AuthManager cada nombre.
+/// entre saber qué fila insertar y tener que adivinar cómo escribe AuthManager cada nombre. La
+/// posición se describe también aunque ya no conceda acceso: es el cargo de la persona y ayuda a
+/// identificar de quién se está hablando al leer el log.
 /// </summary>
 public static class ClavesDeAcceso
 {

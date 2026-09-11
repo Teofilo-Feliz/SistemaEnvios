@@ -41,17 +41,14 @@ public sealed class NotificacionUnicaTests
         var envio = await db.Envios.FirstAsync();
         await Servicio(db).ConfirmarLlegadaTransportacionAsync(envio.EnvioId);
 
-        // La entidad no debe conservar rastro de lectura: si existiera la columna, alguien
-        // volvería a construir el flujo de "marcar como leída" sobre ella.
         var propiedades = typeof(Notificacion).GetProperties().Select(x => x.Name).ToArray();
         Assert.DoesNotContain("FechaLeida", propiedades);
         Assert.DoesNotContain("UsuarioLecturaId", propiedades);
     }
 
-    // Confirmar la llegada es potestad de Transportación, no de un perfil global.
     private static EstadoEnvioService Servicio(SistemaEnviosDbContext db)
     {
-        var u = new FakeUserContext(UsuarioId, "1,AZUA", position: "Encargado de Transportacion");
+        var u = new FakeUserContext(UsuarioId, "1,AZUA", roles: ["Encargado de Transportacion"]);
         return new EstadoEnvioService(db, new UnitOfWork(db), u, AlcanceDePrueba.Crear(db, u));
     }
 
@@ -88,8 +85,6 @@ public sealed class NotificacionUnicaTests
         db.Envios.Add(envio);
         await db.SaveChangesAsync();
 
-        // El guarda exige transporte institucional: es lo que hace que la llegada la confirme
-        // Transportación y no cualquiera.
         db.Transportes.Add(new Transporte
         {
             EnvioId = envio.EnvioId,

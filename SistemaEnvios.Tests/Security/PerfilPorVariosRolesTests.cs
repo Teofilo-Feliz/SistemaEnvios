@@ -85,9 +85,9 @@ public sealed class PerfilPorVariosRolesTests
     }
 
     /// <summary>
-    /// La posición y los roles se miran juntos. Antes la posición se consultaba primero y, si
-    /// estaba mapeada, el rol no llegaba a contar: a quien administra una filial y además le
-    /// conceden el grupo de super administrador, el grupo no le servía de nada.
+    /// El rol manda, aunque la posición esté mapeada a otro perfil. Antes la posición se
+    /// consultaba primero y, si estaba mapeada, el rol no llegaba a contar: a quien administra una
+    /// filial y además le conceden el grupo de super administrador, el grupo no le servía de nada.
     /// </summary>
     [Fact]
     public async Task UnRolMasAmplioGanaSobreLaPosicion()
@@ -101,33 +101,34 @@ public sealed class PerfilPorVariosRolesTests
     }
 
     /// <summary>
-    /// Y al revés: un rol más estrecho no degrada a quien ya tenía más alcance por su posición.
-    /// Esa es la trampa que tendría dar prioridad al rol sin mirar el alcance.
+    /// Y al revés: un rol estrecho degrada a quien tenía más alcance por su posición, porque la
+    /// posición ya no concede nada. Es lo que hace revocable el acceso: se quita el grupo en
+    /// AuthManager y el usuario baja, sin que su cargo de recursos humanos lo sostenga.
     /// </summary>
     [Fact]
-    public async Task UnRolMasEstrechoNoDegradaLaPosicion()
+    public async Task UnRolEstrechoDegradaAunqueLaPosicionSeaAmplia()
     {
         await using var db = await SembrarAsync();
         var usuario = FakeUserContext.ConRoles(UsuarioId, "Programador Senior", 30, "Administrador de Filial");
 
         var perfil = await AlcanceDePrueba.Crear(db, usuario).ResolverPerfilAsync();
 
-        Assert.Equal(PerfilAlcance.Global, perfil);
+        Assert.Equal(PerfilAlcance.Filial, perfil);
     }
 
-    /// <summary>Sin roles, la posición sigue resolviendo por sí sola.</summary>
+    /// <summary>
+    /// Sin roles no hay nada que cruzar: se cae al respaldo, por mapeada que esté la posición.
+    /// </summary>
     [Fact]
-    public async Task LaPosicionSolaSigueResolviendo()
+    public async Task SinRolesLaPosicionNoResuelvePorSiSola()
     {
         await using var db = await SembrarAsync();
-        var usuario = FakeUserContext.ConRoles(UsuarioId, "Administrador de Filial", 30);
+        var usuario = FakeUserContext.ConRoles(UsuarioId, "Programador Senior", 30);
 
         var perfil = await AlcanceDePrueba.Crear(db, usuario).ResolverPerfilAsync();
 
         Assert.Equal(PerfilAlcance.Filial, perfil);
     }
-
-    // ---------- la regla de precedencia, sin base de datos ----------
 
     [Fact]
     public void GlobalEsElDeMayorAlcance()
@@ -146,7 +147,6 @@ public sealed class PerfilPorVariosRolesTests
         var db = new SistemaEnviosDbContext(new DbContextOptionsBuilder<SistemaEnviosDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 
-        // Las claves tal como quedan en la base tras la migración del super administrador.
         db.PerfilesPorPosicion.AddRange(
             new PerfilPosicion { Posicion = "SuperAdministrador", Perfil = 1 },
             new PerfilPosicion { Posicion = "Programador Senior", Perfil = 1 },

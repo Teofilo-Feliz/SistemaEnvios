@@ -17,7 +17,6 @@ internal sealed class FakeUserContext(
     public string? Position => position;
     public string? Affiliate => affiliate;
 
-    // Misma regla que HttpUserContext: el claim llega como "30,SANTO DOMINGO (SEDE)".
     public int? AffiliateId =>
         int.TryParse(affiliate?.Split(',', 2)[0].Trim(), out var id) ? id : null;
 
@@ -25,8 +24,11 @@ internal sealed class FakeUserContext(
     public IReadOnlyCollection<string> Permissions => permissions ?? [];
 
     /// <summary>Usuario sin filial y con rol global: ve todos los envios, sin restriccion de alcance.</summary>
-    /// <summary>Actor con alcance Global. Se identifica por posición mapeada, no por el nombre de un rol.</summary>
-    public static FakeUserContext Global(Guid? userId) => new(userId, position: "Programador Senior");
+    /// <summary>
+    /// Actor con alcance Global. Se identifica por un ROL mapeado: la posición ya no concede
+    /// alcance, porque es un cargo de recursos humanos que no se puede revocar desde AuthManager.
+    /// </summary>
+    public static FakeUserContext Global(Guid? userId) => new(userId, roles: ["Programador Senior"]);
 
     /// <summary>
     /// Usuario tal como llega de AuthManager: su posición, su filial y sus roles. El token trae

@@ -25,7 +25,7 @@ public sealed class PerfilUsuarioServiceTests
         var usuario = new FakeUserContext(
             UsuarioId, "30,SANTO DOMINGO (SEDE)",
             permissions: [PermissionNames.EnviosConsultar],
-            position: "Asistente Administrativo");
+            roles: ["Asistente Administrativo"]);
 
         var resultado = await Servicio(db, usuario).ObtenerAsync();
 
@@ -40,7 +40,7 @@ public sealed class PerfilUsuarioServiceTests
     public async Task UsuarioDeTecnologia_DevuelvePerfilGlobal()
     {
         await using var db = await CrearContextoAsync(("Programador Senior", PerfilAlcance.Global));
-        var usuario = new FakeUserContext(UsuarioId, "30,SANTO DOMINGO (SEDE)", position: "Programador Senior");
+        var usuario = new FakeUserContext(UsuarioId, "30,SANTO DOMINGO (SEDE)", roles: ["Programador Senior"]);
 
         var resultado = await Servicio(db, usuario).ObtenerAsync();
 
@@ -53,7 +53,7 @@ public sealed class PerfilUsuarioServiceTests
     public async Task UsuarioDeFilial_NoPuedeFiltrarPorFilial()
     {
         await using var db = await CrearContextoAsync(("Asistente Administrativo", PerfilAlcance.Filial));
-        var usuario = new FakeUserContext(UsuarioId, "30,SANTO DOMINGO (SEDE)", position: "Asistente Administrativo");
+        var usuario = new FakeUserContext(UsuarioId, "30,SANTO DOMINGO (SEDE)", roles: ["Asistente Administrativo"]);
 
         var resultado = await Servicio(db, usuario).ObtenerAsync();
 
@@ -64,7 +64,7 @@ public sealed class PerfilUsuarioServiceTests
     public async Task FilialSinMapear_LoReportaEnLugarDeFingirQueTodoEstaBien()
     {
         await using var db = await CrearContextoAsync(("Asistente Administrativo", PerfilAlcance.Filial));
-        var usuario = new FakeUserContext(UsuarioId, "77,FILIAL NUEVA", position: "Asistente Administrativo");
+        var usuario = new FakeUserContext(UsuarioId, "77,FILIAL NUEVA", roles: ["Asistente Administrativo"]);
 
         var resultado = await Servicio(db, usuario).ObtenerAsync();
 
@@ -74,16 +74,17 @@ public sealed class PerfilUsuarioServiceTests
     }
 
     /// <summary>
-    /// Posición y roles son las dos claves con las que se resuelve el alcance, y la respuesta las
-    /// devuelve las dos. Sin los roles decía a qué perfil llegó el usuario pero no con qué claves,
-    /// y averiguarlo obligaba a leer el log del contenedor o a decodificar el token entero.
+    /// El alcance se resuelve con los ROLES, y la respuesta los devuelve junto a la posición.
+    /// Sin ellos decía a qué perfil llegó el usuario pero no con qué clave, y averiguarlo obligaba
+    /// a leer el log del contenedor o a decodificar el token entero. La posición viaja también,
+    /// como dato informativo: ya no concede nada, pero saber el cargo ayuda a entender el caso.
     ///
     /// El caso real: la encargada de soporte técnico llega con una posición que no está registrada
     /// y con dos roles que sí. Viendo las tres claves y el perfil se entiende de un vistazo por qué
     /// aterrizó donde aterrizó.
     /// </summary>
     [Fact]
-    public async Task DevuelveLasDosClavesConLasQueSeResolvioElAlcance()
+    public async Task DevuelveLasClavesConLasQueSeResolvioElAlcance()
     {
         await using var db = await CrearContextoAsync(
             ("SuperAdministrador", PerfilAlcance.Global),
@@ -96,7 +97,6 @@ public sealed class PerfilUsuarioServiceTests
         Assert.True(resultado.IsSuccess, resultado.Error);
         Assert.Equal("Encargada de Soporte Técnico", resultado.Value!.Posicion);
         Assert.Equal(["Soporte Técnico", "SuperAdministrador"], resultado.Value.Roles);
-        // Y el resultado de cruzarlas: gana el de mayor alcance.
         Assert.Equal("Global", resultado.Value.Perfil);
     }
 
@@ -105,7 +105,7 @@ public sealed class PerfilUsuarioServiceTests
     public async Task SinRolesDevuelveListaVacia()
     {
         await using var db = await CrearContextoAsync(("Asistente Administrativo", PerfilAlcance.Filial));
-        var usuario = new FakeUserContext(UsuarioId, "30,SANTO DOMINGO (SEDE)", position: "Asistente Administrativo");
+        var usuario = new FakeUserContext(UsuarioId, "30,SANTO DOMINGO (SEDE)");
 
         var resultado = await Servicio(db, usuario).ObtenerAsync();
 

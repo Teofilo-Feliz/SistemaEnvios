@@ -9,16 +9,16 @@ using SistemaEnvios.Tests.Security;
 namespace SistemaEnvios.Tests.Services;
 
 /// <summary>
-/// El perfil sale de la posición del usuario, no de su filial. En la sede conviven Tecnología,
+/// El perfil sale del ROL del usuario, no de su filial. En la sede conviven Tecnología,
 /// administradores de filial y asistentes administrativos: todos con el mismo affiliate.
 /// </summary>
-public sealed class PerfilPorPosicionTests
+public sealed class PerfilPorRolEnLaSedeTests
 {
     private static readonly Guid UsuarioId = Guid.Parse("3b8e1f70-2c4a-4d61-9e05-8a7f6b3c2d19");
     private const string Sede = "30,SANTO DOMINGO (SEDE)";
 
     [Fact]
-    public async Task PosicionDeTecnologia_ResuelveGlobal()
+    public async Task RolDeTecnologia_ResuelveGlobal()
     {
         await using var db = await CrearContextoAsync(("Programador Senior", PerfilAlcance.Global));
 
@@ -26,7 +26,7 @@ public sealed class PerfilPorPosicionTests
     }
 
     [Fact]
-    public async Task PosicionDeTransportacion_ResuelveTransportacion()
+    public async Task RolDeTransportacion_ResuelveTransportacion()
     {
         await using var db = await CrearContextoAsync(("Encargado de Transportacion", PerfilAlcance.Transportacion));
 
@@ -34,7 +34,7 @@ public sealed class PerfilPorPosicionTests
     }
 
     [Fact]
-    public async Task PosicionDeFilial_ResuelveFilial()
+    public async Task RolDeFilial_ResuelveFilial()
     {
         await using var db = await CrearContextoAsync(("Asistente Administrativo", PerfilAlcance.Filial));
 
@@ -42,11 +42,11 @@ public sealed class PerfilPorPosicionTests
     }
 
     /// <summary>
-    /// La prueba que impide la escalada: dos usuarios de la MISMA sede, distinta posición,
+    /// La prueba que impide la escalada: dos usuarios de la MISMA sede, distinto rol,
     /// deben resolver perfiles distintos. Si el perfil saliera de la ubicación, ambos serían iguales.
     /// </summary>
     [Fact]
-    public async Task MismaSede_DistintaPosicion_ResuelvePerfilesDistintos()
+    public async Task MismaSede_DistintoRol_ResuelvePerfilesDistintos()
     {
         await using var db = await CrearContextoAsync(
             ("Programador Senior", PerfilAlcance.Global),
@@ -57,7 +57,7 @@ public sealed class PerfilPorPosicionTests
     }
 
     [Fact]
-    public async Task PosicionSinMapear_ConFilial_CaeEnFilial()
+    public async Task RolSinMapear_ConFilial_CaeEnFilial()
     {
         await using var db = await CrearContextoAsync(("Programador Senior", PerfilAlcance.Global));
 
@@ -65,16 +65,16 @@ public sealed class PerfilPorPosicionTests
     }
 
     [Fact]
-    public async Task PosicionSinMapear_SinFilial_NoTieneAlcance()
+    public async Task RolSinMapear_SinFilial_NoTieneAlcance()
     {
         await using var db = await CrearContextoAsync();
-        var usuario = new FakeUserContext(UsuarioId, affiliate: null, position: "Cargo Desconocido");
+        var usuario = new FakeUserContext(UsuarioId, affiliate: null, roles: ["Cargo Desconocido"]);
 
         Assert.Equal(PerfilAlcance.SinAlcance, await AlcanceDePrueba.Crear(db, usuario).ResolverPerfilAsync());
     }
 
-    private static Task<PerfilAlcance> Perfil(SistemaEnviosDbContext db, string posicion) =>
-        AlcanceDePrueba.Crear(db, new FakeUserContext(UsuarioId, Sede, position: posicion)).ResolverPerfilAsync();
+    private static Task<PerfilAlcance> Perfil(SistemaEnviosDbContext db, string rol) =>
+        AlcanceDePrueba.Crear(db, new FakeUserContext(UsuarioId, Sede, roles: [rol])).ResolverPerfilAsync();
 
     private static async Task<SistemaEnviosDbContext> CrearContextoAsync(
         params (string Posicion, PerfilAlcance Perfil)[] mapeo)

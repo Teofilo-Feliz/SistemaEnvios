@@ -76,7 +76,7 @@ public sealed class CreacionAlcanceTests
     }
 
     private static EnvioService Servicio(SistemaEnviosDbContext db, string affiliate) =>
-        Servicio(db, new FakeUserContext(UsuarioId, affiliate, position: PosicionFilial));
+        Servicio(db, new FakeUserContext(UsuarioId, affiliate, roles: [PosicionFilial]));
 
     private static EnvioService Servicio(SistemaEnviosDbContext db, IUserContext usuario) =>
         new(new GenericRepository<Envio>(db), db, new UnitOfWork(db),

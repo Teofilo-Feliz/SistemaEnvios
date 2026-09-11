@@ -39,7 +39,6 @@ public sealed class EdicionPorCustodiaTests
     public async Task LaFilialNoEditaLoQueTecnologiaEstaPreparandoParaElla()
     {
         await using var db = await SembrarAsync();
-        // Va dirigido a Azua, así que la filial lo ve en su listado; pero es de Tecnología.
         var envio = await Envio(db, "ENV-PREPARA-TEC");
 
         var resultado = await Servicio(db, "Asistente Administrativo").ActualizarAsync(Cambio(db, envio));
@@ -65,7 +64,6 @@ public sealed class EdicionPorCustodiaTests
         await using var db = await SembrarAsync();
         var envio = await Envio(db, "ENV-DE-SANTIAGO");
 
-        // El usuario es de Azua y el envío es de Santiago: fuera de su alcance.
         var resultado = await Servicio(db, "Asistente Administrativo").ActualizarAsync(Cambio(db, envio));
 
         Assert.True(resultado.IsFailure);
@@ -84,8 +82,6 @@ public sealed class EdicionPorCustodiaTests
         Assert.Equal(ErrorType.Conflict, resultado.ErrorType);
     }
 
-    // ---------- apoyo ----------
-
     private static async Task<Envio> Envio(SistemaEnviosDbContext db, string numero) =>
         await db.Envios.AsNoTracking().FirstAsync(x => x.NumeroEnvio == numero);
 
@@ -99,7 +95,7 @@ public sealed class EdicionPorCustodiaTests
 
     private static EnvioService Servicio(SistemaEnviosDbContext db, string posicion)
     {
-        IUserContext u = new FakeUserContext(UsuarioId, "1,AZUA", position: posicion);
+        IUserContext u = new FakeUserContext(UsuarioId, "1,AZUA", roles: [posicion]);
         return new EnvioService(
             new GenericRepository<Envio>(db), db, new UnitOfWork(db),
             new CrearEnvioRequestValidator(), new ActualizarEnvioRequestValidator(),

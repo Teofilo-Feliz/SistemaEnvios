@@ -64,7 +64,7 @@ public sealed class FiltroPorFilialTests
 
     private static EnvioService Servicio(SistemaEnviosDbContext db)
     {
-        var usuario = new FakeUserContext(UsuarioId, "30,SEDE", position: "Programador Senior");
+        var usuario = new FakeUserContext(UsuarioId, "30,SEDE", roles: ["Programador Senior"]);
         return new EnvioService(
             new GenericRepository<Envio>(db), db, new UnitOfWork(db),
             new CrearEnvioRequestValidator(), new ActualizarEnvioRequestValidator(),

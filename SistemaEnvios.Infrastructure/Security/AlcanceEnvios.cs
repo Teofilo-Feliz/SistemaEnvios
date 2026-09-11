@@ -18,51 +18,36 @@ public sealed class AlcanceEnvios(
     ILogger<AlcanceEnvios> registro) : IAlcanceEnvios
 {
     /// <summary>
-    /// El perfil sale del claim "position" contra PerfilesPorPosicion, no de la ubicación del
-    /// usuario. En la sede conviven Tecnología, administradores de filial y asistentes
-    /// administrativos con el mismo affiliate: deducirlo de la ubicación le daría alcance
-    /// global a todo el centro.
+    /// El perfil sale de los ROLES del token, cruzados contra PerfilesPorPosicion. Ni de la
+    /// posición ni de la ubicación del usuario: en la sede conviven Tecnología, administradores
+    /// de filial y asistentes administrativos con el mismo affiliate, así que deducirlo de la
+    /// ubicación le daría alcance global a todo el centro.
     /// </summary>
+    /// <remarks>
+    /// La posición dejó de conceder alcance. Es un cargo de recursos humanos: llega escrito de mil
+    /// formas —con tilde y sin ella, en masculino y en femenino, con variantes que nadie
+    /// registró— y, sobre todo, NO SE PUEDE REVOCAR desde donde se administran los accesos.
+    ///
+    /// Eso último es lo que decidió el cambio. Al sacar a alguien del grupo de super
+    /// administradores conservaba el alcance, porque su cargo se lo seguía concediendo por una vía
+    /// que ese grupo nunca controló. Quitar un acceso tiene que ser una sola acción y en un solo
+    /// sitio; si no, se revoca creyendo que se revocó, que es peor que no revocar.
+    ///
+    /// Un rol, en cambio, es un grupo de seguridad que Tecnología concede y quita en AuthManager.
+    /// Ahí vive el gobierno de los accesos, y ahora también su única llave.
+    /// </remarks>
     public async Task<PerfilAlcance> ResolverPerfilAsync(CancellationToken cancellationToken = default)
     {
         var roles = usuario.Roles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToArray();
 
-        // La posición y los roles se miran JUNTOS, y gana el de mayor alcance.
-        //
-        // Antes la posición se consultaba primero y, si estaba mapeada, los roles no llegaban a
-        // consultarse. Eso contradecía el motivo por el que existen los roles, escrito aquí mismo:
-        // un rol se crea a propósito para este sistema, mientras que la posición es un cargo de
-        // recursos humanos que llega escrito de mil formas. La encargada de soporte técnico lo
-        // demostró: su posición es "Encargada de Soporte Técnico" —una variante que nadie
-        // registró— y sus roles son "Soporte Técnico" y "SuperAdministrador", los grupos que
-        // Tecnología concede a propósito.
-        //
-        // Se juntan en vez de dar prioridad a unos sobre otros porque la tabla ya los trata como
-        // lo mismo —una sola columna para ambos— y porque dar prioridad al rol tendría su propia
-        // trampa: un rol MÁS ESTRECHO degradaría a quien tuviera una posición más amplia. Con
-        // "mayor alcance gana", conceder un grupo nunca quita lo que ya se tenía.
-        string[] claves = string.IsNullOrWhiteSpace(usuario.Position)
-            ? roles
-            : [usuario.Position.Trim(), .. roles];
-
-        if (claves.Length > 0)
+        if (roles.Length > 0)
         {
-            var perfil = await BuscarPerfilAsync(claves, cancellationToken);
+            var perfil = await BuscarPerfilAsync(roles, cancellationToken);
             if (perfil is not null) return perfil.Value;
         }
 
-        // Aquí había un respaldo que concedía alcance Global por el nombre del rol
-        // ("AdministradorGlobal" y parecidos). Esos nombres los define AuthManager para todas
-        // sus aplicaciones, así que un administrador de otra entraba aquí viéndolo todo. El
-        // alcance Global se concede mapeando la posición o el rol, nunca por cómo se llame.
-
-        // Posición sin mapear: se cae al alcance más restrictivo que el usuario pueda tener.
-        // El respaldo es silencioso por diseño —nadie se queda fuera del sistema— pero eso
-        // esconde el síntoma real: Transportación aterriza en el tablero de filial y parece un
-        // fallo de enrutamiento, no una fila que falta. Se registra la clave exacta que trajo el
-        // token para saber qué insertar, igual que hace PermisosPorPosicionTransformation.
         var respaldo = usuario.AffiliateId.HasValue ? PerfilAlcance.Filial : PerfilAlcance.SinAlcance;
-        AvisarPosicionSinMapear(roles, respaldo);
+        AvisarRolSinMapear(roles, respaldo);
         return respaldo;
     }
 
@@ -75,18 +60,8 @@ public sealed class AlcanceEnvios(
 
         return perfil switch
         {
-            // Tecnología está en un extremo de todo envío, así que los ve todos. Lo que la
-            // separa de Global no son los datos sino las pantallas que puede abrir.
             PerfilAlcance.Global or PerfilAlcance.Tecnologia => query,
 
-            // Solo lo que Transportación custodia: sus etapas del flujo y transporte
-            // institucional. El transporte privado va directo a Tecnología sin pasar por ellos.
-            // Sin transporte todavía es el caso normal, no una excepción: Tecnología despacha y
-            // el envío queda esperando a que Transportación le asigne chofer, que es cuando nace
-            // el transporte. Exigirlo aquí escondía justo los envíos que ella tiene que atender.
-            //
-            // El transporte privado se sigue excluyendo: su flujo no deja mover un envío sin un
-            // transporte válido, así que "sin transporte" nunca significa privado.
             PerfilAlcance.Transportacion => query.Where(x =>
                 EstadoEnvioCodigos.EtapasTransportacion.Contains(x.EstadoEnvio.Codigo) &&
                 (x.Transporte == null ||
@@ -117,9 +92,6 @@ public sealed class AlcanceEnvios(
             PerfilAlcance.Transportacion => query.Where(x => db.EnvioEquipos.Any(ee =>
                 ee.EquipoId == x.EquipoId &&
                 EstadoEnvioCodigos.EtapasTransportacion.Contains(ee.Envio.EstadoEnvio.Codigo))),
-            // Los suyos, más los que viajan en un envío suyo. Sin esta segunda parte la filial
-            // no podía ver lo que le venía en camino, que es justo lo que tiene que mirar para
-            // recibirlo: el equipo sigue en Tecnología hasta que ella lo recibe.
             PerfilAlcance.Filial => query.Where(x =>
                 x.UbicacionActual.FilialExternaId == filialId ||
                 db.EnvioEquipos.Any(ee => ee.EquipoId == x.EquipoId &&
@@ -187,7 +159,7 @@ public sealed class AlcanceEnvios(
     /// Un aviso por combinación de claves y por hora: ResolverPerfilAsync se llama varias veces
     /// por petición, y sin el tope el log se llenaría con la misma línea.
     /// </summary>
-    private void AvisarPosicionSinMapear(string[] roles, PerfilAlcance respaldo)
+    private void AvisarRolSinMapear(string[] roles, PerfilAlcance respaldo)
     {
         var posicion = string.IsNullOrWhiteSpace(usuario.Position) ? "(sin posición)" : usuario.Position.Trim();
         var partesRoles = roles.Length == 0 ? "(sin roles)" : string.Join(", ", roles.Select(x => $"'{x}'"));
@@ -197,8 +169,8 @@ public sealed class AlcanceEnvios(
 
         registro.LogWarning(
             "Perfil sin mapear: posición '{Posicion}'; roles {Roles}. Se aplicó el respaldo {Respaldo}, " +
-            "así que este usuario aterriza en el módulo equivocado. Inserte la clave exacta en " +
-            "dbo.PerfilesPorPosicion (Perfil: 1=Global, 2=Transportacion, 3=Filial, 4=Tecnologia).",
+            "así que este usuario aterriza en el módulo equivocado. El alcance solo lo concede un ROL: " +
+            "inserte el nombre exacto de uno de estos roles en dbo.PerfilesPorPosicion (Perfil: 1=Global, 2=Transportacion, 3=Filial, 4=Tecnologia).",
             posicion, partesRoles, respaldo);
     }
 
@@ -209,10 +181,6 @@ public sealed class AlcanceEnvios(
     /// </summary>
     private async Task<PerfilAlcance?> BuscarPerfilAsync(string[] claves, CancellationToken cancellationToken)
     {
-        // Se traen TODAS las coincidencias y gana la de mayor alcance. Antes esto era un
-        // FirstOrDefault sin ORDER BY: con un usuario que trae varios roles mapeados a perfiles
-        // distintos, el resultado dependía de lo que SQL Server devolviera primero, que no está
-        // definido. Un mismo usuario podía resolver a un perfil distinto entre despliegues.
         var mapeados = await db.PerfilesPorPosicion.AsNoTracking()
             .Where(x => claves.Contains(x.Posicion))
             .Select(x => (int)x.Perfil)
@@ -223,5 +191,4 @@ public sealed class AlcanceEnvios(
             .Select(x => (PerfilAlcance)x)
             .DeMayorAlcance();
     }
-
 }

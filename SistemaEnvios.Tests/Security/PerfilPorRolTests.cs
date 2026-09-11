@@ -7,12 +7,12 @@ using SistemaEnvios.Infrastructure.Security;
 namespace SistemaEnvios.Tests.Security;
 
 /// <summary>
-/// El perfil sale de la posición, pero AuthManager también permite crear un rol dedicado a este
-/// sistema, que es más fiable de administrar: la posición es un cargo de recursos humanos y
-/// puede escribirse de mil formas, mientras que un rol se asigna a propósito.
+/// El perfil sale del ROL, y solo del rol. La posición viaja en el token pero ya no concede nada.
 ///
-/// Se aceptan los dos. La posición manda cuando está mapeada, porque es más específica que un
-/// rol que agrupa a mucha gente.
+/// La posición es el cargo de recursos humanos: se escribe de mil formas, no se administra desde
+/// AuthManager y, sobre todo, no se puede revocar. Al sacar a alguien de un grupo de seguridad
+/// conservaba el alcance porque su cargo se lo seguía dando. El rol sí se quita, y con él el
+/// acceso.
 /// </summary>
 public sealed class PerfilPorRolTests
 {
@@ -21,8 +21,6 @@ public sealed class PerfilPorRolTests
     [Fact]
     public async Task UnRolMapeadoDaSuPerfilAunqueLaPosicionNoEsteMapeada()
     {
-        // Se mapea a Transportación a propósito: con affiliate en el token, el respaldo daría
-        // Filial. Si sale Transportación es porque el rol se leyó de verdad.
         await using var db = await SembrarAsync(("LogiTrack.Transportacion", PerfilAlcance.Transportacion));
         var usuario = Usuario(posicion: "Encargada de Servicios Generales", roles: ["LogiTrack.Transportacion"]);
 
@@ -31,8 +29,15 @@ public sealed class PerfilPorRolTests
         Assert.Equal(PerfilAlcance.Transportacion, perfil);
     }
 
+    /// <summary>
+    /// El rol decide, aunque la posición esté mapeada a un alcance MAYOR.
+    ///
+    /// Antes mandaba la posición, y eso hacía imposible revocar: al sacar a alguien de un grupo
+    /// conservaba el alcance porque su cargo se lo seguía dando. El cargo es un dato de recursos
+    /// humanos que no se administra desde AuthManager; el rol sí.
+    /// </summary>
     [Fact]
-    public async Task LaPosicionMandaSobreElRolCuandoLasDosEstanMapeadas()
+    public async Task ElRolDecideAunqueLaPosicionEsteMapeadaAUnAlcanceMayor()
     {
         await using var db = await SembrarAsync(
             ("Programador Senior", PerfilAlcance.Global),
@@ -41,8 +46,7 @@ public sealed class PerfilPorRolTests
 
         var perfil = await AlcanceDePrueba.Crear(db, usuario).ResolverPerfilAsync();
 
-        // La posición es más específica: un rol agrupa a mucha gente, la posición es del cargo.
-        Assert.Equal(PerfilAlcance.Global, perfil);
+        Assert.Equal(PerfilAlcance.Transportacion, perfil);
     }
 
     [Fact]
@@ -60,7 +64,6 @@ public sealed class PerfilPorRolTests
         await using var db = await SembrarAsync(("LogiTrack.Transportacion", PerfilAlcance.Transportacion));
         var usuario = Usuario(posicion: "Sin mapear", roles: ["otro-rol-cualquiera"]);
 
-        // Tiene filial en el token, así que ve lo suyo y nada más. Nunca Global por descarte.
         Assert.Equal(PerfilAlcance.Filial, await AlcanceDePrueba.Crear(db, usuario).ResolverPerfilAsync());
     }
 

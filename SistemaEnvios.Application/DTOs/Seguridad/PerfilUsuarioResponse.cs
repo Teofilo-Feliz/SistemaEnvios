@@ -2,11 +2,13 @@ namespace SistemaEnvios.Application.DTOs.Seguridad;
 
 /// <summary>Quién es el usuario y qué alcance tiene, según lo decide el backend.</summary>
 /// <remarks>
-/// Posicion y Roles viajan juntos y son las DOS claves con las que se resuelve el alcance: se
-/// cruzan contra PerfilesPorPosicion y gana la de mayor alcance.
+/// Roles es la clave con la que se resuelve el alcance: se cruza contra PerfilesPorPosicion y
+/// gana el de mayor alcance. Posicion viaja al lado como dato informativo —es el cargo de
+/// recursos humanos— pero ya no concede nada: no se administra desde AuthManager y por tanto no
+/// se puede revocar.
 ///
 /// Los roles se devuelven para que un problema de acceso se pueda diagnosticar desde el navegador.
-/// Sin ellos, la respuesta decía a qué perfil llegó el usuario pero no con qué claves, y la única
+/// Sin ellos, la respuesta decía a qué perfil llegó el usuario pero no con qué clave, y la única
 /// forma de averiguarlo era leer el log del contenedor o decodificar el token entero. Un usuario
 /// que aterriza en el módulo equivocado es el fallo más frecuente de este sistema, y era también
 /// el más ciego.

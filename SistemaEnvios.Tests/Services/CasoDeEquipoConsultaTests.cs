@@ -47,7 +47,6 @@ public sealed class CasoDeEquipoConsultaTests
     {
         await using var db = await SembrarAsync();
 
-        // El usuario es de Azua (1); el equipo y su caso son de Santiago (41).
         var resultado = await Servicio(db, "Asistente Administrativo").ConsultarDeEquipoAsync(Equipo(db, "SN-SANTIAGO"));
 
         Assert.True(resultado.IsFailure);
@@ -59,7 +58,7 @@ public sealed class CasoDeEquipoConsultaTests
 
     private static CasoEquipoService Servicio(SistemaEnviosDbContext db, string posicion)
     {
-        IUserContext u = new FakeUserContext(UsuarioId, "1,AZUA", position: posicion);
+        IUserContext u = new FakeUserContext(UsuarioId, "1,AZUA", roles: [posicion]);
         return new CasoEquipoService(db, new UnitOfWork(db), u, AlcanceDePrueba.Crear(db, u));
     }
 

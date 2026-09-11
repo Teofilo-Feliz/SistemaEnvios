@@ -32,29 +32,17 @@ public sealed class PermisosPorPosicionTransformation(
 
     public async Task<ClaimsPrincipal> TransformAsync(ClaimsPrincipal principal)
     {
-        // ASP.NET Core puede invocarla más de una vez por petición.
         if (principal.HasClaim(MarcaAplicada, "1")) return principal;
         if (principal.Identity is not ClaimsIdentity identidad || !identidad.IsAuthenticated) return principal;
 
-        // Del token solo sobreviven los permisos que existen en este sistema: "evaluador"
-        // pertenece a otra aplicación y no debe otorgar nada aquí.
         var permisos = principal.FindAll(ClaimPermisos)
             .SelectMany(x => x.Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             .Where(PermisosConocidos.Contains)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        // Se acumulan los permisos de la posición y de los roles: un usuario puede llegar por
-        // cualquiera de los dos caminos, y AuthManager permite crear un rol dedicado a este
-        // sistema, que es más fiable de administrar que un cargo de recursos humanos.
-        var posicion = principal.FindFirstValue(ClaimPosicion)?.Trim();
-        if (!string.IsNullOrEmpty(posicion))
-            permisos.UnionWith(await PermisosDePosicionAsync(posicion));
-
         foreach (var rol in ClavesDeAcceso.Roles(principal))
             permisos.UnionWith(await PermisosDePosicionAsync(rol));
 
-        // Nadie mapeado: el usuario entra pero sin poder hacer nada, y la pantalla solo muestra
-        // 403 sin causa. Se registra qué trajo el token para saber exactamente qué fila falta.
         if (permisos.Count == 0)
         {
             var claves = ClavesDeAcceso.Describir(principal);

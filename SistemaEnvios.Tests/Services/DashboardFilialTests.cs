@@ -27,7 +27,6 @@ public sealed class DashboardFilialTests
         var resultado = await Servicio(db).ObtenerFilialAsync();
 
         Assert.True(resultado.IsSuccess, resultado.Error);
-        // Azua tiene 3 envíos; Santiago tiene 2 que no deben contarse.
         Assert.Equal(3, resultado.Value!.PorEtapa.Sum(x => x.Total));
     }
 
@@ -40,7 +39,6 @@ public sealed class DashboardFilialTests
 
         var enFilial = resultado.Value!.PorEtapa.Single(x => x.Codigo == EstadoEnvioCodigos.EnFilial);
         Assert.Equal(1, enFilial.Total);
-        // El que viene de vuelta va en la misma etapa pero en el otro sentido.
         var deVuelta = resultado.Value.PorEtapa.Single(
             x => x.Codigo == EstadoEnvioCodigos.EnTransito && x.Direccion == (int)DireccionEnvioEnum.HaciaFilial);
         Assert.Equal(1, deVuelta.Total);
@@ -53,7 +51,6 @@ public sealed class DashboardFilialTests
 
         var resultado = await Servicio(db).ObtenerFilialAsync();
 
-        // Dos equipos en Azua y uno en Tecnología con su caso todavía abierto.
         Assert.Equal(2, resultado.Value!.EquiposEnFilial);
         Assert.Equal(1, resultado.Value.EquiposFuera);
     }
@@ -70,7 +67,7 @@ public sealed class DashboardFilialTests
 
     private static DashboardService Servicio(SistemaEnviosDbContext db, string posicion = "Administrador de Filial")
     {
-        IUserContext u = new FakeUserContext(UsuarioId, "1,AZUA", position: posicion);
+        IUserContext u = new FakeUserContext(UsuarioId, "1,AZUA", roles: [posicion]);
         return new DashboardService(db, AlcanceDePrueba.Crear(db, u), u);
     }
 
@@ -117,7 +114,6 @@ public sealed class DashboardFilialTests
             fuera);
         await db.SaveChangesAsync();
 
-        // El equipo que está fuera tiene su caso abierto, colgado del envío de Azua.
         db.EnvioEquipos.Add(new EnvioEquipo
         {
             EnvioId = deAzua.EnvioId,

@@ -57,7 +57,6 @@ public sealed class BandejasTransportacionTests
         var custodia = await servicio.ListarPendientesDeCustodiaAsync(new ParametrosPaginaSimple());
         var llegada = await servicio.ListarPendientesDeLlegadaAsync(new ParametrosPaginaSimple());
 
-        // El que ya salió a ruta no sigue esperando al chofer, y el que aún no sale no puede llegar.
         Assert.DoesNotContain(custodia.Value!.Items, x => x.NumeroEnvio == "ENV-EN-RUTA");
         Assert.DoesNotContain(llegada.Value!.Items, x => x.NumeroEnvio == "ENV-ESPERA-CHOFER");
     }
@@ -69,7 +68,6 @@ public sealed class BandejasTransportacionTests
 
         var custodia = await Servicio(db).ListarPendientesDeCustodiaAsync(new ParametrosPaginaSimple());
 
-        // El privado va directo a Tecnología: Transportación nunca lo custodia.
         Assert.DoesNotContain(custodia.Value!.Items, x => x.NumeroEnvio == "ENV-PRIVADO");
     }
 
@@ -80,15 +78,12 @@ public sealed class BandejasTransportacionTests
 
         var resultado = await Servicio(db).ListarPendientesDeCustodiaAsync(new ParametrosPaginaSimple());
 
-        // Antes se paginaban los envíos y se filtraba después, así que el total mentía.
         Assert.Equal(1, resultado.Value!.TotalItems);
     }
 
-    // ---------- apoyo ----------
-
     private static TransporteService Servicio(SistemaEnviosDbContext db)
     {
-        IUserContext u = new FakeUserContext(UsuarioId, "1,AZUA", position: "Encargado de Transportacion");
+        IUserContext u = new FakeUserContext(UsuarioId, "1,AZUA", roles: ["Encargado de Transportacion"]);
         return new TransporteService(db, new UnitOfWork(db),
             new CrearTransporteRequestValidator(), new ActualizarTransporteRequestValidator(),
             u, AlcanceDePrueba.Crear(db, u));

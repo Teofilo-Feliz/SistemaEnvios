@@ -22,8 +22,6 @@ namespace SistemaEnvios.Tests.Integracion;
 /// </summary>
 public sealed class AccesoEncargadoTransportacionSqlServerTests
 {
-    // Copiadas del token emitido por AuthManager. El rol trae espacio al final y acento; la
-    // posición es el cargo de recursos humanos, escrito sin acentos y con "y mecanica".
     private const string RolDelToken = "Encargado Transportación ";
     private const string PosicionDelToken = "Encargado transportacion y mecanica";
     private const string FilialDelToken = "30,SANTO DOMINGO (SEDE)";
@@ -38,8 +36,6 @@ public sealed class AccesoEncargadoTransportacionSqlServerTests
 
         var perfil = await Alcance(db).ResolverPerfilAsync();
 
-        // Sin mapeo caía en Filial: tiene filial 30 (la sede), así que el respaldo lo daba por
-        // administrador de filial. Es el fallo que lo mandaba a /unauthorized.
         Assert.Equal(PerfilAlcance.Transportacion, perfil);
     }
 
@@ -51,8 +47,6 @@ public sealed class AccesoEncargadoTransportacionSqlServerTests
 
         var permisos = await PermisosDeAsync(db, RolDelToken);
 
-        // El token solo trae transportes.*, y /transportacion exige envios.consultar: sin este
-        // permiso el guardián rebota igual, aunque el perfil ya sea el correcto.
         Assert.Contains(PermissionNames.EnviosConsultar, permisos);
     }
 
@@ -76,7 +70,6 @@ public sealed class AccesoEncargadoTransportacionSqlServerTests
 
         var permisos = await PermisosDeAsync(db, RolDelToken);
 
-        // Transportación custodia y confirma; no crea envíos ni administra catálogos.
         Assert.DoesNotContain(PermissionNames.EnviosCrear, permisos);
         Assert.DoesNotContain(PermissionNames.CatalogosAdministrar, permisos);
     }
@@ -106,14 +99,11 @@ public sealed class AccesoEncargadoTransportacionSqlServerTests
             .ToListAsync();
     }
 
-    // El alcance real contra la base real: el mapeo que se prueba es el que está sembrado, no
-    // uno inventado por la prueba.
     private static AlcanceEnvios Alcance(SistemaEnviosDbContext db) =>
         new(db, new FakeUserContext(
             Guid.Parse("78b7c168-eacb-45f1-93f2-a0528f727c7a"),
             FilialDelToken,
-            roles: [RolDelToken.Trim()],
-            position: PosicionDelToken),
+            roles: [RolDelToken.Trim()]),
             new MemoryCache(new MemoryCacheOptions()), NullLogger<AlcanceEnvios>.Instance);
 
     private static SistemaEnviosDbContext Contexto() => new(

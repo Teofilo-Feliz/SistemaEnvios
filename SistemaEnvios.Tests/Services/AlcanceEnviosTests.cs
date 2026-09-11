@@ -43,7 +43,6 @@ public sealed class AlcanceEnviosTests
     {
         await using var db = CrearContexto();
         await SembrarEnvioDesdeFilialAsync(db, filialExternaId: 30);
-        // Santiago existe y está mapeada: el usuario simplemente no tiene envíos propios.
         db.Ubicaciones.Add(new Ubicacion
         {
             Nombre = "Filial Santiago",
@@ -91,7 +90,7 @@ public sealed class AlcanceEnviosTests
         await using var db = CrearContexto();
         await SembrarEnvioDesdeFilialAsync(db, filialExternaId: 30);
 
-        var resultado = await // El alcance Global se concede por posición mapeada, no por el nombre del rol.
+        var resultado = await
         CrearServicio(db, ClaimSantiago, "Programador Senior").ConsultarAsync(new ConsultarEnviosRequest());
 
         Assert.True(resultado.IsSuccess);
@@ -139,9 +138,9 @@ public sealed class AlcanceEnviosTests
     private static EnvioService CrearServicio(
         SistemaEnviosDbContext db,
         string affiliate,
-        string? posicion = null)
+        string? rol = null)
     {
-        var userContext = new FakeUserContext(UsuarioId, affiliate, position: posicion);
+        var userContext = new FakeUserContext(UsuarioId, affiliate, roles: rol is null ? [] : [rol]);
         return new EnvioService(
             new GenericRepository<Envio>(db),
             db,

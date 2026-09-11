@@ -55,8 +55,6 @@ public sealed class AlcancePerfilesTests
         Assert.Empty(visibles);
     }
 
-    // Se verifica el perfil y no solo la visibilidad: como todo envío toca Tecnología por
-    // diseño, filtrar "por filial 99" daría el mismo resultado y la prueba no distinguiría nada.
     [Fact]
     public async Task UsuarioDeTecnologia_ResuelvePerfilGlobal()
     {
@@ -99,17 +97,16 @@ public sealed class AlcancePerfilesTests
         await using var db = CrearContexto();
         await SembrarAsync(db, EstadoEnvioCodigos.EnTransito, EstrategiaTransporteEnum.TransportacionInstitucional);
 
-        // El envío es de Santo Domingo (30); este usuario es de Santiago (41).
         var visibles = await ListarAsync(db, new FakeUserContext(UsuarioId, ClaimSantiago));
 
         Assert.Empty(visibles);
     }
 
     private static FakeUserContext Transportacion() =>
-        new(UsuarioId, ClaimSantiago, position: PosicionTransportacion);
+        new(UsuarioId, ClaimSantiago, roles: [PosicionTransportacion]);
 
     private static FakeUserContext Tecnologia() =>
-        new(UsuarioId, ClaimSantiago, position: PosicionTecnologia);
+        new(UsuarioId, ClaimSantiago, roles: [PosicionTecnologia]);
 
     private static async Task<List<Envio>> ListarAsync(SistemaEnviosDbContext db, IUserContext usuario)
     {

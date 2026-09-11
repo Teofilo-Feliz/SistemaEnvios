@@ -72,7 +72,6 @@ public sealed class HistorialDeViajesTests
         var ida = viajes.Single(x => x.NumeroEnvio == "ENV-IDA");
         Assert.True(ida.EsAperturaDeCaso);
         Assert.False(vuelta.EsAperturaDeCaso);
-        // Es el mismo caso, así que el ticket es el mismo en los dos viajes.
         Assert.Equal(ida.NumeroTicket, vuelta.NumeroTicket);
     }
 
@@ -98,7 +97,6 @@ public sealed class HistorialDeViajesTests
 
         var resultado = await Servicio(db).ListarViajesAsync(equipo.EquipoId, new ParametrosPaginaSimple());
 
-        // Un equipo recién registrado no es un error: todavía no se ha movido.
         Assert.True(resultado.IsSuccess, resultado.Error);
         Assert.Empty(resultado.Value!.Items);
     }
@@ -109,7 +107,6 @@ public sealed class HistorialDeViajesTests
         await using var db = await SembrarAsync();
         var ajeno = db.Equipos.Single(x => x.NumeroSerie == "SN-AJENO");
 
-        // Usuario de Azua; el equipo vive en Santiago y nunca viajó en un envío suyo.
         var resultado = await Servicio(db, "1,AZUA", "Administrador de Filial")
             .ListarViajesAsync(ajeno.EquipoId, new ParametrosPaginaSimple());
 
@@ -124,14 +121,13 @@ public sealed class HistorialDeViajesTests
 
         var resultado = await Servicio(db).ListarViajesAsync(99999, new ParametrosPaginaSimple());
 
-        // Confundir "no existe" con "no puede" deja al usuario buscando un permiso que no falta.
         Assert.Equal(ErrorType.NotFound, resultado.ErrorType);
     }
 
     private static EquipoService Servicio(
         SistemaEnviosDbContext db, string affiliate = "1,AZUA", string posicion = "Programador Senior")
     {
-        IUserContext u = new FakeUserContext(UsuarioId, affiliate, position: posicion);
+        IUserContext u = new FakeUserContext(UsuarioId, affiliate, roles: [posicion]);
         return new EquipoService(db, new UnitOfWork(db),
             new CrearEquipoRequestValidator(), new ActualizarEquipoRequestValidator(),
             u, AlcanceDePrueba.Crear(db, u));
@@ -164,7 +160,6 @@ public sealed class HistorialDeViajesTests
         db.Envios.AddRange(ida, vuelta, deOtro);
         await db.SaveChangesAsync();
 
-        // La ida abre el caso con ticket propio; la vuelta lo continúa y hereda el mismo ticket.
         var aperturaIda = new EnvioEquipo { EnvioId = ida.EnvioId, EquipoId = viajero.EquipoId, NumeroTicket = "T-500", Observaciones = "Falla de pantalla", UsuarioSolicitanteId = UsuarioId, FechaCreacion = ida.FechaCreacion };
         db.EnvioEquipos.Add(aperturaIda);
         await db.SaveChangesAsync();

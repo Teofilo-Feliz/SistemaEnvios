@@ -71,7 +71,6 @@ public sealed class AlcanceEquiposEnTransitoTests
             NumeroSerie = enCamino.NumeroSerie,
         });
 
-        // Está en Tecnología: quien lo mueve es la recepción cuando llegue, no una edición.
         Assert.True(resultado.IsFailure);
     }
 
@@ -80,7 +79,7 @@ public sealed class AlcanceEquiposEnTransitoTests
 
     private static EquipoService Servicio(SistemaEnviosDbContext db)
     {
-        IUserContext u = new FakeUserContext(UsuarioId, "31,SANTO DOMINGO ESTE", position: "Administrador de Filial");
+        IUserContext u = new FakeUserContext(UsuarioId, "31,SANTO DOMINGO ESTE", roles: ["Administrador de Filial"]);
         return new EquipoService(
             db, new UnitOfWork(db),
             new CrearEquipoRequestValidator(), new ActualizarEquipoRequestValidator(),
@@ -100,7 +99,6 @@ public sealed class AlcanceEquiposEnTransitoTests
         db.AddRange(sde, azua, tecnologia, tipo, transito);
         await db.SaveChangesAsync();
 
-        // El que viene en camino sigue en Tecnología hasta que la filial lo reciba.
         var enCamino = new Equipo { TipoEquipoId = tipo.TipoEquipoId, UbicacionActualId = tecnologia.UbicacionId, Marca = "Lenovo", Modelo = "M70", NumeroSerie = "SN-EN-CAMINO" };
         var propio = new Equipo { TipoEquipoId = tipo.TipoEquipoId, UbicacionActualId = sde.UbicacionId, Marca = "Dell", Modelo = "L1", NumeroSerie = "SN-PROPIO" };
         var ajeno = new Equipo { TipoEquipoId = tipo.TipoEquipoId, UbicacionActualId = azua.UbicacionId, Marca = "Dell", Modelo = "L2", NumeroSerie = "SN-AJENO" };

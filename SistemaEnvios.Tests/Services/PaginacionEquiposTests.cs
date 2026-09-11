@@ -51,7 +51,6 @@ public sealed class PaginacionEquiposTests
 
         var resultado = await Servicio(db, "Asistente Administrativo").ListarAsync(new ConsultarEquiposRequest());
 
-        // Solo los pares quedaron en Santiago; el resto es de Azua.
         Assert.Equal(60, resultado.Value!.TotalItems);
         Assert.All(resultado.Value.Items, x => Assert.EndsWith("-SANTIAGO", x.NumeroSerie));
     }
@@ -71,7 +70,7 @@ public sealed class PaginacionEquiposTests
 
     private static EquipoService Servicio(SistemaEnviosDbContext db, string posicion = "Programador Senior")
     {
-        IUserContext usuario = new FakeUserContext(UsuarioId, "41,SANTIAGO", position: posicion);
+        IUserContext usuario = new FakeUserContext(UsuarioId, "41,SANTIAGO", roles: [posicion]);
         return new EquipoService(
             db, new UnitOfWork(db),
             new CrearEquipoRequestValidator(), new ActualizarEquipoRequestValidator(),

@@ -43,7 +43,6 @@ public sealed class PaginacionIncidenciasTests
 
         var resultado = await Servicio(db, "Asistente Administrativo").ListarAsync(new ConsultarIncidenciasRequest());
 
-        // De 45 envíos, los 22 pares quedaron en Santiago; el resto es de Azua.
         Assert.Equal(22, resultado.Value!.TotalItems);
         Assert.All(resultado.Value.Items, x => Assert.Contains("SANTIAGO", x.Descripcion));
     }
@@ -61,7 +60,7 @@ public sealed class PaginacionIncidenciasTests
 
     private static IncidenciaService Servicio(SistemaEnviosDbContext db, string posicion = "Programador Senior")
     {
-        IUserContext usuario = new FakeUserContext(UsuarioId, "41,SANTIAGO", position: posicion);
+        IUserContext usuario = new FakeUserContext(UsuarioId, "41,SANTIAGO", roles: [posicion]);
         return new IncidenciaService(
             db, new UnitOfWork(db), new CrearIncidenciaRequestValidator(), usuario, AlcanceDePrueba.Crear(db, usuario));
     }

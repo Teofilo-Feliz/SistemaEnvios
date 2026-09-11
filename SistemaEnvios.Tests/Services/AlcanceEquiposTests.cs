@@ -113,7 +113,7 @@ public sealed class AlcanceEquiposTests
 
     private static EquipoService Servicio(SistemaEnviosDbContext db, string posicion)
     {
-        IUserContext usuario = new FakeUserContext(UsuarioId, ClaimSantiago, position: posicion);
+        IUserContext usuario = new FakeUserContext(UsuarioId, ClaimSantiago, roles: [posicion]);
         return new EquipoService(
             db, new UnitOfWork(db),
             new CrearEquipoRequestValidator(), new ActualizarEquipoRequestValidator(),

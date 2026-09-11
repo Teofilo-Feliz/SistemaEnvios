@@ -64,7 +64,6 @@ public sealed class IncidenciasDeRecepcionTests
         await using var db = await SembrarAsync();
         var envioId = db.Envios.First().EnvioId;
 
-        // Usuario de otra filial: el envío es de Azua (1) hacia Tecnología.
         var resultado = await Servicio(db, "41,SANTIAGO", "Administrador de Filial")
             .ListarIncidenciasPorEnvioAsync(envioId, new ParametrosPaginaSimple());
 
@@ -75,7 +74,7 @@ public sealed class IncidenciasDeRecepcionTests
     private static RecepcionService Servicio(
         SistemaEnviosDbContext db, string affiliate = "1,AZUA", string posicion = "Programador Senior")
     {
-        IUserContext u = new FakeUserContext(UsuarioId, affiliate, position: posicion);
+        IUserContext u = new FakeUserContext(UsuarioId, affiliate, roles: [posicion]);
         var alcance = AlcanceDePrueba.Crear(db, u);
         return new RecepcionService(db, new UnitOfWork(db),
             new CrearRecepcionRequestValidator(), new VerificarEquipoRequestValidator(),
@@ -92,8 +91,6 @@ public sealed class IncidenciasDeRecepcionTests
         var tecnologia = new Ubicacion { Nombre = "Tecnología", CodigoCentro = "TEC", Tipo = TipoUbicacionEnum.Tecnologia, Activo = true };
         var estado = new EstadoEnvio { Codigo = EstadoEnvioCodigos.RecibidoPorTecnologiaConIncidencia, Nombre = "Recibido con incidencia", Activo = true, EsFinal = true };
         var tipo = new TipoEquipo { Nombre = "Laptop", Activo = true };
-        // Santiago existe y está mapeada: así el rechazo es por alcance (Forbidden) y no
-        // por filial sin mapear (Conflict), que es un fallo distinto.
         var santiago = new Ubicacion { Nombre = "Santiago", CodigoCentro = "F41", FilialExternaId = 41, Tipo = TipoUbicacionEnum.Filial, Activo = true };
         db.AddRange(filial, santiago, tecnologia, estado, tipo);
         await db.SaveChangesAsync();

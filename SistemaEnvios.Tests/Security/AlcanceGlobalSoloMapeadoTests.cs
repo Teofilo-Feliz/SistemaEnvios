@@ -7,7 +7,7 @@ using SistemaEnvios.Infrastructure.Security;
 namespace SistemaEnvios.Tests.Security;
 
 /// <summary>
-/// El alcance Global solo se concede a una posición o un rol mapeados en este sistema. Antes se
+/// El alcance Global solo se concede a un ROL mapeado en este sistema. Antes se
 /// concedía también por el nombre del rol que trajera el token —"AdministradorGlobal" y
 /// parecidos—, así que un administrador de otra aplicación de AuthManager entraba aquí viéndolo
 /// todo. Ese nombre lo decide otra aplicación, no nosotros.
@@ -23,8 +23,6 @@ public sealed class AlcanceGlobalSoloMapeadoTests
     public async Task UnNombreDeRolAjenoNoConcedeAlcanceGlobal(string rol)
     {
         await using var db = await SembrarAsync();
-        // Posición sin mapear a propósito: con una mapeada el respaldo ni se alcanza, y la
-        // prueba pasaría sin comprobar nada. Es el escenario real del usuario afectado.
         var usuario = new FakeUserContext(UsuarioId, "25,SAN PEDRO", roles: [rol], position: "Cargo sin mapear");
 
         var perfil = await AlcanceDePrueba.Crear(db, usuario).ResolverPerfilAsync();
@@ -38,21 +36,24 @@ public sealed class AlcanceGlobalSoloMapeadoTests
         await using var db = await SembrarAsync();
         var usuario = new FakeUserContext(UsuarioId, "25,SAN PEDRO", roles: ["SuperAdministrador"], position: "Cargo sin mapear");
 
-        // Tiene filial en el token: ve lo suyo. Nunca Global por cómo se llame un rol externo.
         Assert.Equal(PerfilAlcance.Filial, await AlcanceDePrueba.Crear(db, usuario).ResolverPerfilAsync());
     }
 
+    /// <summary>
+    /// Una posición mapeada ya no concede nada por si sola: el cargo de recursos humanos no se
+    /// administra desde AuthManager y no se puede revocar. Sin rol, cae al respaldo.
+    /// </summary>
     [Fact]
-    public async Task ElAlcanceGlobalSigueLlegandoPorUnaPosicionMapeada()
+    public async Task UnaPosicionMapeadaSinRolYaNoConcedeAlcanceGlobal()
     {
         await using var db = await SembrarAsync();
         var usuario = new FakeUserContext(UsuarioId, "30,SEDE", position: "Programador Senior");
 
-        Assert.Equal(PerfilAlcance.Global, await AlcanceDePrueba.Crear(db, usuario).ResolverPerfilAsync());
+        Assert.Equal(PerfilAlcance.Filial, await AlcanceDePrueba.Crear(db, usuario).ResolverPerfilAsync());
     }
 
     [Fact]
-    public async Task ElAlcanceGlobalTambienLlegaPorUnRolMapeadoAProposito()
+    public async Task ElAlcanceGlobalLlegaPorUnRolMapeadoAProposito()
     {
         await using var db = await SembrarAsync();
         var usuario = new FakeUserContext(UsuarioId, "30,SEDE", roles: ["LogiTrack.Tecnologia"], position: "Cargo sin mapear");

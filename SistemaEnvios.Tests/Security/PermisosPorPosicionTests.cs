@@ -10,14 +10,18 @@ using SistemaEnvios.Infrastructure.Persistence;
 namespace SistemaEnvios.Tests.Security;
 
 /// <summary>
-/// AuthManager emite permisos de otra aplicación ("evaluador") y un rol genérico
-/// ("Administrador"). Los permisos de este sistema se derivan de la posición del usuario
-/// contra PermisosPorPosicion, y se inyectan como claims para que [Authorize] los vea.
+/// AuthManager emite permisos de otra aplicación ("evaluador"). Los permisos de este sistema se
+/// derivan de los ROLES del usuario contra PermisosPorPosicion, y se inyectan como claims para que
+/// [Authorize] los vea.
+///
+/// La posición no otorga: es un cargo de recursos humanos que no se puede revocar desde donde se
+/// administran los accesos. Por eso el principal de estas pruebas siempre trae una posición que
+/// no está mapeada, para que se vea que no influye.
 /// </summary>
 public sealed class PermisosPorPosicionTests
 {
     [Fact]
-    public async Task Posicion_Mapeada_OtorgaSusPermisos()
+    public async Task Rol_Mapeado_OtorgaSusPermisos()
     {
         await using var db = await CrearContextoAsync(
             ("Asistente Administrativo", PermissionNames.EnviosConsultar),
@@ -50,7 +54,7 @@ public sealed class PermisosPorPosicionTests
     }
 
     [Fact]
-    public async Task PosicionSinMapeo_NoOtorgaNada()
+    public async Task RolSinMapeo_NoOtorgaNada()
     {
         await using var db = await CrearContextoAsync(("Asistente Administrativo", PermissionNames.EnviosConsultar));
 
@@ -60,7 +64,7 @@ public sealed class PermisosPorPosicionTests
     }
 
     [Fact]
-    public async Task Posicion_SeComparaSinDistinguirEspaciosSobrantes()
+    public async Task Rol_SeComparaSinDistinguirEspaciosSobrantes()
     {
         await using var db = await CrearContextoAsync(("Encargado de Transportacion", PermissionNames.TransportesConfirmar));
 
@@ -79,19 +83,19 @@ public sealed class PermisosPorPosicionTests
         var unaVez = await transformacion.TransformAsync(principal);
         var dosVeces = await transformacion.TransformAsync(unaVez);
 
-        Assert.Single(dosVeces.FindAll("permissions").Where(x => x.Value == PermissionNames.EnviosConsultar));
+        Assert.Single(dosVeces.FindAll("permissions"), x => x.Value == PermissionNames.EnviosConsultar);
     }
 
-    private static async Task<string[]> TransformarAsync(SistemaEnviosDbContext db, string posicion, string permisos)
+    private static async Task<string[]> TransformarAsync(SistemaEnviosDbContext db, string rol, string permisos)
     {
         var transformacion = new PermisosPorPosicionTransformation(db, new MemoryCache(new MemoryCacheOptions()), NullLogger<PermisosPorPosicionTransformation>.Instance);
-        var resultado = await transformacion.TransformAsync(Principal(posicion, permisos));
+        var resultado = await transformacion.TransformAsync(Principal(rol, permisos));
         return resultado.FindAll("permissions").Select(x => x.Value).ToArray();
     }
 
-    private static ClaimsPrincipal Principal(string posicion, string permisos)
+    private static ClaimsPrincipal Principal(string rol, string permisos)
     {
-        List<Claim> claims = [new("position", posicion), new("roles", "Administrador")];
+        List<Claim> claims = [new("roles", rol), new("position", "Cargo de recursos humanos")];
         if (!string.IsNullOrEmpty(permisos)) claims.Add(new Claim("permissions", permisos));
         return new ClaimsPrincipal(new ClaimsIdentity(claims, "Prueba"));
     }

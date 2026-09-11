@@ -32,7 +32,6 @@ public sealed class EnviosEsperandoChoferTests
 
         var numeros = await VisiblesAsync(db);
 
-        // El caso real: ENV-2026-33FA653A8, Tecnología → San Francisco, sin transporte aún.
         Assert.Contains("ENV-ESPERA-CHOFER", numeros);
     }
 
@@ -61,13 +60,12 @@ public sealed class EnviosEsperandoChoferTests
     {
         await using var db = await SembrarAsync();
 
-        // Preparándose en la filial: todavía no ha salido, no es asunto de Transportación.
         Assert.DoesNotContain("ENV-EN-FILIAL", await VisiblesAsync(db));
     }
 
     private static async Task<List<string>> VisiblesAsync(SistemaEnviosDbContext db)
     {
-        IUserContext usuario = new FakeUserContext(UsuarioId, "30,SANTO DOMINGO (SEDE)", position: "Encargado Transportación");
+        IUserContext usuario = new FakeUserContext(UsuarioId, "30,SANTO DOMINGO (SEDE)", roles: ["Encargado Transportación"]);
         var alcance = AlcanceDePrueba.Crear(db, usuario);
         var query = await alcance.FiltrarAsync(db.Envios.AsNoTracking());
         return await query.Select(x => x.NumeroEnvio).ToListAsync();

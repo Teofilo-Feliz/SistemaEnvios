@@ -25,7 +25,7 @@ public sealed class AlcancePerfilTransportacionTests
         var usuario = new FakeUserContext(
             UsuarioId, Sede,
             permissions: [PermissionNames.TransportesGestionar],
-            position: "Asistente Administrativo");
+            roles: ["Asistente Administrativo"]);
 
         Assert.Equal(PerfilAlcance.Filial, await AlcanceDePrueba.Crear(db, usuario).ResolverPerfilAsync());
     }
@@ -37,7 +37,7 @@ public sealed class AlcancePerfilTransportacionTests
         var usuario = new FakeUserContext(
             UsuarioId, Sede,
             permissions: [PermissionNames.TransportesGestionar],
-            position: "Encargado de Transportacion");
+            roles: ["Encargado de Transportacion"]);
 
         Assert.Equal(PerfilAlcance.Transportacion, await AlcanceDePrueba.Crear(db, usuario).ResolverPerfilAsync());
     }
