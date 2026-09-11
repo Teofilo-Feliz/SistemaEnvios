@@ -670,6 +670,11 @@ VALUES
     -- Grupo de seguridad de AuthManager para los super administradores. Llega en el claim
     -- "roles", no en "position": el token trae 'Soporte Técnico,SuperAdministrador' y gana este
     -- por ser el de mayor alcance.
+    -- La encargada de soporte técnico es la dueña del sistema. Se registra su cargo además del
+    -- grupo, para que el alcance no dependa solo de seguir en un grupo de AuthManager. Ojo: el
+    -- cargo va en femenino tal como lo emite AuthManager; si lo ocupa un hombre, el claim dirá
+    -- 'Encargado' y esta vía dejará de valer. El rol SuperAdministrador lo sigue cubriendo.
+    (N'Encargada de Soporte Técnico',        1),
     (N'SuperAdministrador',                  1),
     (N'Soporte Técnico',                     4),
     (N'Soporte Tecnico',                     4);
@@ -720,7 +725,18 @@ VALUES
     (N'Asistente Administrativo', N'recepciones.gestionar'),
     (N'Asistente Administrativo', N'incidencias.gestionar'),
     (N'Asistente Administrativo', N'transportes.gestionar'),
-    -- Super administrador: los mismos once de Programador Senior, que es el otro perfil Global.
+    -- Los otros dos perfiles Global llevan los mismos once permisos de Programador Senior.
+    (N'Encargada de Soporte Técnico', N'envios.consultar'),
+    (N'Encargada de Soporte Técnico', N'envios.crear'),
+    (N'Encargada de Soporte Técnico', N'envios.editar'),
+    (N'Encargada de Soporte Técnico', N'envios.despachar'),
+    (N'Encargada de Soporte Técnico', N'equipos.gestionar'),
+    (N'Encargada de Soporte Técnico', N'recepciones.gestionar'),
+    (N'Encargada de Soporte Técnico', N'incidencias.gestionar'),
+    (N'Encargada de Soporte Técnico', N'transportes.gestionar'),
+    (N'Encargada de Soporte Técnico', N'transportes.confirmar'),
+    (N'Encargada de Soporte Técnico', N'transportes.administrar'),
+    (N'Encargada de Soporte Técnico', N'catalogos.administrar'),
     (N'SuperAdministrador', N'envios.consultar'),
     (N'SuperAdministrador', N'envios.crear'),
     (N'SuperAdministrador', N'envios.editar'),
