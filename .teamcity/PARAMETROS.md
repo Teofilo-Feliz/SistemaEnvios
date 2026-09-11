@@ -92,11 +92,11 @@ Ojo con las mayúsculas: en Linux el archivo se busca literalmente como `appsett
 
 ### Triggers
 
-| Parámetro           | Tipo | QA                | PROD       |
-| ------------------- | ---- | ----------------- | ---------- |
-| `env.BRANCH_FILTER` | text | *(por definir)*   | `+:master` |
+| Parámetro           | Tipo | QA          | PROD       |
+| ------------------- | ---- | ----------- | ---------- |
+| `env.BRANCH_FILTER` | text | `+:testing` | `+:master` |
 
-> **La política de ramas todavía no está decidida.** El repositorio tiene `master` y ramas de trabajo (`integracion-glpi-y-perfil-tecnologia` al momento de escribir esto). Antes de conectar el trigger hay que fijar qué rama alimenta QA — una convención tipo `+:*testing` o `+:develop` — para que un push a una rama de trabajo no dispare un despliegue.
+> Cada instancia escucha una sola rama: `testing` alimenta QA y `master` alimenta Producción. Una rama de trabajo no dispara ningún despliegue hasta que se integra en una de las dos.
 >
 > El trigger ignora cambios en `.teamcity/**`, `Database/**` y `README.md`: editar el pipeline o un script SQL no reconstruye la imagen.
 
@@ -129,10 +129,14 @@ un parámetro de build**: se configuran en el VCS Root, que tiene sus propios ca
 
 | Campo             | Valor                                                           |
 | ----------------- | --------------------------------------------------------------- |
-| Fetch URL         | `https://<organización>@dev.azure.com/<organización>/<proyecto>/_git/SistemaEnvios` |
+| Fetch URL         | `https://azuredevops.rehabilitacion.org.do/ADRCollection/ADRTrack/_git/ADRTrack` |
 | Authentication    | `Password / access token`                                        |
 | User name         | cualquiera (Azure DevOps ignora el usuario cuando se usa PAT)     |
 | Password / token  | *(PAT de Azure DevOps con permiso `Code (read)`)*                 |
+
+El segmento `/_git/` es obligatorio. La URL de navegación
+(`https://azuredevops.rehabilitacion.org.do/ADRCollection/ADRTrack`) no sirve como Fetch URL:
+git responde `repository not found`.
 
 El `settings.kts` no lo menciona: usa `DslContext.settingsRoot`, que **es** este VCS Root, ya
 autenticado por TeamCity al leer la configuración. No hay nada que agregar al Kotlin.
