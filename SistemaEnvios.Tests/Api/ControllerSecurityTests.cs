@@ -18,6 +18,17 @@ public sealed class ControllerSecurityTests
         .Select(x => (string)x.GetRawConstantValue()!)
         .ToHashSet(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Permisos que a propósito NO tienen política de autorización: no autorizan una acción, sino
+    /// que amplían el alcance. Ningún endpoint los exige; los lee AlcanceEnvios al resolver el
+    /// perfil.
+    ///
+    /// Lista corta y decidida a mano, igual que la de <see cref="SoloElPerfilOmiteLaPolitica"/>:
+    /// si aparece otro permiso aquí, hay que justificarlo.
+    /// </summary>
+    private static readonly IReadOnlySet<string> SinPoliticaAProposito =
+        new HashSet<string>(StringComparer.Ordinal) { PermissionNames.AlcanceGlobal };
+
     [Fact]
     public void TodasLasAcciones_ExigenUnaPoliticaConocida()
     {
@@ -76,8 +87,26 @@ public sealed class ControllerSecurityTests
         await using var provider = services.BuildServiceProvider();
         var policyProvider = provider.GetRequiredService<IAuthorizationPolicyProvider>();
 
-        foreach (var permission in DefinedPermissions)
+        foreach (var permission in DefinedPermissions.Except(SinPoliticaAProposito))
             Assert.NotNull(await policyProvider.GetPolicyAsync(permission));
+    }
+
+    /// <summary>
+    /// Y al revés: el permiso de alcance NO debe tener política. Si alguien se la agrega, un
+    /// endpoint podría exigirlo como si fuera un permiso de acción, y entonces "alcance.global"
+    /// significaría dos cosas distintas según dónde se mire.
+    /// </summary>
+    [Fact]
+    public async Task ElPermisoDeAlcanceNoEsUnaPolitica()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddApplicationAuthorization();
+        await using var provider = services.BuildServiceProvider();
+        var policyProvider = provider.GetRequiredService<IAuthorizationPolicyProvider>();
+
+        foreach (var permiso in SinPoliticaAProposito)
+            Assert.Null(await policyProvider.GetPolicyAsync(permiso));
     }
 
     [Fact]

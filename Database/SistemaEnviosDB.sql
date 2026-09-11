@@ -827,7 +827,7 @@ WHERE pp.Permiso NOT IN (
     N'envios.consultar', N'envios.crear', N'envios.editar', N'envios.despachar',
     N'equipos.gestionar', N'recepciones.gestionar', N'incidencias.gestionar',
     N'transportes.gestionar', N'transportes.confirmar', N'transportes.administrar',
-    N'catalogos.administrar');
+    N'catalogos.administrar', N'alcance.global');
 
 -- 4) Una clave con un espacio de sobra se ve idéntica en pantalla y no empareja nunca, porque el
 --    código compara contra el claim ya pasado por Trim().

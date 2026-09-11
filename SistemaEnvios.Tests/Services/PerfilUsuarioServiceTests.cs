@@ -113,6 +113,27 @@ public sealed class PerfilUsuarioServiceTests
         Assert.Empty(resultado.Value.Roles);
     }
 
+    /// <summary>
+    /// El permiso de alcance tiene que llegar hasta /api/perfil, porque el frontend enruta por
+    /// ahí: el sidebar y el guardián miran perfil === "Global", no los permisos sueltos. Si el
+    /// backend lo resolviera bien pero no lo reportara, el usuario vería su módulo de filial.
+    /// </summary>
+    [Fact]
+    public async Task ConElPermisoDeAlcanceReportaGlobalYPuedeFiltrarPorFilial()
+    {
+        await using var db = await CrearContextoAsync(("Asistente Administrativo", PerfilAlcance.Filial));
+        var usuario = new FakeUserContext(
+            UsuarioId, "30,SANTO DOMINGO (SEDE)",
+            roles: ["Asistente Administrativo"],
+            permissions: [PermissionNames.EnviosConsultar, PermissionNames.AlcanceGlobal]);
+
+        var resultado = await Servicio(db, usuario).ObtenerAsync();
+
+        Assert.True(resultado.IsSuccess, resultado.Error);
+        Assert.Equal("Global", resultado.Value!.Perfil);
+        Assert.True(resultado.Value.PuedeFiltrarPorFilial);
+    }
+
     private static PerfilUsuarioService Servicio(SistemaEnviosDbContext db, IUserContext usuario) =>
         new(db, usuario, AlcanceDePrueba.Crear(db, usuario));
 

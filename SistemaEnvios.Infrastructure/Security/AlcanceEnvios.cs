@@ -35,16 +35,28 @@ public sealed class AlcanceEnvios(
     ///
     /// Un rol, en cambio, es un grupo de seguridad que Tecnología concede y quita en AuthManager.
     /// Ahí vive el gobierno de los accesos, y ahora también su única llave.
+    ///
+    /// El alcance Global tiene además una segunda vía: el permiso "alcance.global". En AuthManager
+    /// un rol se ata a un solo grupo de seguridad, así que darle vista global a un rol que ya existe
+    /// obligaba a crear otro rol y sembrar su fila. Con el permiso se concede sin tocar la base.
+    /// Suma al alcance del rol en vez de sustituirlo: gana el mayor de los dos.
     /// </remarks>
     public async Task<PerfilAlcance> ResolverPerfilAsync(CancellationToken cancellationToken = default)
     {
         var roles = usuario.Roles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToArray();
+        List<PerfilAlcance> candidatos = [];
 
         if (roles.Length > 0)
         {
-            var perfil = await BuscarPerfilAsync(roles, cancellationToken);
-            if (perfil is not null) return perfil.Value;
+            var porRol = await BuscarPerfilAsync(roles, cancellationToken);
+            if (porRol is not null) candidatos.Add(porRol.Value);
         }
+
+        if (usuario.Permissions.Contains(PermissionNames.AlcanceGlobal, StringComparer.OrdinalIgnoreCase))
+            candidatos.Add(PerfilAlcance.Global);
+
+        var elegido = candidatos.DeMayorAlcance();
+        if (elegido is not null) return elegido.Value;
 
         var respaldo = usuario.AffiliateId.HasValue ? PerfilAlcance.Filial : PerfilAlcance.SinAlcance;
         AvisarRolSinMapear(roles, respaldo);
