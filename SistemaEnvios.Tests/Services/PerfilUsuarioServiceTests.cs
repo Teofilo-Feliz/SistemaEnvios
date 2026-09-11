@@ -73,6 +73,46 @@ public sealed class PerfilUsuarioServiceTests
         Assert.False(resultado.Value.FilialMapeada);
     }
 
+    /// <summary>
+    /// Posición y roles son las dos claves con las que se resuelve el alcance, y la respuesta las
+    /// devuelve las dos. Sin los roles decía a qué perfil llegó el usuario pero no con qué claves,
+    /// y averiguarlo obligaba a leer el log del contenedor o a decodificar el token entero.
+    ///
+    /// El caso real: la encargada de soporte técnico llega con una posición que no está registrada
+    /// y con dos roles que sí. Viendo las tres claves y el perfil se entiende de un vistazo por qué
+    /// aterrizó donde aterrizó.
+    /// </summary>
+    [Fact]
+    public async Task DevuelveLasDosClavesConLasQueSeResolvioElAlcance()
+    {
+        await using var db = await CrearContextoAsync(
+            ("SuperAdministrador", PerfilAlcance.Global),
+            ("Soporte Técnico", PerfilAlcance.Tecnologia));
+        var usuario = FakeUserContext.ConRoles(
+            UsuarioId, "Encargada de Soporte Técnico", 30, "Soporte Técnico", "SuperAdministrador");
+
+        var resultado = await Servicio(db, usuario).ObtenerAsync();
+
+        Assert.True(resultado.IsSuccess, resultado.Error);
+        Assert.Equal("Encargada de Soporte Técnico", resultado.Value!.Posicion);
+        Assert.Equal(["Soporte Técnico", "SuperAdministrador"], resultado.Value.Roles);
+        // Y el resultado de cruzarlas: gana el de mayor alcance.
+        Assert.Equal("Global", resultado.Value.Perfil);
+    }
+
+    /// <summary>Un usuario sin roles devuelve la lista vacía, no null.</summary>
+    [Fact]
+    public async Task SinRolesDevuelveListaVacia()
+    {
+        await using var db = await CrearContextoAsync(("Asistente Administrativo", PerfilAlcance.Filial));
+        var usuario = new FakeUserContext(UsuarioId, "30,SANTO DOMINGO (SEDE)", position: "Asistente Administrativo");
+
+        var resultado = await Servicio(db, usuario).ObtenerAsync();
+
+        Assert.NotNull(resultado.Value!.Roles);
+        Assert.Empty(resultado.Value.Roles);
+    }
+
     private static PerfilUsuarioService Servicio(SistemaEnviosDbContext db, IUserContext usuario) =>
         new(db, usuario, AlcanceDePrueba.Crear(db, usuario));
 

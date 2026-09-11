@@ -1,9 +1,22 @@
 namespace SistemaEnvios.Application.DTOs.Seguridad;
 
 /// <summary>Quién es el usuario y qué alcance tiene, según lo decide el backend.</summary>
+/// <remarks>
+/// Posicion y Roles viajan juntos y son las DOS claves con las que se resuelve el alcance: se
+/// cruzan contra PerfilesPorPosicion y gana la de mayor alcance.
+///
+/// Los roles se devuelven para que un problema de acceso se pueda diagnosticar desde el navegador.
+/// Sin ellos, la respuesta decía a qué perfil llegó el usuario pero no con qué claves, y la única
+/// forma de averiguarlo era leer el log del contenedor o decodificar el token entero. Un usuario
+/// que aterriza en el módulo equivocado es el fallo más frecuente de este sistema, y era también
+/// el más ciego.
+///
+/// No expone nada nuevo: son los mismos roles que el usuario ya lleva en su propio token.
+/// </remarks>
 public sealed record PerfilUsuarioResponse(
     string Perfil,
     string? Posicion,
+    IReadOnlyCollection<string> Roles,
     int? FilialId,
     string? FilialNombre,
     int? UbicacionId,

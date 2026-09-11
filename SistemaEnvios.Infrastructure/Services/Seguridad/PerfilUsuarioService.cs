@@ -29,7 +29,10 @@ public sealed class PerfilUsuarioService(
 
         return Result<PerfilUsuarioResponse>.Success(new PerfilUsuarioResponse(
             Perfil: perfil.ToString(),
+            // Las dos claves con las que se resolvió el alcance, para poder ver desde el navegador
+            // por qué un usuario aterrizó donde aterrizó.
             Posicion: usuario.Position,
+            Roles: usuario.Roles,
             FilialId: filialId,
             FilialNombre: ubicacion?.Nombre,
             UbicacionId: ubicacion?.UbicacionId,
