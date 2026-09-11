@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using SistemaEnvios.Application.Common;
+using SistemaEnvios.Application.DTOs.Integraciones;
 using SistemaEnvios.Application.Interfaces.Services.Integraciones;
 using SistemaEnvios.Infrastructure.Integrations.Glpi;
 
@@ -9,23 +10,67 @@ namespace SistemaEnvios.Tests.Infrastructure;
 /// La política acordada: un ticket que GLPI no tiene se rechaza, pero GLPI caído deja pasar.
 /// Es la diferencia que hace que una caída de la mesa de ayuda no paralice a las filiales, y es
 /// justo la que se rompería sin ruido si alguien "simplifica" el manejo de errores.
+///
+/// Y la política del negocio: un ticket, un equipo. En ADRTrack el ticket identifica el caso de
+/// UN equipo —el índice único UX_EnvioEquipos_TicketApertura lo sostiene en la base—, así que un
+/// ticket que en GLPI arrastra varios no sirve y se corta aquí, antes de llenar el formulario.
 /// </summary>
 public sealed class ValidadorTicketGlpiTests
 {
     [Fact]
-    public async Task DejaPasarUnTicketQueGlpiTiene()
+    public async Task DejaPasarUnTicketConUnSoloEquipo()
     {
-        var validador = Validador(Result<bool>.Success(true));
+        var validador = Validador(ConEquipos(("Computer", 657)));
 
         var resultado = await validador.ValidarAsync("25000");
 
-        Assert.True(resultado.IsSuccess);
+        Assert.True(resultado.IsSuccess, resultado.Error);
+    }
+
+    /// <summary>
+    /// Sin equipos también pasa: es el ticket que alguien abrió y todavía no le colgó el activo.
+    /// La persona escribe marca, modelo y serial a mano, que es justo lo que hacía siempre.
+    /// </summary>
+    [Fact]
+    public async Task DejaPasarUnTicketSinEquipos()
+    {
+        var validador = Validador(ConEquipos());
+
+        var resultado = await validador.ValidarAsync("25000");
+
+        Assert.True(resultado.IsSuccess, resultado.Error);
+    }
+
+    [Fact]
+    public async Task RechazaUnTicketConVariosEquipos()
+    {
+        var validador = Validador(ConEquipos(("Computer", 657), ("Computer", 812), ("Monitor", 44)));
+
+        var resultado = await validador.ValidarAsync("30261");
+
+        Assert.True(resultado.IsFailure);
+        Assert.Equal(ErrorType.Validation, resultado.ErrorType);
+        Assert.Contains("3 equipos asociados", resultado.Error);
+    }
+
+    /// <summary>
+    /// El mensaje tiene que decir dónde se arregla. El cambio va en GLPI, no en este formulario:
+    /// sin esa frase la persona intenta corregirlo aquí, no puede, y llama a soporte.
+    /// </summary>
+    [Fact]
+    public async Task ElRechazoDiceQueSeArreglaEnGlpi()
+    {
+        var validador = Validador(ConEquipos(("Computer", 1), ("Computer", 2)));
+
+        var resultado = await validador.ValidarAsync("30261");
+
+        Assert.Contains("GLPI", resultado.Error);
     }
 
     [Fact]
     public async Task RechazaUnTicketQueGlpiNoTiene()
     {
-        var validador = Validador(Result<bool>.Success(false));
+        var validador = Validador(TicketGlpi.NoEncontrado);
 
         var resultado = await validador.ValidarAsync("99999999");
 
@@ -37,11 +82,39 @@ public sealed class ValidadorTicketGlpiTests
     [Fact]
     public async Task ConGlpiCaidoDejaPasarEnVezDeBloquearLaOperacion()
     {
-        var validador = Validador(Result<bool>.Failure("GLPI no responde.", ErrorType.ExternalService));
+        var validador = new ValidadorTicketGlpi(
+            new GlpiFalso(Result<TicketGlpi>.Failure("GLPI no responde.", ErrorType.ExternalService)),
+            NullLogger<ValidadorTicketGlpi>.Instance);
 
         var resultado = await validador.ValidarAsync("25000");
 
         Assert.True(resultado.IsSuccess);
+    }
+
+    /// <summary>
+    /// El hueco conocido de la regla: con GLPI caído no se puede contar los equipos, así que un
+    /// ticket de varios pasaría. Se acepta a sabiendas —bloquear pararía a las 34 filiales— y se
+    /// fija aquí para que sea una decisión documentada y no una sorpresa.
+    /// </summary>
+    [Fact]
+    public async Task ConGlpiCaidoNoSePuedeAplicarLaReglaDeUnEquipo()
+    {
+        var validador = new ValidadorTicketGlpi(
+            new GlpiFalso(Result<TicketGlpi>.Failure("Circuito abierto.", ErrorType.ExternalService)),
+            NullLogger<ValidadorTicketGlpi>.Instance);
+
+        Assert.True((await validador.ValidarAsync("30261")).IsSuccess);
+    }
+
+    [Fact]
+    public async Task ValidarVarios_DevuelveElPrimerRechazo()
+    {
+        var validador = Validador(ConEquipos(("Computer", 1), ("Computer", 2)));
+
+        var resultado = await validador.ValidarVariosAsync(["25000", "30261"]);
+
+        Assert.True(resultado.IsFailure);
+        Assert.Contains("2 equipos asociados", resultado.Error);
     }
 
     [Theory]
@@ -60,18 +133,33 @@ public sealed class ValidadorTicketGlpiTests
         Assert.Equal(ErrorType.Validation, resultado.ErrorType);
     }
 
-    private static ValidadorTicketGlpi Validador(Result<bool> respuesta) =>
-        new(new GlpiFalso(respuesta), NullLogger<ValidadorTicketGlpi>.Instance);
+    private static TicketGlpi ConEquipos(params (string Tipo, int Id)[] equipos) =>
+        new(true, [.. equipos.Select(x => new ItemDeTicketGlpi(x.Tipo, x.Id))]);
 
-    private sealed class GlpiFalso(Result<bool> respuesta) : IGlpiClient
+    private static ValidadorTicketGlpi Validador(TicketGlpi respuesta) =>
+        new(new GlpiFalso(Result<TicketGlpi>.Success(respuesta)), NullLogger<ValidadorTicketGlpi>.Instance);
+
+    private sealed class GlpiFalso(Result<TicketGlpi> respuesta) : IGlpiClient
     {
         public Task<Result<bool>> ItemExistsAsync(string itemType, int id, CancellationToken ct = default) =>
+            throw new InvalidOperationException("El validador ya no pregunta por existencia: usa ObtenerTicketAsync.");
+
+        public Task<Result<TicketGlpi>> ObtenerTicketAsync(int ticketId, CancellationToken ct = default) =>
             Task.FromResult(respuesta);
+
+        public Task<Result<EquipoGlpi?>> ObtenerEquipoAsync(string itemType, int id, CancellationToken ct = default) =>
+            throw new InvalidOperationException("El validador no lee activos: solo cuenta cuántos hay.");
     }
 
     private sealed class GlpiQueFalla : IGlpiClient
     {
         public Task<Result<bool>> ItemExistsAsync(string itemType, int id, CancellationToken ct = default) =>
+            throw new InvalidOperationException("No debió consultarse a GLPI con un ticket inválido.");
+
+        public Task<Result<TicketGlpi>> ObtenerTicketAsync(int ticketId, CancellationToken ct = default) =>
+            throw new InvalidOperationException("No debió consultarse a GLPI con un ticket inválido.");
+
+        public Task<Result<EquipoGlpi?>> ObtenerEquipoAsync(string itemType, int id, CancellationToken ct = default) =>
             throw new InvalidOperationException("No debió consultarse a GLPI con un ticket inválido.");
     }
 }

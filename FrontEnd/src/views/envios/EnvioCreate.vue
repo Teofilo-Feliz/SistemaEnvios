@@ -383,59 +383,109 @@ function editEquipment(equipo) {
 /**
  * Guarda la edición de una fila ya agregada.
  *
- * Marca, modelo, serial, tipo y código de activo son del EQUIPO, no de este envío: cuando la fila
- * llegó a la tabla el equipo ya existía en la base, así que cambiarlos solo en pantalla dejaba el
- * inventario con los datos viejos mientras la tabla mostraba los nuevos. Se persisten.
+ * Hay dos casos y distinguirlos importa. Si el serial no cambió, es la misma máquina con algún
+ * dato corregido y se actualiza su ficha del inventario. Si el serial cambió, la fila pasa a ser
+ * de OTRA máquina —el usuario cambió el ticket y trajo el equipo del ticket nuevo—, y entonces no
+ * se puede tocar la ficha de la anterior: se reescribiría un equipo con los datos de otro.
  *
- * El ticket y la observación son de la asociación y los guarda guardarEquipos() al enviar el
- * formulario, junto con el resto del envío.
- *
- * Dos cuidados al persistir: la edición no mueve el equipo, así que conserva su ubicación actual
- * en vez del origen del formulario, que no tiene por qué ser la misma; y el inventario en memoria
- * se refresca, porque alimenta el combo y a ensure(), que si no reconocería este serial con los
- * datos viejos.
+ * En ese segundo caso la fila se reapunta al equipo nuevo y se le quita el envioEquipoId, con lo
+ * que guardarEquipos() quita la asociación vieja y crea la nueva. Es la única forma de cambiar de
+ * equipo, porque el endpoint de actualizar solo acepta ticket y observaciones.
  */
 async function guardarEdicionEquipo(actualizado) {
   const anterior = form.equipment.find((fila) => fila.id === actualizado.id);
   if (!anterior) return;
 
-  const datosDelEquipo = ["typeId", "brand", "model", "serial", "assetCode"];
-  const cambioElEquipo = datosDelEquipo.some(
-    (campo) => String(anterior[campo] ?? "") !== String(actualizado[campo] ?? ""),
+  const mismoSerial =
+    String(anterior.serial ?? "").toLowerCase() === String(actualizado.serial ?? "").toLowerCase();
+
+  try {
+    const fila = mismoSerial
+      ? await actualizarEquipoEnSitio(anterior, actualizado)
+      : await reapuntarAOtroEquipo(actualizado);
+
+    form.equipment = form.equipment.map((x) => (x.id === fila.id ? fila : x));
+    equipoEnEdicion.value = null;
+    ui.notify("Equipo actualizado.", "success");
+  } catch (error) {
+    ui.notify(error.userMessage || "No fue posible actualizar el equipo.", "error");
+  }
+}
+
+/** Misma máquina: marca, modelo o tipo corregidos. Se persiste en su ficha. */
+async function actualizarEquipoEnSitio(anterior, actualizado) {
+  const campos = ["typeId", "brand", "model", "serial", "assetCode"];
+  const cambio = campos.some((c) => String(anterior[c] ?? "") !== String(actualizado[c] ?? ""));
+  if (!cambio || !actualizado.existingId) return actualizado;
+
+  const enInventario = registeredEquipment.value.find(
+    (x) => Number(x.equipoId) === Number(actualizado.existingId),
   );
 
-  if (cambioElEquipo && actualizado.existingId) {
-    const enInventario = registeredEquipment.value.find(
-      (x) => Number(x.equipoId) === Number(actualizado.existingId),
-    );
-    try {
-      await equipoService.update(Number(actualizado.existingId), {
-        equipoId: Number(actualizado.existingId),
-        tipoEquipoId: Number(actualizado.typeId),
-        ubicacionActualId: Number(enInventario?.ubicacionActualId ?? form.originId),
-        codigoActivo: actualizado.assetCode || null,
-        numeroSerie: actualizado.serial,
-        marca: actualizado.brand,
-        modelo: actualizado.model,
-        observaciones: actualizado.notes || null,
-      });
-      if (enInventario) {
-        enInventario.tipoEquipoId = Number(actualizado.typeId);
-        enInventario.codigoActivo = actualizado.assetCode;
-        enInventario.numeroSerie = actualizado.serial;
-        enInventario.marca = actualizado.brand;
-        enInventario.modelo = actualizado.model;
-      }
-    } catch (error) {
-      ui.notify(error.userMessage || "No fue posible actualizar el equipo.", "error");
-      return;
-    }
+  await equipoService.update(Number(actualizado.existingId), {
+    equipoId: Number(actualizado.existingId),
+    tipoEquipoId: Number(actualizado.typeId),
+    // La edición no mueve el equipo: conserva su ubicación actual en vez del origen del
+    // formulario, que no tiene por qué ser la misma.
+    ubicacionActualId: Number(enInventario?.ubicacionActualId ?? form.originId),
+    codigoActivo: actualizado.assetCode || null,
+    numeroSerie: actualizado.serial,
+    marca: actualizado.brand,
+    modelo: actualizado.model,
+    observaciones: actualizado.notes || null,
+  });
+
+  // El inventario en memoria alimenta el combo y a ensure(): si no se refresca, agregar otro
+  // equipo con este serial lo reconocería con los datos viejos.
+  if (enInventario) {
+    Object.assign(enInventario, {
+      tipoEquipoId: Number(actualizado.typeId),
+      codigoActivo: actualizado.assetCode,
+      numeroSerie: actualizado.serial,
+      marca: actualizado.brand,
+      modelo: actualizado.model,
+    });
   }
 
-  form.equipment = form.equipment.map((fila) => (fila.id === actualizado.id ? actualizado : fila));
-  equipoEnEdicion.value = null;
-  ui.notify("Equipo actualizado.", "success");
+  return actualizado;
 }
+
+/** Otra máquina: se busca en el inventario y, si no está, se registra. */
+async function reapuntarAOtroEquipo(actualizado) {
+  const existente = registeredEquipment.value.find(
+    (x) =>
+      (actualizado.serial && x.numeroSerie?.toLowerCase() === actualizado.serial.toLowerCase()) ||
+      (actualizado.assetCode &&
+        x.codigoActivo?.toLowerCase() === actualizado.assetCode.toLowerCase()),
+  );
+
+  let equipoId = existente?.equipoId;
+  if (!equipoId) {
+    const { data } = await equipoService.create({
+      tipoEquipoId: Number(actualizado.typeId),
+      ubicacionActualId: Number(form.originId),
+      codigoActivo: actualizado.assetCode || null,
+      numeroSerie: actualizado.serial,
+      marca: actualizado.brand,
+      modelo: actualizado.model,
+      observaciones: actualizado.notes || null,
+    });
+    equipoId = data;
+    registeredEquipment.value.push({
+      equipoId,
+      ubicacionActualId: Number(form.originId),
+      tipoEquipoId: Number(actualizado.typeId),
+      codigoActivo: actualizado.assetCode,
+      numeroSerie: actualizado.serial,
+      marca: actualizado.brand,
+      modelo: actualizado.model,
+    });
+  }
+
+  // Sin envioEquipoId, guardarEquipos() ve la asociación vieja como quitada y esta como nueva.
+  return { ...actualizado, existingId: equipoId, envioEquipoId: null };
+}
+
 async function load() {
   try {
     // El inventario no se descarga al abrir: se pide el del origen cuando ya se conoce.

@@ -21,4 +21,8 @@ public sealed class ValidadorTicketDePrueba(Result? respuesta = null) : IValidad
     public Task<Result> ValidarVariosAsync(
         IReadOnlyCollection<string> numerosTicket, CancellationToken ct = default) =>
         Task.FromResult(respuesta ?? Result.Success());
+
+    public Task<Result> ValidarParaEquipoAsync(
+        string numeroTicket, string? numeroSerie, CancellationToken ct = default) =>
+        Task.FromResult(respuesta ?? Result.Success());
 }

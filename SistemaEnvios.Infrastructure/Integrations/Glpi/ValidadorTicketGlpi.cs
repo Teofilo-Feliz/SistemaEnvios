@@ -65,21 +65,77 @@ public sealed class ValidadorTicketGlpi(
             return Result.Success();
         }
 
-        var resultado = await glpi.ItemExistsAsync("Ticket", id, ct);
+        var resultado = await glpi.ObtenerTicketAsync(id, ct);
 
         if (resultado.IsFailure)
         {
             // Política acordada: sin respuesta de GLPI se deja pasar. Queda el aviso para que la
             // integración caída sea visible en el log y no un silencio que nadie nota.
+            //
+            // Es también el único hueco de la regla de un equipo por ticket: con GLPI caído no se
+            // puede saber cuántos tiene. Se acepta a sabiendas, porque la alternativa —bloquear—
+            // para los envíos de las 34 filiales cada vez que la mesa de ayuda tenga un mal rato.
             logger.LogWarning(
                 "No se pudo verificar el ticket {Ticket} contra GLPI ({Motivo}). Se deja pasar sin validar.",
                 id, resultado.Error);
             return Result.Success();
         }
 
-        return resultado.Value
-            ? Result.Success()
-            : Result.Failure(
-                $"El ticket {id} no existe en la mesa de ayuda.", ErrorType.Validation);
+        var ticketGlpi = resultado.Value!;
+        if (!ticketGlpi.Existe)
+            return Result.Failure($"El ticket {id} no existe en la mesa de ayuda.", ErrorType.Validation);
+
+        if (!ticketGlpi.EsUsable)
+        {
+            // Se nombran los equipos para que quien lo lea sepa qué separar, y se dice dónde se
+            // arregla: el cambio va en GLPI, no en este formulario. Sin eso, la persona intenta
+            // corregirlo aquí y no puede.
+            logger.LogInformation(
+                "Se rechazó el ticket {Ticket}: tiene {Cuantos} equipos asociados en GLPI.",
+                id, ticketGlpi.Equipos.Count);
+
+            return Result.Failure(
+                $"El ticket {id} tiene {ticketGlpi.Equipos.Count} equipos asociados en la mesa de ayuda " +
+                "y un ticket solo puede traer uno. Separe los equipos en tickets distintos en GLPI " +
+                "y vuelva a intentarlo.",
+                ErrorType.Validation);
+        }
+
+        return Result.Success();
+    }
+
+    public async Task<Result> ValidarParaEquipoAsync(
+        string numeroTicket, string? numeroSerie, CancellationToken ct = default)
+    {
+        var usable = await ValidarAsync(numeroTicket, ct);
+        if (usable.IsFailure) return usable;
+
+        if (!int.TryParse(numeroTicket?.Trim(), out var id) || id <= 0) return Result.Success();
+
+        var consulta = await glpi.ObtenerTicketAsync(id, ct);
+        if (consulta.IsFailure || !consulta.Value!.Existe) return Result.Success();
+
+        if (consulta.Value.EquipoUnico is not { } referencia) return Result.Success();
+
+        var equipo = await glpi.ObtenerEquipoAsync(referencia.ItemType, referencia.ItemsId, ct);
+        if (equipo.IsFailure) return Result.Success();
+
+        var serialEnGlpi = equipo.Value?.Serial;
+        if (string.IsNullOrWhiteSpace(serialEnGlpi) || string.IsNullOrWhiteSpace(numeroSerie))
+            return Result.Success();
+
+        if (!string.Equals(serialEnGlpi.Trim(), numeroSerie.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogInformation(
+                "Se rechazó el ticket {Ticket} para el equipo con serial {Serie}: en GLPI es del serial {Otro}.",
+                id, numeroSerie, serialEnGlpi);
+
+            return Result.Failure(
+                $"El ticket {id} es de otro equipo en la mesa de ayuda, serial {serialEnGlpi}. " +
+                "Un ticket solo puede traer un equipo.",
+                ErrorType.Validation);
+        }
+
+        return Result.Success();
     }
 }

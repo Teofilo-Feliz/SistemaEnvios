@@ -10,9 +10,9 @@
  */
 import { computed, reactive, ref, watch } from "vue";
 import ModalCard from "@/components/common/ModalCard.vue";
-import { envioService } from "@/services/envioService";
 import { glpiService } from "@/services/glpiService";
 import { filtrarSoloDigitos } from "@/utils/documento";
+import { avisar, escapeHtml } from "@/utils/confirm";
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -43,6 +43,9 @@ const errors = reactive({
 });
 const validando = ref(false);
 const ticketOriginal = ref("");
+// El ticket sobre el que se pulsó "Buscar equipo". Si no coincide con el que hay escrito, los
+// datos que se ven son de otro ticket y guardar dejaría la fila mintiendo.
+const ticketBuscado = ref("");
 
 const heredado = computed(() => Boolean(props.equipment?.ticketHeredado));
 
@@ -63,6 +66,7 @@ watch(
     borrador.ticket = props.equipment.ticket ?? "";
     borrador.notes = props.equipment.notes ?? "";
     ticketOriginal.value = props.equipment.ticket ?? "";
+    ticketBuscado.value = props.equipment.ticket ?? "";
     Object.keys(errors).forEach((campo) => (errors[campo] = ""));
   },
   { immediate: true },
@@ -129,42 +133,110 @@ function validarEnLocal() {
   return !Object.values(errors).some(Boolean);
 }
 
+const buscando = ref(false);
+const avisoTicket = ref("");
+
+const ticketCambio = computed(
+  () => !heredado.value && borrador.ticket.trim() !== ticketOriginal.value.trim(),
+);
+const puedeBuscar = computed(
+  () => ticketCambio.value && !buscando.value && borrador.ticket.trim().length >= 3,
+);
+
 /**
- * Las comprobaciones contra el servidor, solo si el ticket cambió: volver a preguntar por el que
- * ya tenía daría "ya está registrado", porque lo está, en este mismo equipo.
+ * Trae el equipo del ticket nuevo y lo pone en el borrador.
  *
- * Son dos preguntas distintas. Que el ticket esté libre lo dice nuestra base; que exista lo dice
- * la mesa de ayuda. Si GLPI está caído no se bloquea: el servidor aplica la misma política al
- * guardar, y frenar aquí dejaría a las filiales sin poder editar.
+ * El equipo sigue al ticket: si el número cambia, los datos del anterior dejan de valer. Sin
+ * equipo asociado los campos se vacían para que la persona los escriba, que es el caso de quien
+ * abre el ticket antes de colgarle el activo.
  */
-async function validarTicketNuevo() {
-  if (heredado.value || borrador.ticket === ticketOriginal.value) return true;
+async function buscarEquipo() {
+  const ticket = borrador.ticket.trim();
+  errors.ticket = "";
+  avisoTicket.value = "";
+  buscando.value = true;
 
   try {
-    const { data } = await envioService.ticketAvailable(borrador.ticket);
-    if (data !== true) {
-      errors.ticket = "Este número de ticket ya está registrado en otro equipo o envío.";
-      return false;
+    const { data } = await glpiService.equipoDeTicket(ticket);
+    const equipo = data?.equipo;
+
+    ticketBuscado.value = ticket;
+
+    if (!equipo) {
+      vaciarDatosDelEquipo();
+      avisoTicket.value = "El ticket no tiene equipo en la mesa de ayuda. Escriba los datos.";
+      return;
     }
+
+    borrador.typeId = equipo.tipoEquipoId ?? "";
+    borrador.brand = equipo.marca ?? "";
+    borrador.model = equipo.modelo ?? "";
+    borrador.serial = equipo.serial ?? "";
+    borrador.assetCode = equipo.codigoActivo ?? "";
+    Object.keys(errors).forEach((campo) => (errors[campo] = ""));
+
+    avisoTicket.value = equipo.yaEstaEnOtroEnvio
+      ? `${equipo.nombre || "El equipo"} ya viaja en otro envío activo.`
+      : `Datos traídos de la mesa de ayuda${equipo.nombre ? ` (${equipo.nombre})` : ""}.`;
   } catch (error) {
+    // GLPI caído no bloquea: se deja escribir a mano, igual que en el resto del sistema.
+    if (error.response?.status === 502) {
+      // Con GLPI caído no se puede traer nada, pero tampoco se le puede cerrar el paso a quien
+      // necesita corregir un ticket. Se da por buscado y el aviso pide escribir los datos.
+      ticketBuscado.value = ticket;
+      avisoTicket.value = "La mesa de ayuda no responde. Escriba los datos del equipo.";
+      return;
+    }
+    errors.ticket = error.userMessage || "No se pudo consultar el ticket en la mesa de ayuda.";
+  } finally {
+    buscando.value = false;
+  }
+}
+
+function vaciarDatosDelEquipo() {
+  borrador.typeId = "";
+  borrador.brand = "";
+  borrador.model = "";
+  borrador.serial = "";
+  borrador.assetCode = "";
+}
+
+/**
+ * Comprueba el ticket nuevo contra el servidor. Solo si cambió: repetir la consulta con el mismo
+ * daría "ya está registrado", porque lo está, en este mismo equipo.
+ *
+ * Aquí solo se mira que el ticket sea usable —libre, existente y de un solo equipo—. Que
+ * corresponda a esta máquina ya no se exige, porque al cambiar el ticket el equipo se cambia con
+ * él; de eso se encarga "Buscar equipo".
+ */
+async function validarTicketNuevo() {
+  if (!ticketCambio.value) return true;
+
+  try {
+    await glpiService.equipoDeTicket(borrador.ticket.trim());
+    return true;
+  } catch (error) {
+    if (error.response?.status === 502) return true;
     errors.ticket = error.userMessage || "No se pudo validar el número de ticket.";
     return false;
   }
-
-  try {
-    const { data } = await glpiService.ticketExiste(borrador.ticket);
-    if (data?.existe === false) {
-      errors.ticket = `El ticket ${borrador.ticket} no existe en la mesa de ayuda.`;
-      return false;
-    }
-  } catch {
-    /* GLPI caído no bloquea. */
-  }
-
-  return true;
 }
 
 async function guardar() {
+  // El ticket cambió pero nadie pulsó "Buscar equipo": lo que se ve en pantalla sigue siendo el
+  // equipo del ticket anterior. Guardar así dejaría la fila diciendo que el caso de esta máquina
+  // es un número que pertenece a otra.
+  if (!heredado.value && borrador.ticket.trim() !== ticketBuscado.value.trim()) {
+    await avisar({
+      title: "Falta buscar el equipo",
+      html:
+        `Cambió el ticket a <b>${escapeHtml(borrador.ticket.trim() || "(vacío)")}</b> pero los ` +
+        "datos que se ven siguen siendo los del ticket anterior.<br><br>" +
+        "Pulse <b>Buscar equipo del ticket</b> para traer el equipo que le corresponde.",
+    });
+    return;
+  }
+
   if (!validarEnLocal()) return;
   validando.value = true;
   try {
@@ -277,8 +349,19 @@ async function guardar() {
           >Heredado del caso abierto{{
             equipment.ticketFilial ? ` de ${equipment.ticketFilial}` : ""
           }}. No se modifica.</small
-        ><small v-else-if="errors.ticket" class="field-error">{{ errors.ticket }}</small></label
+        ><small v-else-if="errors.ticket" class="field-error">{{ errors.ticket }}</small
+        ><small v-else-if="avisoTicket" class="field-hint">{{ avisoTicket }}</small></label
       >
+
+      <button
+        v-if="ticketCambio"
+        class="btn btn-secondary equipo-editar-buscar"
+        type="button"
+        :disabled="!puedeBuscar"
+        @click="buscarEquipo"
+      >
+        {{ buscando ? "Buscando…" : "Buscar equipo del ticket" }}
+      </button>
 
       <label class="equipo-editar-ancho"
         >Observación<input
@@ -310,6 +393,9 @@ async function guardar() {
 .equipo-editar-aviso,
 .equipo-editar-ancho {
   grid-column: 1 / -1;
+}
+.equipo-editar-buscar {
+  align-self: end;
 }
 .equipo-editar label {
   display: grid;

@@ -25,6 +25,9 @@ public sealed class EnvioEquipoService(
     ICasoEquipoService casos,
     IValidadorTicketGlpi ticketsGlpi) : IEnvioEquipoService
 {
+    /// <summary>Índice único que sostiene la regla de un ticket por caso.</summary>
+    private const string IndiceTicketApertura = "UX_EnvioEquipos_TicketApertura";
+
     public async Task<Result<int>> AgregarAsync(
         AgregarEquipoEnvioRequest request,
         CancellationToken cancellationToken = default)
@@ -116,11 +119,9 @@ public sealed class EnvioEquipoService(
         {
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex)
         {
-            return Result<int>.Failure(
-                "El equipo fue reservado por otro envío mientras se procesaba la solicitud.",
-                ErrorType.Conflict);
+            return Result<int>.Failure(MotivoDelChoque(ex, numeroTicket), ErrorType.Conflict);
         }
         return Result<int>.Success(envioEquipo.EnvioEquipoId);
     }
@@ -204,9 +205,13 @@ public sealed class EnvioEquipoService(
                     cancellationToken))
                 return Result.Failure("El número de ticket ya fue utilizado en otro envío.", ErrorType.Conflict);
 
-            // Editar una apertura es escribir un ticket a mano igual que al crear, así que pasa
-            // por la misma comprobación contra la mesa de ayuda.
-            var ticketEnGlpi = await ticketsGlpi.ValidarAsync(ticket, cancellationToken);
+            // Editar una apertura es escribir un ticket a mano igual que al crear, pero con una
+            // exigencia más: el ticket tiene que ser el de ESTE equipo. Sin eso se le podía poner
+            // el ticket de otra máquina y la fila quedaba mintiendo sobre a qué caso pertenece.
+            var equipo = await db.Equipos.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.EquipoId == detalle.EquipoId, cancellationToken);
+            var ticketEnGlpi = await ticketsGlpi.ValidarParaEquipoAsync(
+                ticket, equipo?.NumeroSerie, cancellationToken);
             if (ticketEnGlpi.IsFailure) return ticketEnGlpi;
         }
 
@@ -257,6 +262,31 @@ public sealed class EnvioEquipoService(
             return Result.Failure("El envío fue modificado por otra operación. Actualice los datos e intente nuevamente.", ErrorType.Conflict);
         }
         return Result.Success();
+    }
+
+    /// <summary>
+    /// Dice cuál de las dos reglas se rompió en la carrera entre dos peticiones.
+    /// </summary>
+    /// <remarks>
+    /// Aquí pueden reventar dos índices únicos distintos: PK_ReservasEquipoEnvio, cuando otro
+    /// envío se llevó el equipo, y UX_EnvioEquipos_TicketApertura, cuando otro caso se quedó con
+    /// el ticket. Antes los dos salían como "el equipo fue reservado por otro envío", así que
+    /// quien chocaba por el ticket se iba a buscar el problema al sitio equivocado.
+    ///
+    /// Se mira el nombre del índice en el mensaje de SQL Server en vez del número de error: 2601
+    /// y 2627 dicen que hubo duplicado, pero no cuál.
+    /// </remarks>
+    private static string MotivoDelChoque(DbUpdateException ex, string numeroTicket)
+    {
+        var detalle = ex.InnerException?.Message ?? ex.Message;
+
+        if (detalle.Contains(IndiceTicketApertura, StringComparison.OrdinalIgnoreCase))
+        {
+            return $"El ticket {numeroTicket} fue utilizado para abrir otro caso mientras se " +
+                   "procesaba la solicitud. Un ticket solo puede abrir un caso.";
+        }
+
+        return "El equipo fue reservado por otro envío mientras se procesaba la solicitud.";
     }
 
     // Igual que en EnvioService: los equipos se pueden tocar mientras el envío no se mueva.

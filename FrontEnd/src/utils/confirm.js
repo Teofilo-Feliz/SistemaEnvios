@@ -32,6 +32,18 @@ export async function confirmAction({
   return result.isConfirmed;
 }
 
+/** Aviso de un solo botón: cuando no hay nada que confirmar sino algo que entender. */
+export function avisar({ title = "Atención", text, html, icon = "warning" } = {}) {
+  return Swal.fire({
+    title,
+    text,
+    html,
+    icon,
+    confirmButtonText: "Entendido",
+    confirmButtonColor: "#3d5f70",
+  });
+}
+
 export function notifyNotificationsChanged() {
   window.dispatchEvent(new CustomEvent("notifications-changed"));
 }

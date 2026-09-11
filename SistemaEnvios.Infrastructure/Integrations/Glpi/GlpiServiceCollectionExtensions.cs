@@ -14,6 +14,7 @@ public static class GlpiServiceCollectionExtensions
         services.Configure<GlpiOptions>(configuration.GetSection(GlpiOptions.Seccion));
         services.AddSingleton<GlpiSessionProvider>();
         services.AddScoped<IValidadorTicketGlpi, ValidadorTicketGlpi>();
+        services.AddScoped<IEquipoDeTicketGlpi, EquipoDeTicketGlpi>();
 
         // El App-Token identifica a la aplicación y viaja en toda petición, incluida initSession;
         // el Session-Token identifica la sesión y lo pone cada llamada, porque cambia.
