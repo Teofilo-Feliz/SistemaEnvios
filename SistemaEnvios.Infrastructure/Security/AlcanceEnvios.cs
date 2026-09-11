@@ -25,20 +25,30 @@ public sealed class AlcanceEnvios(
     /// </summary>
     public async Task<PerfilAlcance> ResolverPerfilAsync(CancellationToken cancellationToken = default)
     {
-        // La posición manda: es del cargo concreto, mientras que un rol agrupa a mucha gente.
-        if (!string.IsNullOrWhiteSpace(usuario.Position))
-        {
-            var perfilDePosicion = await BuscarPerfilAsync([usuario.Position.Trim()], cancellationToken);
-            if (perfilDePosicion is not null) return perfilDePosicion.Value;
-        }
-
-        // Un rol creado a propósito para este sistema es más fiable de administrar que la
-        // posición, que es un cargo de recursos humanos y puede venir escrito de mil formas.
         var roles = usuario.Roles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToArray();
-        if (roles.Length > 0)
+
+        // La posición y los roles se miran JUNTOS, y gana el de mayor alcance.
+        //
+        // Antes la posición se consultaba primero y, si estaba mapeada, los roles no llegaban a
+        // consultarse. Eso contradecía el motivo por el que existen los roles, escrito aquí mismo:
+        // un rol se crea a propósito para este sistema, mientras que la posición es un cargo de
+        // recursos humanos que llega escrito de mil formas. La encargada de soporte técnico lo
+        // demostró: su posición es "Encargada de Soporte Técnico" —una variante que nadie
+        // registró— y sus roles son "Soporte Técnico" y "SuperAdministrador", los grupos que
+        // Tecnología concede a propósito.
+        //
+        // Se juntan en vez de dar prioridad a unos sobre otros porque la tabla ya los trata como
+        // lo mismo —una sola columna para ambos— y porque dar prioridad al rol tendría su propia
+        // trampa: un rol MÁS ESTRECHO degradaría a quien tuviera una posición más amplia. Con
+        // "mayor alcance gana", conceder un grupo nunca quita lo que ya se tenía.
+        string[] claves = string.IsNullOrWhiteSpace(usuario.Position)
+            ? roles
+            : [usuario.Position.Trim(), .. roles];
+
+        if (claves.Length > 0)
         {
-            var perfilDeRol = await BuscarPerfilAsync(roles, cancellationToken);
-            if (perfilDeRol is not null) return perfilDeRol.Value;
+            var perfil = await BuscarPerfilAsync(claves, cancellationToken);
+            if (perfil is not null) return perfil.Value;
         }
 
         // Aquí había un respaldo que concedía alcance Global por el nombre del rol
@@ -199,14 +209,19 @@ public sealed class AlcanceEnvios(
     /// </summary>
     private async Task<PerfilAlcance?> BuscarPerfilAsync(string[] claves, CancellationToken cancellationToken)
     {
-        var mapeado = await db.PerfilesPorPosicion.AsNoTracking()
+        // Se traen TODAS las coincidencias y gana la de mayor alcance. Antes esto era un
+        // FirstOrDefault sin ORDER BY: con un usuario que trae varios roles mapeados a perfiles
+        // distintos, el resultado dependía de lo que SQL Server devolviera primero, que no está
+        // definido. Un mismo usuario podía resolver a un perfil distinto entre despliegues.
+        var mapeados = await db.PerfilesPorPosicion.AsNoTracking()
             .Where(x => claves.Contains(x.Posicion))
-            .Select(x => (byte?)x.Perfil)
-            .FirstOrDefaultAsync(cancellationToken);
+            .Select(x => (int)x.Perfil)
+            .ToArrayAsync(cancellationToken);
 
-        return mapeado is byte perfil && Enum.IsDefined(typeof(PerfilAlcance), (int)perfil)
-            ? (PerfilAlcance)perfil
-            : null;
+        return mapeados
+            .Where(x => Enum.IsDefined(typeof(PerfilAlcance), x))
+            .Select(x => (PerfilAlcance)x)
+            .DeMayorAlcance();
     }
 
 }

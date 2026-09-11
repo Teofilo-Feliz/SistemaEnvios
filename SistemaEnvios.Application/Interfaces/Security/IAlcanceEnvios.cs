@@ -37,6 +37,49 @@ public static class PerfilAlcanceExtensiones
     /// </remarks>
     public static bool EsTecnologia(this PerfilAlcance perfil) =>
         perfil is PerfilAlcance.Global or PerfilAlcance.Tecnologia;
+
+    /// <summary>
+    /// Orden de alcance, de mayor a menor. Cuando un usuario trae varias claves mapeadas, gana la
+    /// primera de esta lista.
+    /// </summary>
+    /// <remarks>
+    /// Un usuario puede traer varios roles a la vez. Queren, por ejemplo, llega con "Soporte
+    /// Técnico" y "SuperAdministrador": sin un orden explícito, la consulta se quedaba con el
+    /// primero que devolviera SQL Server, y eso no está definido —depende del plan, del índice y
+    /// del orden físico de las filas—. El mismo usuario podía resolver a un perfil distinto entre
+    /// despliegues sin que nadie tocara nada, que es peor que fallar siempre.
+    ///
+    /// El criterio es que conceder un rol nunca quite lo que ya se tenía: si a alguien le dan el
+    /// grupo de super administrador, espera poder más, no menos.
+    ///
+    /// Tecnología va por delante de Transportación y Filial aunque su número sea mayor: ve los
+    /// mismos datos que Global —está en un extremo de todo envío— y lo que la acota son las
+    /// pantallas, no el alcance. Por eso el orden no es el numérico del enum.
+    /// </remarks>
+    private static readonly PerfilAlcance[] DeMayorAMenorAlcance =
+    [
+        PerfilAlcance.Global,
+        PerfilAlcance.Tecnologia,
+        PerfilAlcance.Transportacion,
+        PerfilAlcance.Filial
+    ];
+
+    /// <summary>Posición en el orden de alcance; los desconocidos van al final.</summary>
+    public static int Precedencia(this PerfilAlcance perfil)
+    {
+        var indice = Array.IndexOf(DeMayorAMenorAlcance, perfil);
+        return indice < 0 ? int.MaxValue : indice;
+    }
+
+    /// <summary>El de mayor alcance de los que se le reconocen al usuario, o null si ninguno.</summary>
+    public static PerfilAlcance? DeMayorAlcance(this IEnumerable<PerfilAlcance> perfiles)
+    {
+        PerfilAlcance? mejor = null;
+        foreach (var perfil in perfiles)
+            if (mejor is null || perfil.Precedencia() < mejor.Value.Precedencia())
+                mejor = perfil;
+        return mejor;
+    }
 }
 
 /// <summary>

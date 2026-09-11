@@ -667,6 +667,10 @@ VALUES
     -- El CHECK de la tabla admite el 4 desde que soporte técnico se separó de Global, pero
     -- este seed se quedó sin las filas: la base nacía soportando el perfil y sin sus datos.
     -- Esa es la causa de que en QA soporte técnico cayera en el tablero de filial.
+    -- Grupo de seguridad de AuthManager para los super administradores. Llega en el claim
+    -- "roles", no en "position": el token trae 'Soporte Técnico,SuperAdministrador' y gana este
+    -- por ser el de mayor alcance.
+    (N'SuperAdministrador',                  1),
     (N'Soporte Técnico',                     4),
     (N'Soporte Tecnico',                     4);
 GO
@@ -716,6 +720,18 @@ VALUES
     (N'Asistente Administrativo', N'recepciones.gestionar'),
     (N'Asistente Administrativo', N'incidencias.gestionar'),
     (N'Asistente Administrativo', N'transportes.gestionar'),
+    -- Super administrador: los mismos once de Programador Senior, que es el otro perfil Global.
+    (N'SuperAdministrador', N'envios.consultar'),
+    (N'SuperAdministrador', N'envios.crear'),
+    (N'SuperAdministrador', N'envios.editar'),
+    (N'SuperAdministrador', N'envios.despachar'),
+    (N'SuperAdministrador', N'equipos.gestionar'),
+    (N'SuperAdministrador', N'recepciones.gestionar'),
+    (N'SuperAdministrador', N'incidencias.gestionar'),
+    (N'SuperAdministrador', N'transportes.gestionar'),
+    (N'SuperAdministrador', N'transportes.confirmar'),
+    (N'SuperAdministrador', N'transportes.administrar'),
+    (N'SuperAdministrador', N'catalogos.administrar'),
     -- Soporte técnico trabaja el flujo completo del equipo: lo recibe, lo revisa y lo devuelve.
     -- Quedan fuera a propósito 'catalogos.administrar' y 'transportes.administrar': administrar
     -- el sistema y la flota no es su trabajo, y es lo único que lo separa de Programador Senior.

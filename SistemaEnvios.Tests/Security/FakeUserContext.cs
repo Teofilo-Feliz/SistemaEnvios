@@ -27,4 +27,11 @@ internal sealed class FakeUserContext(
     /// <summary>Usuario sin filial y con rol global: ve todos los envios, sin restriccion de alcance.</summary>
     /// <summary>Actor con alcance Global. Se identifica por posición mapeada, no por el nombre de un rol.</summary>
     public static FakeUserContext Global(Guid? userId) => new(userId, position: "Programador Senior");
+
+    /// <summary>
+    /// Usuario tal como llega de AuthManager: su posición, su filial y sus roles. El token trae
+    /// los roles en un solo claim separado por comas, y un mismo usuario puede traer varios.
+    /// </summary>
+    public static FakeUserContext ConRoles(Guid? userId, string? position, int filial, params string[] roles) =>
+        new(userId, affiliate: $"{filial},SANTO DOMINGO (SEDE)", roles: roles, position: position);
 }
