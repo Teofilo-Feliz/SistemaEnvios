@@ -6,6 +6,8 @@ const props = defineProps({
   open: { type: Boolean, default: false },
   title: { type: String, default: "" },
   eyebrow: { type: String, default: "" },
+  /** Ancho máximo. Un formulario de varias columnas necesita más que un detalle de una sola. */
+  width: { type: String, default: "440px" },
 });
 const emit = defineEmits(["close"]);
 
@@ -41,7 +43,13 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <Transition name="modal">
       <div v-if="open" class="modal-scrim" @click.self="emit('close')">
-        <div class="modal-card" role="dialog" aria-modal="true" :aria-label="title || 'Detalle'">
+        <div
+          class="modal-card"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="title || 'Detalle'"
+          :style="{ '--modal-width': width }"
+        >
           <header class="modal-head">
             <div>
               <span v-if="eyebrow" class="modal-eyebrow">{{ eyebrow }}</span>
@@ -76,14 +84,20 @@ onBeforeUnmount(() => {
   padding: 20px;
 }
 .modal-card {
-  width: min(440px, 100%);
+  width: min(var(--modal-width, 440px), 100%);
   max-height: calc(100vh - 40px);
   background: #fff;
   border-radius: 12px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 18px 48px rgb(16 24 40 / 0.24);
+  /* Tres capas: un filo que separa la tarjeta del velo, un halo sin desplazamiento que
+     sombrea también los lados —una sombra solo hacia abajo deja los costados planos— y la caída
+     larga que la levanta del fondo. */
+  box-shadow:
+    0 0 0 1px rgb(16 24 40 / 0.05),
+    0 0 34px rgb(16 24 40 / 0.2),
+    0 26px 58px -14px rgb(16 24 40 / 0.34);
 }
 .modal-head {
   display: flex;

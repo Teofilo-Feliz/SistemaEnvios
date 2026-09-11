@@ -7,6 +7,7 @@ import ShipmentSection from "@/components/shipments/ShipmentSection.vue";
 import ShipmentGeneralSection from "@/components/shipments/ShipmentGeneralSection.vue";
 import ShipmentTransportSection from "@/components/shipments/ShipmentTransportSection.vue";
 import ShipmentEquipmentSection from "@/components/shipments/ShipmentEquipmentSection.vue";
+import ShipmentEquipmentEditModal from "@/components/shipments/ShipmentEquipmentEditModal.vue";
 import ShipmentSummary from "@/components/shipments/ShipmentSummary.vue";
 import { catalogoService } from "@/services/catalogoService";
 import { casoService } from "@/services/casoService";
@@ -62,9 +63,12 @@ const form = reactive({
 const equiposOriginales = ref([]);
 // Transporte ya asignado al envío, si lo hay: define si al guardar se crea o se actualiza.
 const transporteExistente = ref(null);
+/**
+ * El equipo que se está escribiendo para agregar. Solo eso: editar uno ya agregado va por
+ * ShipmentEquipmentEditModal y no pasa por aquí, así que escribir un equipo nuevo y corregir otro
+ * ya no se pisan.
+ */
 const item = reactive({
-  // Se conserva al editar un equipo ya asociado: sin esto la edicion se convertiria
-  // en quitar y volver a agregar, perdiendo la asociacion original.
   envioEquipoId: null,
   existingId: "",
   typeId: "",
@@ -369,9 +373,68 @@ async function guardarEquipos() {
     }
   }
 }
-function editEquipment(e) {
-  Object.assign(item, e);
-  removeEquipment(e.id);
+/** La fila que el lápiz abrió. El popup edita una copia, así que cancelar no la toca. */
+const equipoEnEdicion = ref(null);
+
+function editEquipment(equipo) {
+  equipoEnEdicion.value = equipo;
+}
+
+/**
+ * Guarda la edición de una fila ya agregada.
+ *
+ * Marca, modelo, serial, tipo y código de activo son del EQUIPO, no de este envío: cuando la fila
+ * llegó a la tabla el equipo ya existía en la base, así que cambiarlos solo en pantalla dejaba el
+ * inventario con los datos viejos mientras la tabla mostraba los nuevos. Se persisten.
+ *
+ * El ticket y la observación son de la asociación y los guarda guardarEquipos() al enviar el
+ * formulario, junto con el resto del envío.
+ *
+ * Dos cuidados al persistir: la edición no mueve el equipo, así que conserva su ubicación actual
+ * en vez del origen del formulario, que no tiene por qué ser la misma; y el inventario en memoria
+ * se refresca, porque alimenta el combo y a ensure(), que si no reconocería este serial con los
+ * datos viejos.
+ */
+async function guardarEdicionEquipo(actualizado) {
+  const anterior = form.equipment.find((fila) => fila.id === actualizado.id);
+  if (!anterior) return;
+
+  const datosDelEquipo = ["typeId", "brand", "model", "serial", "assetCode"];
+  const cambioElEquipo = datosDelEquipo.some(
+    (campo) => String(anterior[campo] ?? "") !== String(actualizado[campo] ?? ""),
+  );
+
+  if (cambioElEquipo && actualizado.existingId) {
+    const enInventario = registeredEquipment.value.find(
+      (x) => Number(x.equipoId) === Number(actualizado.existingId),
+    );
+    try {
+      await equipoService.update(Number(actualizado.existingId), {
+        equipoId: Number(actualizado.existingId),
+        tipoEquipoId: Number(actualizado.typeId),
+        ubicacionActualId: Number(enInventario?.ubicacionActualId ?? form.originId),
+        codigoActivo: actualizado.assetCode || null,
+        numeroSerie: actualizado.serial,
+        marca: actualizado.brand,
+        modelo: actualizado.model,
+        observaciones: actualizado.notes || null,
+      });
+      if (enInventario) {
+        enInventario.tipoEquipoId = Number(actualizado.typeId);
+        enInventario.codigoActivo = actualizado.assetCode;
+        enInventario.numeroSerie = actualizado.serial;
+        enInventario.marca = actualizado.brand;
+        enInventario.modelo = actualizado.model;
+      }
+    } catch (error) {
+      ui.notify(error.userMessage || "No fue posible actualizar el equipo.", "error");
+      return;
+    }
+  }
+
+  form.equipment = form.equipment.map((fila) => (fila.id === actualizado.id ? actualizado : fila));
+  equipoEnEdicion.value = null;
+  ui.notify("Equipo actualizado.", "success");
 }
 async function load() {
   try {
@@ -680,6 +743,15 @@ onMounted(load);
         :flow-label="flowLabel"
       />
     </form>
+    <ShipmentEquipmentEditModal
+      :open="Boolean(equipoEnEdicion)"
+      :equipment="equipoEnEdicion"
+      :equipments="form.equipment"
+      :types="types"
+      :puede-editar-equipo="auth.can('equipos.gestionar')"
+      @close="equipoEnEdicion = null"
+      @save="guardarEdicionEquipo"
+    />
     <div v-if="confirmOpen" class="confirm-overlay" role="dialog" aria-modal="true">
       <div class="confirm-dialog">
         <button
