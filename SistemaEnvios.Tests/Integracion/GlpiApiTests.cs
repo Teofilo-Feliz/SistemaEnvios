@@ -10,7 +10,8 @@ using SistemaEnvios.Infrastructure.Persistence;
 namespace SistemaEnvios.Tests.Integracion;
 
 /// <summary>
-/// Contrato real de la mesa de ayuda: 200 cuando el item existe, 404 cuando no. Va contra la
+/// Contrato real de la mesa de ayuda: Item_Ticket responde 404 cuando el ticket no existe y la
+/// lista de activos cuando sí. Va contra la
 /// instancia de verdad a propósito —un doble de prueba solo confirmaría lo que asumimos de GLPI,
 /// que es justo lo que hay que verificar.
 ///
@@ -21,9 +22,6 @@ namespace SistemaEnvios.Tests.Integracion;
 /// </summary>
 public sealed class GlpiApiTests
 {
-    // Existe en la instancia de ADR ("Compra de Equipos"). Si algún día se depura, la prueba
-    // empieza a fallar con "existe = false" y hay que apuntarla a otro ticket vigente.
-    private const int TicketQueExiste = 25000;
     private const int TicketQueNoExiste = 99_999_999;
 
     // Verificados a mano contra la instancia: el ticket 30261 tiene un solo activo, el Computer
@@ -31,42 +29,7 @@ public sealed class GlpiApiTests
     private const int TicketConUnEquipo = 30261;
     private const int EquipoDelTicket = 657;
 
-    [SkippableFact]
-    public async Task ElTicketDeReferenciaExiste()
-    {
-        var glpi = ClienteOSalte();
-
-        var resultado = await glpi.ItemExistsAsync("Ticket", TicketQueExiste);
-
-        Assert.True(resultado.IsSuccess, resultado.Error);
-        Assert.True(resultado.Value);
-    }
-
-    [SkippableFact]
-    public async Task UnTicketInexistenteDaFalseYNoUnError()
-    {
-        var glpi = ClienteOSalte();
-
-        var resultado = await glpi.ItemExistsAsync("Ticket", TicketQueNoExiste);
-
-        // Lo importante es la distinción: 404 es una respuesta, no una falla de integración.
-        Assert.True(resultado.IsSuccess, resultado.Error);
-        Assert.False(resultado.Value);
-    }
-
-    [SkippableFact]
-    public async Task LaSegundaConsultaReutilizaLaSesion()
-    {
-        var glpi = ClienteOSalte();
-
-        var primera = await glpi.ItemExistsAsync("Ticket", TicketQueExiste);
-        var segunda = await glpi.ItemExistsAsync("Ticket", TicketQueExiste);
-
-        Assert.True(primera.IsSuccess, primera.Error);
-        Assert.True(segunda.IsSuccess, segunda.Error);
-    }
-
-/// <summary>
+    /// <summary>
     /// El contrato que sostiene la regla de un equipo por ticket: Item_Ticket responde con 404
     /// cuando el ticket no existe y con la lista de asociaciones cuando sí. Por eso una sola
     /// llamada sustituye a la consulta de existencia en vez de sumarse a ella.

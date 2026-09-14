@@ -141,9 +141,6 @@ public sealed class ValidadorTicketGlpiTests
 
     private sealed class GlpiFalso(Result<TicketGlpi> respuesta) : IGlpiClient
     {
-        public Task<Result<bool>> ItemExistsAsync(string itemType, int id, CancellationToken ct = default) =>
-            throw new InvalidOperationException("El validador ya no pregunta por existencia: usa ObtenerTicketAsync.");
-
         public Task<Result<TicketGlpi>> ObtenerTicketAsync(int ticketId, CancellationToken ct = default) =>
             Task.FromResult(respuesta);
 
@@ -153,9 +150,6 @@ public sealed class ValidadorTicketGlpiTests
 
     private sealed class GlpiQueFalla : IGlpiClient
     {
-        public Task<Result<bool>> ItemExistsAsync(string itemType, int id, CancellationToken ct = default) =>
-            throw new InvalidOperationException("No debió consultarse a GLPI con un ticket inválido.");
-
         public Task<Result<TicketGlpi>> ObtenerTicketAsync(int ticketId, CancellationToken ct = default) =>
             throw new InvalidOperationException("No debió consultarse a GLPI con un ticket inválido.");
 

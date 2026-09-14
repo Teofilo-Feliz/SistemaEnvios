@@ -41,7 +41,6 @@ const errors = reactive({
   assetCode: "",
   ticket: "",
 });
-const validando = ref(false);
 const ticketOriginal = ref("");
 // El ticket sobre el que se pulsó "Buscar equipo". Si no coincide con el que hay escrito, los
 // datos que se ven son de otro ticket y guardar dejaría la fila mintiendo.
@@ -201,27 +200,6 @@ function vaciarDatosDelEquipo() {
   borrador.assetCode = "";
 }
 
-/**
- * Comprueba el ticket nuevo contra el servidor. Solo si cambió: repetir la consulta con el mismo
- * daría "ya está registrado", porque lo está, en este mismo equipo.
- *
- * Aquí solo se mira que el ticket sea usable —libre, existente y de un solo equipo—. Que
- * corresponda a esta máquina ya no se exige, porque al cambiar el ticket el equipo se cambia con
- * él; de eso se encarga "Buscar equipo".
- */
-async function validarTicketNuevo() {
-  if (!ticketCambio.value) return true;
-
-  try {
-    await glpiService.equipoDeTicket(borrador.ticket.trim());
-    return true;
-  } catch (error) {
-    if (error.response?.status === 502) return true;
-    errors.ticket = error.userMessage || "No se pudo validar el número de ticket.";
-    return false;
-  }
-}
-
 async function guardar() {
   // El ticket cambió pero nadie pulsó "Buscar equipo": lo que se ve en pantalla sigue siendo el
   // equipo del ticket anterior. Guardar así dejaría la fila diciendo que el caso de esta máquina
@@ -238,25 +216,20 @@ async function guardar() {
   }
 
   if (!validarEnLocal()) return;
-  validando.value = true;
-  try {
-    if (!(await validarTicketNuevo())) return;
-    emit("save", {
-      ...props.equipment,
-      typeId: borrador.typeId,
-      brand: borrador.brand,
-      model: borrador.model,
-      serial: borrador.serial,
-      assetCode: borrador.assetCode,
-      ticket: heredado.value ? props.equipment.ticket : borrador.ticket,
-      notes: borrador.notes,
-      typeName:
-        props.types.find((tipo) => tipo.tipoEquipoId === Number(borrador.typeId))?.nombre ||
-        props.equipment.typeName,
-    });
-  } finally {
-    validando.value = false;
-  }
+
+  emit("save", {
+    ...props.equipment,
+    typeId: borrador.typeId,
+    brand: borrador.brand,
+    model: borrador.model,
+    serial: borrador.serial,
+    assetCode: borrador.assetCode,
+    ticket: heredado.value ? props.equipment.ticket : borrador.ticket,
+    notes: borrador.notes,
+    typeName:
+      props.types.find((tipo) => tipo.tipoEquipoId === Number(borrador.typeId))?.nombre ||
+      props.equipment.typeName,
+  });
 }
 </script>
 
@@ -372,12 +345,8 @@ async function guardar() {
     </div>
 
     <template #footer>
-      <button class="btn btn-ghost" type="button" :disabled="validando" @click="emit('close')">
-        Cancelar
-      </button>
-      <button class="btn btn-primary" type="button" :disabled="validando" @click="guardar">
-        {{ validando ? "Validando…" : "Guardar cambios" }}
-      </button>
+      <button class="btn btn-ghost" type="button" @click="emit('close')">Cancelar</button>
+      <button class="btn btn-primary" type="button" @click="guardar">Guardar cambios</button>
     </template>
   </ModalCard>
 </template>

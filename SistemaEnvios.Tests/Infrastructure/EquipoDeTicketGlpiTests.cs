@@ -203,9 +203,6 @@ public sealed class EquipoDeTicketGlpiTests
 
     private sealed class GlpiFalso(Result<TicketGlpi> ticket, EquipoGlpi? equipo) : IGlpiClient
     {
-        public Task<Result<bool>> ItemExistsAsync(string itemType, int id, CancellationToken ct = default) =>
-            throw new InvalidOperationException("No se usa aquí.");
-
         public Task<Result<TicketGlpi>> ObtenerTicketAsync(int ticketId, CancellationToken ct = default) =>
             Task.FromResult(ticket);
 
@@ -217,9 +214,6 @@ public sealed class EquipoDeTicketGlpiTests
 
     private sealed class GlpiQueExplota : IGlpiClient
     {
-        public Task<Result<bool>> ItemExistsAsync(string itemType, int id, CancellationToken ct = default) =>
-            throw new InvalidOperationException("No debió consultarse a GLPI.");
-
         public Task<Result<TicketGlpi>> ObtenerTicketAsync(int ticketId, CancellationToken ct = default) =>
             throw new InvalidOperationException("No debió consultarse a GLPI.");
 

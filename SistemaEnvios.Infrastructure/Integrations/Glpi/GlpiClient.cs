@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using SistemaEnvios.Application.Common;
 using SistemaEnvios.Application.DTOs.Integraciones;
@@ -11,93 +12,34 @@ namespace SistemaEnvios.Infrastructure.Integrations.Glpi;
 public sealed class GlpiClient(
     HttpClient http,
     GlpiSessionProvider sesion,
+    IMemoryCache cache,
     ILogger<GlpiClient> logger) : IGlpiClient
 {
     private const int LargoMaximoItemType = 50;
 
-    public async Task<Result<bool>> ItemExistsAsync(string itemType, int id, CancellationToken ct = default)
-    {
-        if (!EsItemTypeValido(itemType))
-        {
-            return Result<bool>.Failure(
-                "El tipo de item de GLPI solo admite letras, dígitos y guion bajo, y debe empezar con letra.",
-                ErrorType.Validation);
-        }
-
-        if (id <= 0)
-            return Result<bool>.Failure("El id del item debe ser mayor que cero.", ErrorType.Validation);
-
-        try
-        {
-            var estado = await ConsultarAsync(itemType, id, reintentarSesion: true, ct).ConfigureAwait(false);
-            return estado switch
-            {
-                HttpStatusCode.OK => Result<bool>.Success(true),
-                HttpStatusCode.NotFound => Result<bool>.Success(false),
-                // 400 suele ser un itemtype que GLPI no conoce: es culpa de quien llamó, no de GLPI.
-                HttpStatusCode.BadRequest => Result<bool>.Failure(
-                    $"GLPI no reconoce el tipo de item '{itemType}'.", ErrorType.Validation),
-                _ => Fallo($"GLPI respondió {(int)estado} al consultar {itemType}/{id}.")
-            };
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            // Canceló quien llamó (cliente cerró la conexión): no es una falla de GLPI.
-            throw;
-        }
-        catch (OperationCanceledException ex)
-        {
-            logger.LogWarning(ex, "Timeout consultando {ItemType}/{Id} en GLPI.", itemType, id);
-            return Fallo("La mesa de ayuda no respondió a tiempo.");
-        }
-        catch (GlpiIntegrationException ex)
-        {
-            logger.LogError(ex, "Falla de integración con GLPI consultando {ItemType}/{Id}.", itemType, id);
-            return Fallo(ex.Message);
-        }
-        catch (HttpRequestException ex)
-        {
-            logger.LogError(ex, "No se pudo contactar a GLPI para consultar {ItemType}/{Id}.", itemType, id);
-            return Fallo("No se pudo contactar a la mesa de ayuda.");
-        }
-        catch (Exception ex)
-        {
-            // Frontera con un sistema externo: nada de lo que venga de ahí puede tumbar el API.
-            // Incluye las excepciones de Polly (circuito abierto, timeout de la estrategia), que
-            // no se nombran aquí para no acoplar Infrastructure a sus tipos.
-            logger.LogError(ex, "Error inesperado consultando {ItemType}/{Id} en GLPI.", itemType, id);
-            return Fallo("La mesa de ayuda no está disponible.");
-        }
-    }
-
-    private async Task<HttpStatusCode> ConsultarAsync(
-        string itemType, int id, bool reintentarSesion, CancellationToken ct)
-    {
-        var token = await sesion.ObtenerTokenAsync(ct).ConfigureAwait(false);
-        using var peticion = new HttpRequestMessage(HttpMethod.Get, $"{itemType}/{id}");
-        peticion.Headers.TryAddWithoutValidation("Session-Token", token);
-
-        using var respuesta = await http.SendAsync(peticion, ct).ConfigureAwait(false);
-
-        // El token pudo morir antes de nuestro TTL (GLPI reiniciado, sesión cerrada desde otro
-        // lado). Se descarta y se reintenta una sola vez con sesión nueva; sin el tope, un 401
-        // permanente por credenciales malas se volvería un bucle infinito.
-        if (respuesta.StatusCode == HttpStatusCode.Unauthorized && reintentarSesion)
-        {
-            logger.LogInformation("GLPI rechazó el session_token; se abre una sesión nueva y se reintenta.");
-            sesion.Invalidar();
-            return await ConsultarAsync(itemType, id, reintentarSesion: false, ct).ConfigureAwait(false);
-        }
-
-        return respuesta.StatusCode;
-    }
-
+    /// <summary>
+    /// Cuánto se reutiliza una respuesta de GLPI.
+    /// </summary>
+    /// <remarks>
+    /// El mismo ticket se consulta dos veces seguidas: una al autocompletar el formulario y otra
+    /// al guardar, cuando el servidor vuelve a comprobarlo por su cuenta. Con la caché, la segunda
+    /// no sale a la red.
+    ///
+    /// Corto a propósito. Si alguien le cuelga un segundo equipo al ticket en GLPI, no queremos
+    /// estar sirviendo un "está bien" de hace media hora: un minuto cubre el trecho entre buscar y
+    /// guardar y poco más.
+    /// </remarks>
+    private static readonly TimeSpan VigenciaConsulta = TimeSpan.FromMinutes(1);
 
     /// <inheritdoc/>
     public async Task<Result<TicketGlpi>> ObtenerTicketAsync(int ticketId, CancellationToken ct = default)
     {
         if (ticketId <= 0)
             return Result<TicketGlpi>.Failure("El id del ticket debe ser mayor que cero.", ErrorType.Validation);
+
+        var clave = $"glpi-ticket::{ticketId}";
+        if (cache.TryGetValue(clave, out TicketGlpi? cacheado) && cacheado is not null)
+            return Result<TicketGlpi>.Success(cacheado);
 
         try
         {
@@ -106,10 +48,14 @@ public sealed class GlpiClient(
             var (estado, cuerpo) = await LeerAsync($"Ticket/{ticketId}/Item_Ticket", reintentarSesion: true, ct)
                 .ConfigureAwait(false);
 
+            // Solo se guarda lo que GLPI respondió de verdad. Un fallo no se cachea: sería
+            // convertir un tropiezo de red en un minuto de rechazos.
             return estado switch
             {
-                HttpStatusCode.OK => Result<TicketGlpi>.Success(new TicketGlpi(true, LeerItems(cuerpo))),
-                HttpStatusCode.NotFound => Result<TicketGlpi>.Success(TicketGlpi.NoEncontrado),
+                HttpStatusCode.OK => Result<TicketGlpi>.Success(
+                    Recordar(clave, new TicketGlpi(true, LeerItems(cuerpo)))),
+                HttpStatusCode.NotFound => Result<TicketGlpi>.Success(
+                    Recordar(clave, TicketGlpi.NoEncontrado)),
                 _ => FalloTicket($"GLPI respondió {(int)estado} al consultar los equipos del ticket {ticketId}.")
             };
         }
@@ -205,6 +151,10 @@ public sealed class GlpiClient(
         if (id <= 0)
             return Result<EquipoGlpi?>.Failure("El id del item debe ser mayor que cero.", ErrorType.Validation);
 
+        var clave = $"glpi-equipo::{itemType}::{id}";
+        if (cache.TryGetValue(clave, out EquipoGlpi? cacheado))
+            return Result<EquipoGlpi?>.Success(cacheado);
+
         try
         {
             var (estado, cuerpo) = await LeerAsync(
@@ -212,8 +162,8 @@ public sealed class GlpiClient(
 
             return estado switch
             {
-                HttpStatusCode.OK => Result<EquipoGlpi?>.Success(LeerEquipo(itemType, cuerpo)),
-                HttpStatusCode.NotFound => Result<EquipoGlpi?>.Success(null),
+                HttpStatusCode.OK => Result<EquipoGlpi?>.Success(Recordar(clave, LeerEquipo(itemType, cuerpo))),
+                HttpStatusCode.NotFound => Result<EquipoGlpi?>.Success(Recordar<EquipoGlpi?>(clave, null)),
                 _ => Result<EquipoGlpi?>.Failure(
                     $"GLPI respondió {(int)estado} al consultar {itemType}/{id}.", ErrorType.ExternalService)
             };
@@ -315,8 +265,11 @@ public sealed class GlpiClient(
 
     private Result<TicketGlpi> FalloTicket(string mensaje) =>
         Result<TicketGlpi>.Failure(mensaje, ErrorType.ExternalService);
-    private Result<bool> Fallo(string mensaje) =>
-        Result<bool>.Failure(mensaje, ErrorType.ExternalService);
+    private T Recordar<T>(string clave, T valor)
+    {
+        cache.Set(clave, valor, VigenciaConsulta);
+        return valor;
+    }
 
     /// <summary>
     /// El itemType se concatena a la URL, así que se restringe al alfabeto real de GLPI

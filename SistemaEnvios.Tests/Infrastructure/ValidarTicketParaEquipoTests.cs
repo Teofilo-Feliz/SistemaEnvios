@@ -115,9 +115,6 @@ public sealed class ValidarTicketParaEquipoTests
 
     private sealed class GlpiFalso(Result<TicketGlpi> ticket, EquipoGlpi? equipo) : IGlpiClient
     {
-        public Task<Result<bool>> ItemExistsAsync(string itemType, int id, CancellationToken ct = default) =>
-            throw new InvalidOperationException("No se usa aquí.");
-
         public Task<Result<TicketGlpi>> ObtenerTicketAsync(int ticketId, CancellationToken ct = default) =>
             Task.FromResult(ticket);
 

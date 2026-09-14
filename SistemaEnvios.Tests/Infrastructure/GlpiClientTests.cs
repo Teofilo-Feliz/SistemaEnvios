@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -22,7 +23,7 @@ public sealed class GlpiClientTests
     [InlineData("Ticket ")]
     public async Task RechazaUnItemTypeQueReescribiriaLaRuta(string itemType)
     {
-        var resultado = await Cliente().ItemExistsAsync(itemType, 25000);
+        var resultado = await Cliente().ObtenerEquipoAsync(itemType, 657);
 
         Assert.True(resultado.IsFailure);
         Assert.Equal(ErrorType.Validation, resultado.ErrorType);
@@ -33,22 +34,22 @@ public sealed class GlpiClientTests
     [InlineData(-1)]
     public async Task RechazaUnIdQueGlpiNuncaTendria(int id)
     {
-        var resultado = await Cliente().ItemExistsAsync("Ticket", id);
+        var resultado = await Cliente().ObtenerEquipoAsync("Computer", id);
 
         Assert.True(resultado.IsFailure);
         Assert.Equal(ErrorType.Validation, resultado.ErrorType);
     }
 
     [Theory]
-    [InlineData("Ticket")]
     [InlineData("Computer")]
+    [InlineData("Monitor")]
     [InlineData("Item_DeviceProcessor")]
     public async Task AceptaLosItemTypesRealesDeGlpi(string itemType)
     {
         // Sin red disponible la consulta falla, pero lo que se comprueba es que NO fue rechazada
         // por validación: el itemType pasó el filtro y se intentó la llamada.
         var resultado = await Cliente(baseUrl: "http://localhost:1/apirest.php/")
-            .ItemExistsAsync(itemType, 1);
+            .ObtenerEquipoAsync(itemType, 1);
 
         Assert.NotEqual(ErrorType.Validation, resultado.ErrorType);
     }
@@ -74,6 +75,8 @@ public sealed class GlpiClientTests
 
         var sesion = new GlpiSessionProvider(proveedorHttp, opciones, NullLogger<GlpiSessionProvider>.Instance);
         var http = proveedorHttp.CreateClient(GlpiSessionProvider.HttpClientName);
-        return new GlpiClient(http, sesion, NullLogger<GlpiClient>.Instance);
+        // Caché nueva por cliente: si se compartiera, una prueba serviría la respuesta de otra.
+        return new GlpiClient(
+            http, sesion, new MemoryCache(new MemoryCacheOptions()), NullLogger<GlpiClient>.Instance);
     }
 }

@@ -12,6 +12,10 @@ public static class GlpiServiceCollectionExtensions
         opciones.Validar();
 
         services.Configure<GlpiOptions>(configuration.GetSection(GlpiOptions.Seccion));
+        // GlpiClient cachea las respuestas, así que la registra aquí y no da por hecho que el
+        // anfitrión ya lo hizo: AddMemoryCache usa TryAdd, de modo que si Program.cs también la
+        // llama no se duplica nada.
+        services.AddMemoryCache();
         services.AddSingleton<GlpiSessionProvider>();
         services.AddScoped<IValidadorTicketGlpi, ValidadorTicketGlpi>();
         services.AddScoped<IEquipoDeTicketGlpi, EquipoDeTicketGlpi>();
