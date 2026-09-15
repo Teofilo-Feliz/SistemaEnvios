@@ -628,47 +628,76 @@ function validate() {
   if (!form.equipment.length) ui.notify("Agrega al menos un equipo antes de guardar.", "warning");
   return !Object.values(errors).some(Boolean) && Boolean(form.equipment.length);
 }
-async function submit() {
-  if (!validate()) return;
-  // Solo se comprueban los tickets que se estrenan. Un ticket heredado ya está usado por la
-  // apertura de su caso a propósito, así que preguntar si está libre siempre diría que no.
-  // Al editar hay que excluir la propia asociación: si no, el ticket que ya tiene el equipo
-  // en este mismo envío se reportaría como ocupado y no se podría guardar nada.
+/**
+ * Comprueba los tickets contra la base antes de pedir la confirmación.
+ *
+ * Va aparte y con su try porque antes no lo tenía: si la consulta fallaba —un 400 por formato, un
+ * 403, un 404 porque el ticket llegó vacío a la ruta— la promesa quedaba sin manejar y al pulsar
+ * "Guardar envío" no pasaba absolutamente nada. Sin mensaje, sin diálogo y sin petición: parecía
+ * que el botón estuviera muerto.
+ */
+async function ticketsLibres() {
+  // Solo los que se estrenan. Un ticket heredado ya está usado por la apertura de su caso a
+  // propósito, así que preguntar si está libre siempre diría que no. Al editar hay que excluir la
+  // propia asociación: si no, el ticket que el equipo ya tiene en este mismo envío se reportaría
+  // como ocupado y no se podría guardar nada.
   const porVerificar = form.equipment.filter((equipment) => !equipment.ticketHeredado);
-  const availability = await Promise.all(
-    porVerificar.map((equipment) =>
-      envioService.ticketAvailable(
-        equipment.ticket,
-        equipment.envioEquipoId ? { excluirEnvioEquipoId: equipment.envioEquipoId } : {},
+
+  let respuestas;
+  try {
+    respuestas = await Promise.all(
+      porVerificar.map((equipment) =>
+        envioService.ticketAvailable(
+          equipment.ticket,
+          equipment.envioEquipoId ? { excluirEnvioEquipoId: equipment.envioEquipoId } : {},
+        ),
       ),
-    ),
-  );
-  const duplicateIndex = availability.findIndex((response) => response.data !== true);
-  if (duplicateIndex >= 0) {
+    );
+  } catch (error) {
+    ui.notify(error.userMessage || "No fue posible comprobar los tickets del envío.", "error");
+    return false;
+  }
+
+  const ocupado = respuestas.findIndex((respuesta) => respuesta.data !== true);
+  if (ocupado >= 0) {
     ui.notify(
-      `El ticket ${porVerificar[duplicateIndex].ticket} ya está asociado a otro equipo o envío.`,
+      `El ticket ${porVerificar[ocupado].ticket} ya está asociado a otro equipo o envío.`,
       "error",
     );
-    return;
+    return false;
   }
-  const transportLabel = selectedTransportType.value?.nombre || "Sin indicar";
-  const driverLabel = isInternalTransport(selectedTransportType.value?.estrategia)
-    ? selectedDriver.value?.nombreCompleto || "Sin indicar"
-    : `${form.privateName || "Sin indicar"} · ${form.vehiclePlate || "Sin placa"}`;
-  const equipmentHtml = form.equipment.length
-    ? form.equipment
-        .map(
-          (equipment, index) =>
-            `<div style="border:1px solid #e1e6ee;border-radius:6px;padding:9px;margin:7px 0"><strong>${index + 1}. ${escapeHtml(equipment.typeName)}</strong><br><small>${escapeHtml(equipment.brand)} ${escapeHtml(equipment.model)} · Serial: ${escapeHtml(equipment.serial)} · Activo: ${escapeHtml(equipment.assetCode)} · Ticket: ${escapeHtml(equipment.ticket)}</small></div>`,
-        )
-        .join("")
-    : "<p>Los equipos asociados se conservarán sin cambios.</p>";
-  const accepted = await confirmAction({
-    title: editing.value ? "Confirmar actualización" : "Confirmar nuevo envío",
-    html: `<div style="text-align:left"><p><strong>Origen:</strong> ${escapeHtml(origin.value?.nombre)}</p><p><strong>Destino:</strong> ${escapeHtml(destination.value?.nombre)}</p><p><strong>Transporte:</strong> ${escapeHtml(transportLabel)}</p>${editing.value ? "" : `<p><strong>Responsable/chofer:</strong> ${escapeHtml(driverLabel)}</p>`}<p><strong>Observaciones:</strong> ${escapeHtml(form.notes || "Sin observaciones")}</p><hr><strong>Equipos (${form.equipment.length})</strong><div style="max-height:280px;overflow:auto">${equipmentHtml}</div></div>`,
-    confirmText: editing.value ? "Guardar cambios" : "Crear envío",
-  });
-  if (accepted) await save();
+
+  return true;
+}
+
+async function submit() {
+  try {
+    if (!validate()) return;
+    if (!(await ticketsLibres())) return;
+
+    const transportLabel = selectedTransportType.value?.nombre || "Sin indicar";
+    const driverLabel = isInternalTransport(selectedTransportType.value?.estrategia)
+      ? selectedDriver.value?.nombreCompleto || "Sin indicar"
+      : `${form.privateName || "Sin indicar"} · ${form.vehiclePlate || "Sin placa"}`;
+    const equipmentHtml = form.equipment.length
+      ? form.equipment
+          .map(
+            (equipment, index) =>
+              `<div style="border:1px solid #e1e6ee;border-radius:6px;padding:9px;margin:7px 0"><strong>${index + 1}. ${escapeHtml(equipment.typeName)}</strong><br><small>${escapeHtml(equipment.brand)} ${escapeHtml(equipment.model)} · Serial: ${escapeHtml(equipment.serial)} · Activo: ${escapeHtml(equipment.assetCode)} · Ticket: ${escapeHtml(equipment.ticket)}</small></div>`,
+          )
+          .join("")
+      : "<p>Los equipos asociados se conservarán sin cambios.</p>";
+    const accepted = await confirmAction({
+      title: editing.value ? "Confirmar actualización" : "Confirmar nuevo envío",
+      html: `<div style="text-align:left"><p><strong>Origen:</strong> ${escapeHtml(origin.value?.nombre)}</p><p><strong>Destino:</strong> ${escapeHtml(destination.value?.nombre)}</p><p><strong>Transporte:</strong> ${escapeHtml(transportLabel)}</p>${editing.value ? "" : `<p><strong>Responsable/chofer:</strong> ${escapeHtml(driverLabel)}</p>`}<p><strong>Observaciones:</strong> ${escapeHtml(form.notes || "Sin observaciones")}</p><hr><strong>Equipos (${form.equipment.length})</strong><div style="max-height:280px;overflow:auto">${equipmentHtml}</div></div>`,
+      confirmText: editing.value ? "Guardar cambios" : "Crear envío",
+    });
+    if (accepted) await save();
+  } catch (error) {
+    // Nada de lo de arriba debería reventar, pero si lo hace el usuario tiene que enterarse. Un
+    // botón que no responde y no dice nada es el peor fallo posible: no hay por dónde empezar.
+    ui.notify(error.userMessage || "No fue posible preparar el guardado del envío.", "error");
+  }
 }
 async function save() {
   confirmOpen.value = false;
