@@ -20,6 +20,7 @@ import { TIPO_CEDULA, errorDocumento } from "@/utils/documento";
 import { useUiStore } from "@/stores/uiStore";
 import { useAuthStore } from "@/stores/authStore";
 import { confirmAction, escapeHtml } from "@/utils/confirm";
+import { hayErrores } from "@/utils/validacion";
 import "@/assets/styles/shipment-create.css";
 
 const router = useRouter(),
@@ -43,7 +44,6 @@ const router = useRouter(),
     internalDriver: "",
     privateName: "",
     relationship: "",
-    documentType: TIPO_CEDULA,
     privateId: "",
     vehiclePlate: "",
   });
@@ -55,6 +55,7 @@ const form = reactive({
   internalDriverId: "",
   privateName: "",
   relationship: "",
+  documentType: TIPO_CEDULA,
   privateId: "",
   vehiclePlate: "",
   equipment: [],
@@ -626,7 +627,7 @@ function validate() {
   // También al editar: un envío sin equipos no se puede despachar, así que guardarlo así
   // lo dejaría en un callejón sin salida.
   if (!form.equipment.length) ui.notify("Agrega al menos un equipo antes de guardar.", "warning");
-  return !Object.values(errors).some(Boolean) && Boolean(form.equipment.length);
+  return !hayErrores(errors) && Boolean(form.equipment.length);
 }
 /**
  * Comprueba los tickets contra la base antes de pedir la confirmación.

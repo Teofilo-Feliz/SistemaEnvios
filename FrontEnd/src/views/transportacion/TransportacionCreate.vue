@@ -10,6 +10,7 @@ import { filas } from "@/services/paginacion";
 import { transporteService } from "@/services/transporteService";
 import { catalogoService } from "@/services/catalogoService";
 import { useUiStore } from "@/stores/uiStore";
+import { hayErrores } from "@/utils/validacion";
 import { isInternalTransport, isPrivateTransport } from "@/utils/transport";
 import { TIPO_CEDULA, errorDocumento } from "@/utils/documento";
 import { confirmAction } from "@/utils/confirm";
@@ -35,7 +36,6 @@ const errors = reactive({
   internalDriver: "",
   privateName: "",
   relationship: "",
-  documentType: TIPO_CEDULA,
   privateId: "",
   vehiclePlate: "",
 });
@@ -45,6 +45,7 @@ const form = reactive({
   internalDriverId: "",
   privateName: "",
   relationship: "",
+  documentType: TIPO_CEDULA,
   privateId: "",
   vehiclePlate: "",
   notes: "",
@@ -104,7 +105,7 @@ async function save() {
     : "";
   errors.vehiclePlate =
     isPrivateTransport(selected?.estrategia) && !form.vehiclePlate ? "Indica la placa." : "";
-  if (Object.values(errors).some(Boolean)) return;
+  if (hayErrores(errors)) return;
   const accepted = await confirmAction({
     title: "Confirmar transporte",
     text: "¿Deseas guardar la asignación de transporte para este envío?",

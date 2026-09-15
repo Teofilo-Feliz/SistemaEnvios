@@ -31,6 +31,23 @@ const avisoTicket = ref("");
 // queden datos de un ticket pegados a otro: si el número cambia, esto vuelve a false y no hay
 // campos que limpiar.
 const camposVisibles = ref(false);
+// Campos que llegó a llenar la mesa de ayuda. Se bloquean: cambiarlos aquí contradiría el
+// inventario de GLPI. Los que GLPI dejó vacíos siguen abiertos, porque si no un equipo sin serial
+// allá impediría crear el envío aquí.
+const deGlpi = reactive({
+  typeId: false,
+  brand: false,
+  model: false,
+  serial: false,
+  assetCode: false,
+});
+
+// El ticket ya decidió qué equipo es, así que elegir otro del inventario lo contradiría.
+const equipoLoDecideGlpi = computed(() => Object.values(deGlpi).some(Boolean));
+
+function olvidarLoDeGlpi() {
+  Object.keys(deGlpi).forEach((campo) => (deGlpi[campo] = false));
+}
 
 const puedeBuscar = computed(
   () => !buscando.value && String(props.item.ticket || "").trim().length >= 3,
@@ -52,6 +69,7 @@ watch(
     camposVisibles.value = false;
     avisoTicket.value = "";
     errors.ticket = "";
+    olvidarLoDeGlpi();
   },
 );
 
@@ -85,15 +103,23 @@ async function buscarEquipo() {
       return;
     }
 
-    if (equipo.tipoEquipoId) props.item.typeId = equipo.tipoEquipoId;
-    if (equipo.marca) props.item.brand = equipo.marca;
-    if (equipo.modelo) props.item.model = equipo.modelo;
-    if (equipo.serial) props.item.serial = equipo.serial;
-    if (equipo.codigoActivo) props.item.assetCode = equipo.codigoActivo;
+    const traidos = {
+      typeId: equipo.tipoEquipoId,
+      brand: equipo.marca,
+      model: equipo.modelo,
+      serial: equipo.serial,
+      assetCode: equipo.codigoActivo,
+    };
+    for (const [campo, valor] of Object.entries(traidos)) {
+      if (!valor) continue;
+      props.item[campo] = valor;
+      deGlpi[campo] = true;
+    }
 
     avisoTicket.value = equipo.yaEstaEnOtroEnvio
       ? `${equipo.nombre || "El equipo"} ya viaja en otro envío activo y no se puede agregar aquí.`
-      : `Datos traídos de la mesa de ayuda${equipo.nombre ? ` (${equipo.nombre})` : ""}.`;
+      : `Datos de la mesa de ayuda${equipo.nombre ? ` (${equipo.nombre})` : ""}: no se editan. ` +
+        "Complete los que vengan vacíos.";
     camposVisibles.value = true;
   } catch (error) {
     // GLPI caído no bloquea: el servidor aplica la misma política al guardar, y frenar aquí
@@ -174,7 +200,12 @@ async function validateAndAdd() {
 
     <template v-if="camposVisibles">
       <label class="equipment-existing"
-        >Equipo existente (opcional)<select v-model="item.existingId" class="form-control">
+        >Equipo existente (opcional)<select
+          v-model="item.existingId"
+          class="form-control"
+          :disabled="equipoLoDecideGlpi"
+          :class="{ 'input-heredado': equipoLoDecideGlpi }"
+        >
           <option value="">Registrar equipo nuevo</option>
           <option
             v-for="equipment in registeredEquipment"
@@ -195,7 +226,12 @@ async function validateAndAdd() {
         + Nuevo equipo
       </button>
       <label
-        >Tipo *<select v-model="item.typeId" class="form-control">
+        >Tipo *<select
+          v-model="item.typeId"
+          class="form-control"
+          :disabled="deGlpi.typeId"
+          :class="{ 'input-heredado': deGlpi.typeId }"
+        >
           <option value="">Seleccionar</option>
           <option v-for="type in types" :key="type.tipoEquipoId" :value="type.tipoEquipoId">
             {{ type.nombre }}
@@ -203,23 +239,29 @@ async function validateAndAdd() {
         ><small v-if="errors.typeId" class="field-error">{{ errors.typeId }}</small></label
       >
       <label
-        >Marca *<input v-model.trim="item.brand" class="form-control" placeholder="Marca" /><small
-          v-if="errors.brand"
-          class="field-error"
-          >{{ errors.brand }}</small
-        ></label
+        >Marca *<input
+          v-model.trim="item.brand"
+          class="form-control"
+          :readonly="deGlpi.brand"
+          :class="{ 'input-heredado': deGlpi.brand }"
+          placeholder="Marca"
+        /><small v-if="errors.brand" class="field-error">{{ errors.brand }}</small></label
       >
       <label
-        >Modelo *<input v-model.trim="item.model" class="form-control" placeholder="Modelo" /><small
-          v-if="errors.model"
-          class="field-error"
-          >{{ errors.model }}</small
-        ></label
+        >Modelo *<input
+          v-model.trim="item.model"
+          class="form-control"
+          :readonly="deGlpi.model"
+          :class="{ 'input-heredado': deGlpi.model }"
+          placeholder="Modelo"
+        /><small v-if="errors.model" class="field-error">{{ errors.model }}</small></label
       >
       <label
         >Serial *<input
           v-model.trim="item.serial"
           class="form-control"
+          :readonly="deGlpi.serial"
+          :class="{ 'input-heredado': deGlpi.serial }"
           placeholder="Serial"
         /><small v-if="errors.serial" class="field-error">{{ errors.serial }}</small></label
       >
@@ -227,6 +269,8 @@ async function validateAndAdd() {
         >Código activo<input
           :value="item.assetCode"
           class="form-control"
+          :readonly="deGlpi.assetCode"
+          :class="{ 'input-heredado': deGlpi.assetCode }"
           inputmode="numeric"
           placeholder="Opcional, solo números"
           @input="alEscribirActivo"

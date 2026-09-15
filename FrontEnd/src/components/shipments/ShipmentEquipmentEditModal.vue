@@ -45,6 +45,22 @@ const ticketOriginal = ref("");
 // El ticket sobre el que se pulsó "Buscar equipo". Si no coincide con el que hay escrito, los
 // datos que se ven son de otro ticket y guardar dejaría la fila mintiendo.
 const ticketBuscado = ref("");
+// Campos que llegó a llenar la mesa de ayuda. Se bloquean: cambiarlos contradiría el inventario
+// de GLPI. Los que vengan vacíos siguen abiertos para completarlos a mano.
+const deGlpi = reactive({
+  typeId: false,
+  brand: false,
+  model: false,
+  serial: false,
+  assetCode: false,
+});
+
+function olvidarLoDeGlpi() {
+  Object.keys(deGlpi).forEach((campo) => (deGlpi[campo] = false));
+}
+
+// Un campo se edita si el permiso lo consiente y GLPI no lo dictó.
+const editable = (campo) => props.puedeEditarEquipo && !deGlpi[campo];
 
 const heredado = computed(() => Boolean(props.equipment?.ticketHeredado));
 
@@ -66,6 +82,7 @@ watch(
     borrador.notes = props.equipment.notes ?? "";
     ticketOriginal.value = props.equipment.ticket ?? "";
     ticketBuscado.value = props.equipment.ticket ?? "";
+    olvidarLoDeGlpi();
     Object.keys(errors).forEach((campo) => (errors[campo] = ""));
   },
   { immediate: true },
@@ -167,16 +184,23 @@ async function buscarEquipo() {
       return;
     }
 
-    borrador.typeId = equipo.tipoEquipoId ?? "";
-    borrador.brand = equipo.marca ?? "";
-    borrador.model = equipo.modelo ?? "";
-    borrador.serial = equipo.serial ?? "";
-    borrador.assetCode = equipo.codigoActivo ?? "";
+    olvidarLoDeGlpi();
+    const traidos = {
+      typeId: equipo.tipoEquipoId,
+      brand: equipo.marca,
+      model: equipo.modelo,
+      serial: equipo.serial,
+      assetCode: equipo.codigoActivo,
+    };
+    for (const [campo, valor] of Object.entries(traidos)) {
+      borrador[campo] = valor ?? "";
+      if (valor) deGlpi[campo] = true;
+    }
     Object.keys(errors).forEach((campo) => (errors[campo] = ""));
 
     avisoTicket.value = equipo.yaEstaEnOtroEnvio
       ? `${equipo.nombre || "El equipo"} ya viaja en otro envío activo.`
-      : `Datos traídos de la mesa de ayuda${equipo.nombre ? ` (${equipo.nombre})` : ""}.`;
+      : `Datos de la mesa de ayuda${equipo.nombre ? ` (${equipo.nombre})` : ""}: no se editan.`;
   } catch (error) {
     // GLPI caído no bloquea: se deja escribir a mano, igual que en el resto del sistema.
     if (error.response?.status === 502) {
@@ -193,6 +217,7 @@ async function buscarEquipo() {
 }
 
 function vaciarDatosDelEquipo() {
+  olvidarLoDeGlpi();
   borrador.typeId = "";
   borrador.brand = "";
   borrador.model = "";
@@ -255,7 +280,7 @@ async function guardar() {
         >Tipo *<select
           v-model="borrador.typeId"
           class="form-control"
-          :disabled="!puedeEditarEquipo"
+          :disabled="!editable('typeId')"
         >
           <option value="">Seleccionar</option>
           <option v-for="tipo in types" :key="tipo.tipoEquipoId" :value="tipo.tipoEquipoId">
@@ -268,8 +293,8 @@ async function guardar() {
         >Marca *<input
           v-model.trim="borrador.brand"
           class="form-control"
-          :readonly="!puedeEditarEquipo"
-          :class="{ 'input-heredado': !puedeEditarEquipo }"
+          :readonly="!editable('brand')"
+          :class="{ 'input-heredado': !editable('brand') }"
           placeholder="Marca"
           @input="errors.brand = ''"
         /><small v-if="errors.brand" class="field-error">{{ errors.brand }}</small></label
@@ -279,8 +304,8 @@ async function guardar() {
         >Modelo *<input
           v-model.trim="borrador.model"
           class="form-control"
-          :readonly="!puedeEditarEquipo"
-          :class="{ 'input-heredado': !puedeEditarEquipo }"
+          :readonly="!editable('model')"
+          :class="{ 'input-heredado': !editable('model') }"
           placeholder="Modelo"
           @input="errors.model = ''"
         /><small v-if="errors.model" class="field-error">{{ errors.model }}</small></label
@@ -290,8 +315,8 @@ async function guardar() {
         >Serial *<input
           v-model.trim="borrador.serial"
           class="form-control"
-          :readonly="!puedeEditarEquipo"
-          :class="{ 'input-heredado': !puedeEditarEquipo }"
+          :readonly="!editable('serial')"
+          :class="{ 'input-heredado': !editable('serial') }"
           placeholder="Serial"
           @input="errors.serial = ''"
         /><small v-if="errors.serial" class="field-error">{{ errors.serial }}</small></label
@@ -301,8 +326,8 @@ async function guardar() {
         >Código activo<input
           :value="borrador.assetCode"
           class="form-control"
-          :readonly="!puedeEditarEquipo"
-          :class="{ 'input-heredado': !puedeEditarEquipo }"
+          :readonly="!editable('assetCode')"
+          :class="{ 'input-heredado': !editable('assetCode') }"
           inputmode="numeric"
           placeholder="Opcional, solo números"
           @input="alEscribirActivo"
