@@ -11,6 +11,11 @@ const props = defineProps({
   types: Array,
   registeredEquipment: Array,
   registering: Boolean,
+  /**
+   * Saliendo de Tecnología el equipo manda sobre el ticket, no al revés: se elige del inventario
+   * y, si arrastra un caso abierto, trae su número. Por eso aquí no hay paso previo de búsqueda.
+   */
+  origenEsTecnologia: Boolean,
 });
 const emit = defineEmits(["add", "remove", "edit", "new"]);
 const errors = reactive({ typeId: "", brand: "", model: "", serial: "", ticket: "" });
@@ -31,6 +36,8 @@ const avisoTicket = ref("");
 // queden datos de un ticket pegados a otro: si el número cambia, esto vuelve a false y no hay
 // campos que limpiar.
 const camposVisibles = ref(false);
+// El ticket que ya se comprobó contra la mesa de ayuda, para no repetir la consulta.
+const ticketValidado = ref("");
 // Campos que llegó a llenar la mesa de ayuda. Se bloquean: cambiarlos aquí contradiría el
 // inventario de GLPI. Los que GLPI dejó vacíos siguen abiertos, porque si no un equipo sin serial
 // allá impediría crear el envío aquí.
@@ -53,11 +60,12 @@ const puedeBuscar = computed(
   () => !buscando.value && String(props.item.ticket || "").trim().length >= 3,
 );
 
-// El ticket heredado viene de un caso abierto y no se busca: su equipo ya está decidido.
+// Un ticket heredado ya trae su equipo decidido, y desde Tecnología el formulario empieza
+// abierto: en los dos casos no hay nada que buscar en la mesa de ayuda.
 watch(
-  () => props.item.ticketHeredado,
-  (heredado) => {
-    if (heredado) camposVisibles.value = true;
+  [() => props.item.ticketHeredado, () => props.origenEsTecnologia],
+  ([heredado, desdeTecnologia]) => {
+    if (heredado || desdeTecnologia) camposVisibles.value = true;
   },
   { immediate: true },
 );
@@ -65,8 +73,9 @@ watch(
 watch(
   () => props.item.ticket,
   () => {
-    if (props.item.ticketHeredado) return;
+    if (props.item.ticketHeredado || props.origenEsTecnologia) return;
     camposVisibles.value = false;
+    ticketValidado.value = "";
     avisoTicket.value = "";
     errors.ticket = "";
     olvidarLoDeGlpi();
@@ -95,6 +104,7 @@ async function buscarEquipo() {
   buscando.value = true;
   try {
     const { data } = await glpiService.equipoDeTicket(ticket);
+    ticketValidado.value = ticket;
     const equipo = data?.equipo;
 
     if (!equipo) {
@@ -165,6 +175,27 @@ async function validateAndAdd() {
   // aquí no se vuelve a consultar la mesa de ayuda. Si el número cambia, el formulario se cierra y
   // hay que buscar otra vez.
   if (Object.values(errors).some(Boolean)) return;
+
+  // El ticket se comprueba una sola vez. Si vino de "Buscar equipo" ya está validado; si no
+  // -saliendo de Tecnología no hay ese paso- se comprueba aquí, para no dejar que un ticket
+  // inexistente o de varios equipos llegue hasta el guardado del envío completo.
+  const ticket = String(props.item.ticket || "").trim();
+  if (!props.item.ticketHeredado && ticket !== ticketValidado.value) {
+    buscando.value = true;
+    try {
+      await glpiService.equipoDeTicket(ticket);
+      ticketValidado.value = ticket;
+    } catch (error) {
+      // GLPI caído no bloquea: el servidor aplica la misma política al guardar.
+      if (error.response?.status !== 502) {
+        errors.ticket = error.userMessage || "No se pudo validar el número de ticket.";
+        return;
+      }
+    } finally {
+      buscando.value = false;
+    }
+  }
+
   emit("add");
 }
 </script>
@@ -189,7 +220,7 @@ async function validateAndAdd() {
       ><small v-else-if="avisoTicket" class="field-hint">{{ avisoTicket }}</small></label
     >
     <button
-      v-if="!item.ticketHeredado"
+      v-if="!item.ticketHeredado && !origenEsTecnologia"
       class="btn btn-secondary equipment-search-button"
       type="button"
       :disabled="!puedeBuscar"

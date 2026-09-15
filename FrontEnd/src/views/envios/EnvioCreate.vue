@@ -810,6 +810,7 @@ onMounted(load);
             :types="types"
             :registered-equipment="availableEquipment"
             :registering="registering"
+            :origen-es-tecnologia="isTechnology(origin)"
             @add="addEquipment"
             @remove="removeEquipment"
             @edit="editEquipment"
