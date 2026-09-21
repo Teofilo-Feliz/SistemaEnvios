@@ -71,6 +71,10 @@ public sealed class CasoEquipoService(
     /// Sella el cierre en la apertura. Es idempotente a propósito: la recepción conforme y un
     /// descarte podrían llegar en cualquier orden, y el primer motivo es el que vale.
     /// </summary>
+    /// <remarks>
+    /// "En cualquier orden" incluye a la vez, y ahí la comprobación de arriba no alcanza: las dos
+    /// peticiones leen el caso abierto y las dos escriben.
+    /// </remarks>
     public async Task<Result> CerrarAsync(
         int envioEquipoAperturaId, string motivo, Guid usuarioId, CancellationToken cancellationToken = default)
     {
@@ -85,7 +89,23 @@ public sealed class CasoEquipoService(
         apertura.MotivoCierreCaso = motivo;
         apertura.FechaModificacion = DateTime.UtcNow;
         apertura.UsuarioModificacionId = usuarioId;
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            var cerrado = await db.EnvioEquipos.AsNoTracking()
+                .Where(x => x.EnvioEquipoId == envioEquipoAperturaId)
+                .Select(x => x.FechaCierreCaso)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (cerrado is not null) return Result.Success();
+
+            return Result.Failure(
+                "El caso del equipo fue modificado por otra operación. Actualice los datos e intente nuevamente.",
+                ErrorType.Conflict);
+        }
         return Result.Success();
     }
 
@@ -137,6 +157,67 @@ public sealed class CasoEquipoService(
                 EF.Functions.DateDiffDay(x.FechaCreacion, ahora)), cancellationToken);
 
         return Result<PaginaResponse<CasoListadoResponse>>.Success(pagina);
+    }
+
+    /// <summary>
+    /// El inventario de Tecnología para armar un envío hacia una filial.
+    /// </summary>
+    /// <remarks>
+    /// Antes el formulario pedía los cien primeros equipos de la sede sin filtro ninguno y los
+    /// pintaba en un desplegable plano. Con cien equipos arriba, el ciento uno no aparecía y
+    /// nadie se enteraba; y para encontrar el de una filial había que reconocerlo por el serial.
+    ///
+    /// Solo salen los que tienen caso abierto, que son los que una filial está esperando. Lo que
+    /// esté en Tecnología sin caso se asigna por otra vía.
+    ///
+    /// Cada equipo trae el ticket de su caso, que es como la filial lo llama: dos máquinas del
+    /// mismo modelo no se distinguen de otra forma.
+    /// </remarks>
+    public async Task<Result<PaginaResponse<EquipoEnTecnologiaResponse>>> ListarEquiposEnTecnologiaAsync(
+        ConsultarEquiposEnTecnologiaRequest request, CancellationToken cancellationToken = default)
+    {
+        if (!(await alcance.ResolverPerfilAsync(cancellationToken)).EsTecnologia())
+            return Result<PaginaResponse<EquipoEnTecnologiaResponse>>.Failure(
+                "Solo Tecnología puede consultar el inventario de la sede para armar un envío.",
+                ErrorType.Forbidden);
+
+        var query = db.EnvioEquipos.AsNoTracking()
+            .Where(x => x.EnvioEquipoOrigenId == null
+                        && x.FechaCierreCaso == null
+                        && x.Equipo.UbicacionActual.Tipo == TipoUbicacionEnum.Tecnologia);
+
+        if (request.FilialId is int filial)
+            query = query.Where(x => (x.Envio.Direccion == DireccionEnvioEnum.HaciaTecnologia
+                ? x.Envio.UbicacionOrigenId
+                : x.Envio.UbicacionDestinoId) == filial);
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var termino = request.Search.Trim();
+            query = query.Where(x =>
+                x.NumeroTicket.Contains(termino) ||
+                (x.Equipo.NumeroSerie != null && x.Equipo.NumeroSerie.Contains(termino)) ||
+                (x.Equipo.CodigoActivo != null && x.Equipo.CodigoActivo.Contains(termino)) ||
+                x.Equipo.Marca.Contains(termino) ||
+                x.Equipo.Modelo.Contains(termino));
+        }
+
+        var pagina = await query
+            .OrderBy(x => x.Equipo.NumeroSerie)
+            .ThenBy(x => x.EnvioEquipoId)
+            .PaginarAsync(request, x => new EquipoEnTecnologiaResponse(
+                x.EquipoId,
+                x.Equipo.NumeroSerie,
+                x.Equipo.CodigoActivo,
+                x.Equipo.Marca,
+                x.Equipo.Modelo,
+                x.Equipo.TipoEquipoId,
+                x.NumeroTicket,
+                x.Envio.Direccion == DireccionEnvioEnum.HaciaTecnologia
+                    ? x.Envio.UbicacionOrigenId
+                    : x.Envio.UbicacionDestinoId), cancellationToken);
+
+        return Result<PaginaResponse<EquipoEnTecnologiaResponse>>.Success(pagina);
     }
 
     /// <summary>

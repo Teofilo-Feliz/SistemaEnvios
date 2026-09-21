@@ -8,7 +8,7 @@ namespace SistemaEnvios.Domain.Entities
     public class Envio : AuditoriaEntitie
     {
         public int EnvioId { get; set; }
-        public string NumeroEnvio { get; set; } = null!;
+        public string NumeroEnvio { get; set; } = string.Empty;
         public int UbicacionOrigenId { get; set; }
         public int UbicacionDestinoId { get; set; }
         public int EstadoEnvioId { get; set; }

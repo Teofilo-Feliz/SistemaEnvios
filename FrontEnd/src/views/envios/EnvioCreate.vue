@@ -11,7 +11,7 @@ import ShipmentEquipmentEditModal from "@/components/shipments/ShipmentEquipment
 import ShipmentSummary from "@/components/shipments/ShipmentSummary.vue";
 import { catalogoService } from "@/services/catalogoService";
 import { casoService } from "@/services/casoService";
-import { filas } from "@/services/paginacion";
+import { filas, todasLasPaginas } from "@/services/paginacion";
 import { equipoService } from "@/services/equipoService";
 import { envioService } from "@/services/envioService";
 import { transporteService } from "@/services/transporteService";
@@ -128,21 +128,89 @@ const availableEquipment = computed(() =>
     : [],
 );
 
-/** Recarga el inventario disponible cuando cambia el origen del envío. */
-async function cargarEquiposDelOrigen(ubicacionId) {
+/**
+ * El destino lo mueven dos manos y hay que distinguirlas.
+ *
+ * Cuando lo mueve el sistema —hereda el caso de un equipo, abre un envío para editarlo, lo
+ * desfija al quitar el último equipo con caso— el cambio viene DE los equipos y no hay nada que
+ * limpiar. Cuando lo mueve la persona en el desplegable va CONTRA ellos: saliendo de Tecnología
+ * cada equipo arrastra el caso de su filial, así que un destino nuevo los deja a todos inválidos.
+ *
+ * Sin este distingo, elegir un equipo vaciaría el envío: heredar su caso cambia el destino, y el
+ * cambio de destino borraría el equipo que acaba de elegirse.
+ */
+const destinoLoPoneElSistema = ref(false);
+function fijarDestino(valor) {
+  if (Number(form.destinationId || 0) === Number(valor || 0)) return;
+  destinoLoPoneElSistema.value = true;
+  form.destinationId = valor;
+}
+
+/**
+ * Recarga el inventario disponible.
+ *
+ * Saliendo de Tecnología la lista depende también del destino: cada equipo con caso abierto
+ * tiene una filial dueña y solo puede volver ahí, así que mostrar el inventario entero de la
+ * sede obligaba a reconocer el equipo por el serial y dejaba elegir uno que el envío iba a
+ * rechazar después. El endpoint devuelve solo los de la filial elegida; lo que esté en
+ * Tecnología sin caso no es de nadie y se asigna por otra vía.
+ *
+ * Se recorren todas las páginas porque esto llena un <select>: con una sola página de cien, el
+ * equipo ciento uno no aparecía y nadie se enteraba.
+ */
+async function cargarEquiposDelOrigen() {
+  const ubicacionId = form.originId;
   if (!ubicacionId) {
     registeredEquipment.value = [];
     return;
   }
   try {
-    registeredEquipment.value = filas(
-      await equipoService.list({ pageSize: 100, ubicacionActualId: Number(ubicacionId) }),
-    );
+    registeredEquipment.value = isTechnology(origin.value)
+      ? (
+          await todasLasPaginas((pagina) =>
+            casoService.equiposEnTecnologia({
+              ...pagina,
+              ...(form.destinationId ? { filialId: Number(form.destinationId) } : {}),
+            }),
+          )
+        ).map((equipo) => ({ ...equipo, ubicacionActualId: Number(ubicacionId) }))
+      : await todasLasPaginas((pagina) =>
+          equipoService.list({ ...pagina, ubicacionActualId: Number(ubicacionId) }),
+        );
   } catch (error) {
     ui.notify(error.userMessage || "No fue posible cargar los equipos del origen.", "error");
   }
 }
-watch(() => form.originId, cargarEquiposDelOrigen);
+watch([() => form.originId, () => form.destinationId], () => cargarEquiposDelOrigen());
+
+/**
+ * Cambiar el destino a mano vacía los equipos del envío.
+ *
+ * Saliendo de Tecnología cada equipo vuelve a la filial de SU caso, así que un envío no puede
+ * mezclar filiales. Al mover el destino, lo que estuviera armado ya no puede ir ahí: se vacía en
+ * vez de quedarse en la tabla apuntando a una filial que ya no es la del envío.
+ */
+watch(
+  () => form.destinationId,
+  () => {
+    if (destinoLoPoneElSistema.value) {
+      destinoLoPoneElSistema.value = false;
+      return;
+    }
+    if (!isTechnology(origin.value)) return;
+
+    const habiaAlgo = form.equipment.length > 0 || Boolean(item.existingId) || Boolean(item.serial);
+    form.equipment = [];
+    resetItem();
+    Object.keys(itemErrors).forEach((k) => (itemErrors[k] = ""));
+    if (habiaAlgo) {
+      ui.notify(
+        "Cambiaste el destino: se vaciaron los equipos, que eran de otra filial.",
+        "warning",
+      );
+    }
+  },
+);
 const flowLabel = computed(() =>
   !origin.value || !destination.value
     ? ""
@@ -204,7 +272,7 @@ async function heredarTicket(equipoId) {
     item.casoFilialId = caso.filialId;
     item.ticketFilial = locations.value.find((x) => x.ubicacionId === caso.filialId)?.nombre || "";
     // La devolución solo puede ir a la filial del caso: se selecciona sola y queda fijada.
-    if (isTechnology(origin.value)) form.destinationId = caso.filialId;
+    if (isTechnology(origin.value)) fijarDestino(caso.filialId);
   } catch {
     // Si la consulta falla el campo sigue editable: es preferible a bloquearlo sin dato.
   }
@@ -350,7 +418,7 @@ async function addEquipment() {
     });
     // El destino de un equipo con caso lo decide el caso, venga por donde venga: agregarlo
     // por primera vez o volver a agregarlo tras editarlo. Así la regla no depende del camino.
-    if (item.casoFilialId && isTechnology(origin.value)) form.destinationId = item.casoFilialId;
+    if (item.casoFilialId && isTechnology(origin.value)) fijarDestino(item.casoFilialId);
     ui.notify("Equipo listo para asociar al envío.", "success");
     resetItem();
     Object.keys(itemErrors).forEach((k) => (itemErrors[k] = ""));
@@ -366,7 +434,7 @@ function removeEquipment(id) {
   form.equipment = form.equipment.filter((x) => x.id !== id);
   const sigueFijado = form.equipment.some((x) => x.ticketHeredado && x.casoFilialId);
   if (fijadoAntes && !sigueFijado && Number(form.destinationId) === Number(fijadoAntes)) {
-    form.destinationId = "";
+    fijarDestino("");
   }
 }
 
@@ -564,9 +632,9 @@ async function load() {
       }
 
       form.originId = r.data.ubicacionOrigenId;
-      form.destinationId = r.data.ubicacionDestinoId;
+      fijarDestino(r.data.ubicacionDestinoId);
       form.notes = r.data.observaciones || "";
-      await cargarEquiposDelOrigen(r.data.ubicacionOrigenId);
+      await cargarEquiposDelOrigen();
 
       // Los equipos ya asociados se cargan al formulario. Se guarda envioEquipoId para poder
       // distinguir después qué se agregó, qué cambió y qué se quitó.
@@ -629,7 +697,7 @@ async function load() {
         ? locations.value.find((x) => x.ubicacionId === auth.perfil.ubicacionId)
         : null;
       if (propia) form.originId = propia.ubicacionId;
-      if (tecnologia) form.destinationId = tecnologia.ubicacionId;
+      if (tecnologia) fijarDestino(tecnologia.ubicacionId);
     }
   } catch (e) {
     ui.notify(e.userMessage || "No fue posible cargar los catálogos.", "error");
@@ -803,14 +871,14 @@ watch(
       form.destinationId &&
       !destinationLocations.value.some((x) => x.ubicacionId === Number(form.destinationId))
     )
-      form.destinationId = "";
+      fijarDestino("");
     if (!editing.value && origin.value && !isTechnology(origin.value)) {
       const technologyHeadquarters = locations.value.find(
         (location) =>
           isTechnology(location) &&
           (/centro\s*sede/i.test(location.nombre || "") || /tecnolog/i.test(location.nombre || "")),
       );
-      if (technologyHeadquarters) form.destinationId = technologyHeadquarters.ubicacionId;
+      if (technologyHeadquarters) fijarDestino(technologyHeadquarters.ubicacionId);
     }
   },
 );
@@ -862,6 +930,7 @@ onMounted(load);
             :registered-equipment="availableEquipment"
             :registering="registering"
             :origen-es-tecnologia="isTechnology(origin)"
+            :nombre-filial-destino="destination?.nombre || ''"
             @add="addEquipment"
             @remove="removeEquipment"
             @edit="editEquipment"

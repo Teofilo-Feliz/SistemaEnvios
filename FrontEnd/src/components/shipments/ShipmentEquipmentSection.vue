@@ -17,6 +17,8 @@ const props = defineProps({
    * y, si arrastra un caso abierto, trae su número. Por eso aquí no hay paso previo de búsqueda.
    */
   origenEsTecnologia: Boolean,
+  /** Filial destino, para nombrar el grupo de equipos que tienen que volver ahí. */
+  nombreFilialDestino: String,
 });
 const emit = defineEmits(["add", "remove", "edit", "new"]);
 const errors = reactive({
@@ -37,6 +39,23 @@ function alEscribirActivo(evento) {
   // vuelve a pintarlo y la letra se quedaría en pantalla. Se fuerza.
   evento.target.value = limpio;
   errors.assetCode = "";
+}
+
+const avisoInventario = computed(() => {
+  if (!props.origenEsTecnologia || (props.registeredEquipment || []).length) return "";
+  return props.nombreFilialDestino
+    ? `Tecnología no tiene equipos de ${props.nombreFilialDestino} esperando.`
+    : "Elige la filial destino para ver sus equipos.";
+});
+
+/**
+ * El ticket va en la etiqueta porque es como la filial llama al equipo. Sin él, dos máquinas del
+ * mismo modelo solo se distinguen por el serial, que nadie se sabe de memoria.
+ */
+function describirEquipo(equipo) {
+  const identidad = equipo.numeroSerie || equipo.codigoActivo || `Equipo #${equipo.equipoId}`;
+  const maquina = [equipo.marca, equipo.modelo].filter(Boolean).join(" ");
+  return `${identidad} · ${maquina}${equipo.numeroTicket ? ` · ticket ${equipo.numeroTicket}` : ""}`;
 }
 
 const buscando = ref(false);
@@ -296,14 +315,13 @@ async function validateAndAdd() {
         >
           <option value="">Registrar equipo nuevo</option>
           <option
-            v-for="equipment in registeredEquipment"
-            :key="equipment.equipoId"
-            :value="equipment.equipoId"
+            v-for="equipo in registeredEquipment"
+            :key="equipo.equipoId"
+            :value="equipo.equipoId"
           >
-            {{ equipment.numeroSerie || equipment.codigoActivo || `Equipo #${equipment.equipoId}` }}
-            · {{ equipment.marca }} {{ equipment.modelo }}
-          </option>
-        </select></label
+            {{ describirEquipo(equipo) }}
+          </option></select
+        ><small v-if="avisoInventario" class="field-hint">{{ avisoInventario }}</small></label
       >
       <button
         v-if="item.existingId"

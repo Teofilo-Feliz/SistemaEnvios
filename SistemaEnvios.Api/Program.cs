@@ -221,4 +221,6 @@ if (sirveSpa)
     app.MapFallbackToFile("index.html").AllowAnonymous().DisableRateLimiting();
 }
 
+await RelojDeLaBase.ComprobarAsync(app.Services, app.Logger);
+
 app.Run();

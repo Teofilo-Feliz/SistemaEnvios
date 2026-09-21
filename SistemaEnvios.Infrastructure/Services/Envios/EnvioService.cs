@@ -114,17 +114,80 @@ public sealed class EnvioService(
             });
         }
 
+        var aperturas = casosPorEquipo.Values
+            .Where(x => x is not null)
+            .Select(x => x!.EnvioEquipoAperturaId)
+            .ToArray();
+        if (aperturas.Length > 0 && await db.EnvioEquipos.AsNoTracking()
+                .AnyAsync(x => aperturas.Contains(x.EnvioEquipoId) && x.FechaCierreCaso != null, cancellationToken))
+        {
+            return Result<EnvioResponse>.Failure(
+                "El caso de uno de los equipos se cerró mientras se preparaba el envío. " +
+                "Vuelva a cargar la pantalla antes de intentarlo de nuevo.",
+                ErrorType.Conflict);
+        }
+
         try
         {
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateException)
         {
-            return Result<EnvioResponse>.Failure(
-                "No fue posible asociar los equipos; el envío no se creó.", ErrorType.Conflict);
+            return await ExplicarConflictoAsync(request, casosPorEquipo, cancellationToken);
         }
         return Result<EnvioResponse>.Success(ToResponse(envio));
     }
+    /// <summary>
+    /// Qué chocó exactamente, para que el mensaje lo diga.
+    /// </summary>
+    /// <remarks>
+    /// Se vuelve a preguntar a la base en vez de leer el texto del error de SQL Server: ahí el
+    /// nombre del índice se rompe con cualquier renombrado y el valor duplicado hay que
+    /// trocearlo de una frase.
+    ///
+    /// Medido en la prueba de concurrencia: con ocho personas usando el mismo ticket, a las siete
+    /// que pierden las para el índice, no la comprobación previa. O sea, este es el camino normal
+    /// cuando dos personas coinciden, no un caso raro.
+    /// </remarks>
+    private async Task<Result<EnvioResponse>> ExplicarConflictoAsync(
+        CrearEnvioConEquiposRequest request,
+        IReadOnlyDictionary<int, CasoAbiertoResponse?> casosPorEquipo,
+        CancellationToken cancellationToken)
+    {
+        var ticketsNuevos = request.Equipos
+            .Where(x => casosPorEquipo[x.EquipoId] is null)
+            .Select(x => x.NumeroTicket.Trim())
+            .ToArray();
+
+        var tomado = await db.EnvioEquipos.AsNoTracking()
+            .Where(x => x.EnvioEquipoOrigenId == null && ticketsNuevos.Contains(x.NumeroTicket))
+            .Select(x => x.NumeroTicket)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (tomado is not null)
+        {
+            return Result<EnvioResponse>.Failure(
+                $"El ticket {tomado} ya fue utilizado para abrir otro caso. " +
+                "Alguien lo registró mientras usted llenaba el formulario.",
+                ErrorType.Conflict);
+        }
+
+        var equipoIds = request.Equipos.Select(x => x.EquipoId).ToArray();
+        var reservado = await db.ReservasEquipoEnvio.AsNoTracking()
+            .Where(x => equipoIds.Contains(x.EquipoId))
+            .Select(x => x.Equipo.NumeroSerie ?? x.Equipo.CodigoActivo)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (reservado is not null)
+        {
+            return Result<EnvioResponse>.Failure(
+                $"El equipo {reservado} ya viaja en otro envío activo. " +
+                "Alguien lo agregó mientras usted llenaba el formulario.",
+                ErrorType.Conflict);
+        }
+
+        return Result<EnvioResponse>.Failure(
+            "No fue posible asociar los equipos; el envío no se creó.", ErrorType.Conflict);
+    }
+
     public async Task<Result<EnvioResponse>> CrearAsync(
         CrearEnvioRequest request,
         CancellationToken cancellationToken = default)
@@ -191,17 +254,17 @@ public sealed class EnvioService(
         if (estadoInicial is null)
             return Result<Envio>.Failure("El estado inicial del flujo no se encuentra configurado.", ErrorType.Conflict);
 
+        // Ni NumeroEnvio ni FechaCreacion se asignan aquí: los pone la base al insertar, el
+        // primero calculado a partir del segundo. EF los lee de vuelta tras el SaveChanges.
         var fechaActual = DateTime.UtcNow;
         var envio = new Envio
         {
-            NumeroEnvio = $"ENV-{fechaActual:yyyy}-{Guid.NewGuid():N}"[..18].ToUpperInvariant(),
             UbicacionOrigenId = request.UbicacionOrigenId,
             UbicacionDestinoId = request.UbicacionDestinoId,
             EstadoEnvioId = estadoInicial.EstadoEnvioId,
             Direccion = direccion,
             UsuarioSolicitanteId = usuarioId,
             Observaciones = NormalizarOpcional(request.Observaciones),
-            FechaCreacion = fechaActual,
             UsuarioCreacionId = usuarioId
         };
 

@@ -42,9 +42,30 @@ public class SistemaEnviosDbContext(DbContextOptions<SistemaEnviosDbContext> opt
         aLaBase => aLaBase,
         deLaBase => deLaBase.HasValue ? DateTime.SpecifyKind(deLaBase.Value, DateTimeKind.Utc) : deLaBase);
 
+    /// <summary>
+    /// ENV-AAAA-MM-######. Tiene que decir lo mismo que Database/SistemaEnviosDB.sql; si se
+    /// separan, ElModeloCoincideConElEsquemaReal falla contra la base real.
+    /// </summary>
+    internal const string ExpresionNumeroEnvio =
+        "'ENV-' + LEFT(CONVERT(VARCHAR(10), DATEADD(HOUR, -4, FechaCreacion), 126), 7)"
+        + " + '-' + RIGHT('000000' + CAST(EnvioId AS VARCHAR(10)), 6)";
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(SistemaEnviosDbContext).Assembly);
+
+        // NumeroEnvio lo calcula SQL Server a partir de FechaCreacion y EnvioId. Se declara solo
+        // para ese proveedor porque el InMemory de las pruebas no sabe calcular nada: dejaría a
+        // todos los envíos sin número y además ignoraría el que siembra cada prueba.
+        //
+        // Esa diferencia obliga a que el formato se compruebe contra el motor real, no en
+        // memoria. Lo hace NumeroEnvioSqlServerTests, incluidas las fronteras de mes.
+        if (Database.IsSqlServer())
+        {
+            modelBuilder.Entity<Envio>()
+                .Property(x => x.NumeroEnvio)
+                .HasComputedColumnSql(ExpresionNumeroEnvio, stored: true);
+        }
 
         foreach (var entidad in modelBuilder.Model.GetEntityTypes())
             foreach (var propiedad in entidad.GetProperties())

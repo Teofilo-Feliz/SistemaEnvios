@@ -18,6 +18,23 @@
 -- aquí, al final, y el resto de sus datos está en los INSERT de este archivo.
 -- ---------------------------------------------------------------------------------------------
 --
+-- EN LOCAL
+--
+-- La base que crea este archivo se llama ADRTrack. Si su cadena de conexión apunta a otro
+-- nombre —los entornos viejos usaban SistemaEnviosDB— el API seguirá hablando con la base
+-- vieja y no verá nada de lo que este script cree. Apunte la cadena a ADRTrack:
+--
+--   dotnet user-secrets set "ConnectionStrings:SistemaEnvios" ^
+--     "Server=localhost;Database=ADRTrack;Trusted_Connection=True;TrustServerCertificate=True" ^
+--     --project SistemaEnvios.Api
+--
+-- Para comprobar que la base quedó al nivel del código, apunte las pruebas a ella y ejecútelas.
+-- ElModeloCoincideConElEsquemaReal compara tabla por tabla y dice qué columna falta:
+--
+--   $env:SISTEMAENVIOS_TEST_SQL = "Server=localhost;Database=ADRTrack;Trusted_Connection=True;TrustServerCertificate=True"
+--   dotnet test SistemaEnvios.Tests
+-- ---------------------------------------------------------------------------------------------
+--
 -- SOBRE LAS CLAVES DE ACCESO
 --
 -- La columna se llama Posicion por historia, pero desde que el alcance se resuelve solo con el
@@ -217,7 +234,24 @@ GO
 CREATE TABLE dbo.Envios
 (
     EnvioId INT IDENTITY(1,1) NOT NULL,
-    NumeroEnvio NVARCHAR(30) NOT NULL,
+    -- ENV-AAAA-MM-######. Calculada y PERSISTED, no escrita por el API.
+    --
+    -- La cola es el propio EnvioId: el IDENTITY ya es un contador con candado, así que no hace
+    -- falta una tabla de secuencia aparte —que sería leer-y-escribir, o sea una carrera— ni
+    -- resolver el primer envío de cada mes, ni el 29 de febrero.
+    --
+    -- El DATEADD(-4) pasa la marca UTC a hora dominicana. Sin él, todo envío creado después de
+    -- las 8 PM se numeraría con la fecha de mañana, y el último día de cada mes —que cae en 28,
+    -- 29, 30 o 31 según el mes— con el mes siguiente. Se usa el desfase fijo y no AT TIME ZONE
+    -- porque esta última es no determinista y SQL Server no la admite en una columna PERSISTED.
+    -- República Dominicana es UTC-4 todo el año: no aplica horario de verano desde 2000.
+    --
+    -- Va CONVERT con estilo 126 y no FORMAT por lo mismo: FORMAT depende de la cultura.
+    --
+    -- Por ser PERSISTED, todo INSERT o UPDATE sobre esta tabla exige QUOTED_IDENTIFIER ON. El
+    -- API y SSMS lo activan solos; un "sqlcmd -Q" no, y falla con el error 1934.
+    NumeroEnvio AS ('ENV-' + LEFT(CONVERT(VARCHAR(10), DATEADD(HOUR, -4, FechaCreacion), 126), 7)
+                    + '-' + RIGHT('000000' + CAST(EnvioId AS VARCHAR(10)), 6)) PERSISTED NOT NULL,
     UbicacionOrigenId INT NOT NULL,
     UbicacionDestinoId INT NOT NULL,
     EstadoEnvioId INT NOT NULL,

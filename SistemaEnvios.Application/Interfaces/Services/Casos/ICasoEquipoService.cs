@@ -22,6 +22,18 @@ public interface ICasoEquipoService
     /// <summary>Casos abiertos de equipos que hoy están en Tecnología: los candidatos a descarte.</summary>
     Task<Result<PaginaResponse<CasoListadoResponse>>> ListarAbiertosEnTecnologiaAsync(ConsultarCasosRequest request, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Lo que Tecnología tiene esperando volver a una filial: equipos con caso abierto, cada uno
+    /// con el ticket de su caso.
+    /// </summary>
+    /// <remarks>
+    /// Un equipo en Tecnología sin caso abierto no sale por aquí. No es de ninguna filial, se
+    /// asigna por otra vía, y mezclarlo con los que una filial está esperando obligaba a
+    /// distinguirlos a ojo en el desplegable.
+    /// </remarks>
+    Task<Result<PaginaResponse<EquipoEnTecnologiaResponse>>> ListarEquiposEnTecnologiaAsync(
+        ConsultarEquiposEnTecnologiaRequest request, CancellationToken cancellationToken = default);
+
     /// <summary>Descarta el equipo de su filial, cerrando el caso y dejándolo libre para reasignar.</summary>
     Task<Result> DescartarAsync(int equipoId, string motivo, CancellationToken cancellationToken = default);
 }

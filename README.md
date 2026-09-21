@@ -29,10 +29,22 @@ dotnet user-secrets init --project SistemaEnvios.Api
 dotnet user-secrets set "ConnectionStrings:SistemaEnvios" "SU_CADENA" --project SistemaEnvios.Api
 ```
 
-El esquema completo de SQL Server se encuentra en `Database/SistemaEnviosDB.sql`, y las
-migraciones posteriores en `Database/Migrations/`. Se aplican en orden por fecha;
-`20260908_UsuarioDelApi.sql` crea el usuario `sistema_envios_app` que el API usa en despliegue y
-se niega a ejecutarse con la contraseña de marcador.
+`Database/SistemaEnviosDB.sql` levanta el entorno entero en un solo archivo: esquema, datos de
+referencia y el usuario `sistema_envios_app` con el que se conecta el API. Crea una base llamada
+**ADRTrack**, y la recrea desde cero —hace `DROP DATABASE`—, así que no sirve para actualizar una
+base con datos. Antes de la primera ejecución hay que poner una contraseña real en `@Clave`, en
+el PASO FINAL; si el login ya existe no hace falta tocar nada.
+
+Los scripts de `Database/Migrations/` **no hacen falta en una base nueva**: reparan bases ya
+creadas, y lo que hacían está incorporado en el archivo principal.
+
+Para comprobar que una base está al nivel del código, apunte las pruebas a ella:
+`ElModeloCoincideConElEsquemaReal` compara tabla por tabla y nombra la columna que falte.
+
+```powershell
+$env:SISTEMAENVIOS_TEST_SQL = "Server=localhost;Database=ADRTrack;Trusted_Connection=True;TrustServerCertificate=True"
+dotnet test SistemaEnvios.Tests
+```
 
 ## Desarrollo
 

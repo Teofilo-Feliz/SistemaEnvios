@@ -18,6 +18,9 @@ public class EnvioConfiguration : IEntityTypeConfiguration<Envio>
         b.HasOne(x => x.UbicacionOrigen).WithMany(x => x.EnviosOrigen).HasForeignKey(x => x.UbicacionOrigenId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.UbicacionDestino).WithMany(x => x.EnviosDestino).HasForeignKey(x => x.UbicacionDestinoId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.EstadoEnvio).WithMany(x => x.Envios).HasForeignKey(x => x.EstadoEnvioId).OnDelete(DeleteBehavior.Restrict);
+        // El sello lo pone SQL Server, no el API. Son dos máquinas distintas y sus relojes
+        // pueden discrepar; con una sola fuente, el mes que dice el número y la fecha guardada
+        // no se pueden contradecir.
         b.Property(x => x.FechaCreacion).HasDefaultValueSql("SYSUTCDATETIME()");
         b.ToTable(t => t.HasCheckConstraint("CK_Envio_UbicacionesDistintas", "UbicacionOrigenId <> UbicacionDestinoId"));
         b.ToTable(t => t.HasCheckConstraint("CK_Envio_Direccion", "Direccion IN (1, 2)"));

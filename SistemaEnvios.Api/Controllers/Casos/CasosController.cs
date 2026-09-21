@@ -26,6 +26,17 @@ public sealed class CasosController(ICasoEquipoService service) : ControllerBase
     public async Task<IActionResult> DeEquipo(int equipoId, CancellationToken cancellationToken) =>
         (await service.ConsultarDeEquipoAsync(equipoId, cancellationToken)).ToActionResult(this);
 
+    /// <summary>
+    /// Lo que Tecnología puede mandar a una filial. Pide envios.crear y no envios.consultar
+    /// porque solo sirve para armar un envío: quien no puede crearlo no tiene por qué ver el
+    /// inventario completo de la sede con los tickets de todas las filiales.
+    /// </summary>
+    [HttpGet("equipos-en-tecnologia")]
+    [Authorize(Policy = PermissionNames.EnviosCrear)]
+    public async Task<IActionResult> EquiposEnTecnologia(
+        [FromQuery] ConsultarEquiposEnTecnologiaRequest request, CancellationToken cancellationToken) =>
+        (await service.ListarEquiposEnTecnologiaAsync(request, cancellationToken)).ToActionResult(this);
+
     [HttpPost("descartar")]
     [Authorize(Policy = PermissionNames.EquiposGestionar)]
     public async Task<IActionResult> Descartar([FromBody] DescartarEquipoRequest request, CancellationToken cancellationToken) =>
