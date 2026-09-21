@@ -29,11 +29,21 @@ dotnet user-secrets init --project SistemaEnvios.Api
 dotnet user-secrets set "ConnectionStrings:SistemaEnvios" "SU_CADENA" --project SistemaEnvios.Api
 ```
 
-`Database/SistemaEnviosDB.sql` levanta el entorno entero en un solo archivo: esquema, datos de
-referencia y el usuario `sistema_envios_app` con el que se conecta el API. Crea una base llamada
-**ADRTrack**, y la recrea desde cero —hace `DROP DATABASE`—, así que no sirve para actualizar una
-base con datos. Antes de la primera ejecución hay que poner una contraseña real en `@Clave`, en
-el PASO FINAL; si el login ya existe no hace falta tocar nada.
+`Database/SistemaEnviosDB.sql` levanta el entorno entero en un solo archivo: esquema, las 34
+filiales y Tecnología, los estados del flujo, los choferes, el acceso por rol y el usuario
+`sistema_envios_app` con el que se conecta el API. Crea una base llamada **ADRTrack**, y la
+recrea desde cero —hace `DROP DATABASE`—, así que no sirve para actualizar una base con datos.
+
+Dos cosas se editan a mano antes de ejecutarlo, las dos señaladas en la cabecera del archivo:
+
+| Qué | Dónde | Para qué |
+| --- | ----- | -------- |
+| `@Clave` | PASO FINAL | Contraseña del login del API. Solo hace falta si el login todavía no existe. |
+| `#Opciones` | Al inicio | Ponga `1` para sembrar datos de prueba: equipos, técnicos y tres casos de ticket ya montados. Viene en `0`. |
+
+**En local conviene ponerlo en `1`**: deja la base lista para recorrer el flujo completo sin
+cargar nada a mano. En QA y producción se deja en `0`, o los envíos inventados ensucian los
+listados de todo el mundo.
 
 Los scripts de `Database/Migrations/` **no hacen falta en una base nueva**: reparan bases ya
 creadas, y lo que hacían está incorporado en el archivo principal.

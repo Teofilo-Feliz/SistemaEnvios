@@ -18,6 +18,17 @@
 -- aquí, al final, y el resto de sus datos está en los INSERT de este archivo.
 -- ---------------------------------------------------------------------------------------------
 --
+-- DATOS DE PRUEBA
+--
+-- Al final del archivo hay una seccion que siembra equipos, tecnicos y varios casos de ticket
+-- ya montados, para poder recorrer el flujo completo sin cargar nada a mano. Viene APAGADA.
+--
+-- Para encenderla, ponga 1 en el INSERT de #Opciones, unas lineas mas abajo. En QA y en
+-- produccion se deja en 0: son envios inventados y ensucian los listados de todo el mundo.
+--
+-- Los choferes NO son datos de prueba y se siembran siempre: son los de Transportacion.
+-- ---------------------------------------------------------------------------------------------
+--
 -- EN LOCAL
 --
 -- La base que crea este archivo se llama ADRTrack. Si su cadena de conexión apunta a otro
@@ -52,6 +63,13 @@
 -- 'Soporte Técnico' son dos claves distintas, y un espacio al final no cruza nunca.
 -- ---------------------------------------------------------------------------------------------
 USE master;
+GO
+
+-- El interruptor vive en una tabla temporal y no en una variable porque tiene que sobrevivir a
+-- los GO: una variable muere al final de su lote y esto se lee mil lineas mas abajo.
+IF OBJECT_ID(N'tempdb..#Opciones') IS NOT NULL DROP TABLE #Opciones;
+CREATE TABLE #Opciones (DatosDePrueba BIT NOT NULL);
+INSERT INTO #Opciones (DatosDePrueba) VALUES (0);   -- <<< 1 para sembrar datos de prueba
 GO
 
 IF DB_ID(N'ADRTrack') IS NOT NULL
@@ -1012,4 +1030,182 @@ SELECT p.name AS UsuarioDelApi,
         WHERE d.grantee_principal_id = p.principal_id AND d.state_desc = 'DENY') AS DenegacionesAplicadas
 FROM sys.database_principals p
 WHERE p.name = N'sistema_envios_app';
+GO
+
+/* ==============================================================================================
+   PASO FINAL 2: choferes de Transportacion
+
+   Datos operativos reales, no de prueba, asi que se siembran siempre. Idempotente: se reconocen
+   por el numero de empleado.
+
+   El mantenimiento del dia a dia se hace desde la pantalla "Transportes y choferes"; esto es
+   solo la carga inicial.
+   ============================================================================================== */
+
+USE ADRTrack;
+GO
+
+MERGE dbo.ChoferesInternos AS destino
+USING (VALUES
+    (N'Ramón Castillo Peña',     N'EMP-4101', 1),
+    (N'José Luis Encarnación',   N'EMP-4102', 1),
+    (N'Wilkin Rosario Núñez',    N'EMP-4103', 1),
+    (N'Ángel Manuel Frías',      N'EMP-4104', 1),
+    (N'Domingo Reyes Cabrera',   N'EMP-4105', 1),
+    (N'Franklin Ureña Santos',   N'EMP-4106', 0)   -- inactivo: no debe poder asignarse
+) AS origen (NombreCompleto, NumeroEmpleado, Activo)
+ON destino.NumeroEmpleado = origen.NumeroEmpleado
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (NombreCompleto, NumeroEmpleado, Activo)
+    VALUES (origen.NombreCompleto, origen.NumeroEmpleado, origen.Activo);
+GO
+
+/* ==============================================================================================
+   PASO FINAL 3: datos de prueba (solo si #Opciones.DatosDePrueba = 1)
+
+   Equipos repartidos entre cuatro filiales y Tecnologia, tecnicos provisionales, y tres casos de
+   ticket ya montados para ver la herencia y el descarte sin tener que construirlos a mano:
+
+     1001  ADR-012  caso ABIERTO, 1 movimiento  -> la devolucion hereda 1001 y solo puede ir a
+                                                   Santiago. Sale en la pantalla de descarte.
+     1002  ADR-015  caso ABIERTO, 3 movimientos -> volvio con incidencia y se reenvio; sirve para
+                                                   ver el contador de vueltas.
+     1003  ADR-009  caso CERRADO conforme       -> el equipo puede estrenar ticket nuevo.
+
+   ADR-013 y ADR-014 quedan en Tecnologia SIN caso: son asignaciones iniciales y por eso no deben
+   aparecer en la pantalla de descarte.
+
+   Los numeros de envio no se escriben: los calcula la base a partir de la fecha y del EnvioId.
+
+   Los tecnicos de UsuariosReferencia son provisionales. Esa tabla deberia poblarse sincronizando
+   desde AuthManager y hoy no hay ninguna sincronizacion: solo se lee.
+   ============================================================================================== */
+
+IF (SELECT DatosDePrueba FROM #Opciones) = 1
+BEGIN
+    BEGIN TRANSACTION;
+
+    INSERT INTO dbo.Equipos (CodigoActivo, NumeroSerie, TipoEquipoId, UbicacionActualId, Marca, Modelo, Observaciones)
+    SELECT e.CodigoActivo, e.NumeroSerie, te.TipoEquipoId, u.UbicacionId, e.Marca, e.Modelo, e.Observaciones
+    FROM (VALUES
+        (N'ADR-001', N'SN-DL-77120', N'Laptop',                    N'SANTIAGO',           N'Dell',    N'Latitude 5440',  N'Equipo de recepción'),
+        (N'ADR-002', N'SN-DL-77121', N'Laptop',                    N'SANTIAGO',           N'Dell',    N'Latitude 5440',  N'Equipo de caja'),
+        (N'ADR-003', N'SN-HP-45012', N'Impresora',                 N'SANTIAGO',           N'HP',      N'LaserJet M404',  N'Impresora de archivo'),
+        (N'ADR-004', N'SN-LN-33450', N'Computadora de escritorio', N'SANTO-DOMINGO-ESTE', N'Lenovo',  N'ThinkCentre M70',N'Consultorio 2'),
+        (N'ADR-005', N'SN-LN-33451', N'Computadora de escritorio', N'SANTO-DOMINGO-ESTE', N'Lenovo',  N'ThinkCentre M70',N'Consultorio 3'),
+        (N'ADR-006', N'SN-SM-90881', N'Monitor',                   N'SANTO-DOMINGO-ESTE', N'Samsung', N'S24R350',        N'Monitor de reemplazo'),
+        (N'ADR-007', N'SN-DL-77122', N'Laptop',                    N'LA-VEGA',            N'Dell',    N'Vostro 3520',    N'Administración'),
+        (N'ADR-008', N'SN-HP-45013', N'Impresora',                 N'LA-VEGA',            N'HP',      N'LaserJet M404',  N'Recepción'),
+        (N'ADR-009', N'SN-LN-33452', N'Computadora de escritorio', N'SAN-CRISTOBAL',      N'Lenovo',  N'ThinkCentre M70',N'Facturación'),
+        (N'ADR-010', N'SN-SM-90882', N'Monitor',                   N'SAN-CRISTOBAL',      N'Samsung', N'S24R350',        N'Facturación'),
+        (N'ADR-011', N'SN-GN-10001', N'Otro',                      N'SAN-CRISTOBAL',      N'APC',     N'Back-UPS 650',   N'UPS con batería agotada'),
+        (N'ADR-012', N'SN-DL-77123', N'Laptop',                    N'TECNOLOGIA',         N'Dell',    N'Latitude 5440',  N'Reparado, listo para devolver'),
+        (N'ADR-013', N'SN-LN-33453', N'Computadora de escritorio', N'TECNOLOGIA',         N'Lenovo',  N'ThinkCentre M70',N'Equipo nuevo para asignar'),
+        (N'ADR-014', N'SN-SM-90883', N'Monitor',                   N'TECNOLOGIA',         N'Samsung', N'S24R350',        N'Equipo nuevo para asignar'),
+        (N'ADR-015', N'SN-HP-45014', N'Impresora',                 N'TECNOLOGIA',         N'HP',      N'LaserJet M404',  N'Reparada, lista para devolver')
+    ) AS e (CodigoActivo, NumeroSerie, TipoNombre, CodigoCentro, Marca, Modelo, Observaciones)
+    JOIN dbo.TiposEquipo  te ON te.Nombre = e.TipoNombre
+    JOIN dbo.Ubicaciones  u  ON u.CodigoCentro = e.CodigoCentro
+    WHERE NOT EXISTS (SELECT 1 FROM dbo.Equipos x WHERE x.CodigoActivo = e.CodigoActivo);
+
+    MERGE dbo.UsuariosReferencia AS destino
+    USING (VALUES
+        ('b7d1a2c4-5e60-4f83-9a11-2c3d4e5f6071', N'Laura Méndez Polanco',  N'TEC-1001', N'lmendez@rehabilitacion.org.do',  1, 1),
+        ('c8e2b3d5-6f71-4094-8b22-3d4e5f607182', N'Roberto Díaz Vásquez',  N'TEC-1002', N'rdiaz@rehabilitacion.org.do',    1, 1),
+        ('d9f3c4e6-7082-41a5-9c33-4e5f60718293', N'Yuderka Santana Cruz',  N'TEC-1003', N'ysantana@rehabilitacion.org.do', 1, 1),
+        ('e0a4d5f7-8193-42b6-8d44-5f6071829304', N'Técnico dado de baja',  N'TEC-0099', NULL,                             1, 0)
+    ) AS origen (UsuarioExternoId, NombreCompleto, NumeroEmpleado, Correo, EsTecnico, Activo)
+    ON destino.UsuarioExternoId = origen.UsuarioExternoId
+    WHEN NOT MATCHED BY TARGET THEN
+        INSERT (UsuarioExternoId, NombreCompleto, NumeroEmpleado, Correo, EsTecnico, Activo, FechaUltimaSincronizacion, Origen)
+        VALUES (origen.UsuarioExternoId, origen.NombreCompleto, origen.NumeroEmpleado, origen.Correo,
+                origen.EsTecnico, origen.Activo, SYSUTCDATETIME(), N'MANUAL');
+
+    DECLARE @Usuario UNIQUEIDENTIFIER = '11111111-2222-3333-4444-555555555555';
+    DECLARE @Tecnologia INT = (SELECT UbicacionId FROM dbo.Ubicaciones WHERE CodigoCentro = N'TECNOLOGIA');
+    DECLARE @Santiago   INT = (SELECT UbicacionId FROM dbo.Ubicaciones WHERE CodigoCentro = N'SANTIAGO');
+    DECLARE @LaVega     INT = (SELECT UbicacionId FROM dbo.Ubicaciones WHERE CodigoCentro = N'LA-VEGA');
+    DECLARE @SanCris    INT = (SELECT UbicacionId FROM dbo.Ubicaciones WHERE CodigoCentro = N'SAN-CRISTOBAL');
+    DECLARE @EnTecnologia   INT = (SELECT EstadoEnvioId FROM dbo.EstadosEnvio WHERE Codigo = N'RECIBIDO_TECNOLOGIA');
+    DECLARE @RecibidoFilial INT = (SELECT EstadoEnvioId FROM dbo.EstadosEnvio WHERE Codigo = N'RECIBIDO_FILIAL');
+
+    IF NOT EXISTS (SELECT 1 FROM dbo.EnvioEquipos WHERE NumeroTicket = N'1001')
+    BEGIN
+        DECLARE @EnvioA INT;
+
+        -- 1001: Santiago mando el equipo y Tecnologia ya lo recibio. Caso abierto.
+        INSERT INTO dbo.Envios (UbicacionOrigenId, UbicacionDestinoId, EstadoEnvioId, Direccion, UsuarioSolicitanteId, Observaciones, FechaCreacion)
+        VALUES (@Santiago, @Tecnologia, @EnTecnologia, 1, @Usuario, N'Laptop con fallo de teclado.', DATEADD(DAY, -6, SYSUTCDATETIME()));
+        SET @EnvioA = SCOPE_IDENTITY();
+        INSERT INTO dbo.EnvioEquipos (EnvioId, EquipoId, NumeroTicket, UsuarioSolicitanteId, Observaciones, FechaCreacion)
+        SELECT @EnvioA, EquipoId, N'1001', @Usuario, N'Apertura del caso.', DATEADD(DAY, -6, SYSUTCDATETIME())
+        FROM dbo.Equipos WHERE CodigoActivo = N'ADR-012';
+        INSERT INTO dbo.HistorialesEstadoEnvio (EnvioId, EstadoEnvioId, Fecha, UbicacionId, UsuarioId, Observaciones)
+        VALUES (@EnvioA, @EnTecnologia, DATEADD(DAY, -5, SYSUTCDATETIME()), @Tecnologia, @Usuario, N'Recibido por Tecnologia.');
+
+        -- 1002: La Vega. Fue, volvio con incidencia y se reenvio: tres movimientos, mismo ticket.
+        DECLARE @EnvioB INT, @EnvioB2 INT, @EnvioB3 INT, @AperturaB INT;
+        INSERT INTO dbo.Envios (UbicacionOrigenId, UbicacionDestinoId, EstadoEnvioId, Direccion, UsuarioSolicitanteId, Observaciones, FechaCreacion)
+        VALUES (@LaVega, @Tecnologia, @EnTecnologia, 1, @Usuario, N'Impresora no imprime.', DATEADD(DAY, -20, SYSUTCDATETIME()));
+        SET @EnvioB = SCOPE_IDENTITY();
+        INSERT INTO dbo.EnvioEquipos (EnvioId, EquipoId, NumeroTicket, UsuarioSolicitanteId, Observaciones, FechaCreacion)
+        SELECT @EnvioB, EquipoId, N'1002', @Usuario, N'Apertura del caso.', DATEADD(DAY, -20, SYSUTCDATETIME())
+        FROM dbo.Equipos WHERE CodigoActivo = N'ADR-015';
+        SET @AperturaB = SCOPE_IDENTITY();
+
+        INSERT INTO dbo.Envios (UbicacionOrigenId, UbicacionDestinoId, EstadoEnvioId, Direccion, UsuarioSolicitanteId, Observaciones, FechaCreacion)
+        VALUES (@Tecnologia, @LaVega, @RecibidoFilial, 2, @Usuario, N'Devolucion tras reparacion.', DATEADD(DAY, -14, SYSUTCDATETIME()));
+        SET @EnvioB2 = SCOPE_IDENTITY();
+        INSERT INTO dbo.EnvioEquipos (EnvioId, EquipoId, NumeroTicket, EnvioEquipoOrigenId, UsuarioSolicitanteId, Observaciones, FechaCreacion)
+        SELECT @EnvioB2, EquipoId, N'1002', @AperturaB, @Usuario, N'Devolucion: llego con incidencia.', DATEADD(DAY, -14, SYSUTCDATETIME())
+        FROM dbo.Equipos WHERE CodigoActivo = N'ADR-015';
+
+        INSERT INTO dbo.Envios (UbicacionOrigenId, UbicacionDestinoId, EstadoEnvioId, Direccion, UsuarioSolicitanteId, Observaciones, FechaCreacion)
+        VALUES (@LaVega, @Tecnologia, @EnTecnologia, 1, @Usuario, N'Reenvio: el problema no se resolvio.', DATEADD(DAY, -9, SYSUTCDATETIME()));
+        SET @EnvioB3 = SCOPE_IDENTITY();
+        INSERT INTO dbo.EnvioEquipos (EnvioId, EquipoId, NumeroTicket, EnvioEquipoOrigenId, UsuarioSolicitanteId, Observaciones, FechaCreacion)
+        SELECT @EnvioB3, EquipoId, N'1002', @AperturaB, @Usuario, N'Reenvio por incidencia.', DATEADD(DAY, -9, SYSUTCDATETIME())
+        FROM dbo.Equipos WHERE CodigoActivo = N'ADR-015';
+
+        -- 1003: ciclo completo cerrado conforme. El equipo ya volvio a San Cristobal.
+        DECLARE @EnvioC INT, @EnvioC2 INT, @AperturaC INT;
+        INSERT INTO dbo.Envios (UbicacionOrigenId, UbicacionDestinoId, EstadoEnvioId, Direccion, UsuarioSolicitanteId, Observaciones, FechaCreacion, FechaFinalizacion)
+        VALUES (@SanCris, @Tecnologia, @EnTecnologia, 1, @Usuario, N'PC no enciende.', DATEADD(DAY, -30, SYSUTCDATETIME()), NULL);
+        SET @EnvioC = SCOPE_IDENTITY();
+        INSERT INTO dbo.EnvioEquipos (EnvioId, EquipoId, NumeroTicket, UsuarioSolicitanteId, Observaciones, FechaCreacion, FechaCierreCaso, MotivoCierreCaso)
+        SELECT @EnvioC, EquipoId, N'1003', @Usuario, N'Apertura del caso.', DATEADD(DAY, -30, SYSUTCDATETIME()),
+               DATEADD(DAY, -22, SYSUTCDATETIME()), N'Recibido conforme en la filial.'
+        FROM dbo.Equipos WHERE CodigoActivo = N'ADR-009';
+        SET @AperturaC = SCOPE_IDENTITY();
+
+        INSERT INTO dbo.Envios (UbicacionOrigenId, UbicacionDestinoId, EstadoEnvioId, Direccion, UsuarioSolicitanteId, Observaciones, FechaCreacion, FechaFinalizacion)
+        VALUES (@Tecnologia, @SanCris, @RecibidoFilial, 2, @Usuario, N'Devolucion reparada.', DATEADD(DAY, -24, SYSUTCDATETIME()), DATEADD(DAY, -22, SYSUTCDATETIME()));
+        SET @EnvioC2 = SCOPE_IDENTITY();
+        INSERT INTO dbo.EnvioEquipos (EnvioId, EquipoId, NumeroTicket, EnvioEquipoOrigenId, UsuarioSolicitanteId, Observaciones, FechaCreacion)
+        SELECT @EnvioC2, EquipoId, N'1003', @AperturaC, @Usuario, N'Devolucion recibida conforme.', DATEADD(DAY, -24, SYSUTCDATETIME())
+        FROM dbo.Equipos WHERE CodigoActivo = N'ADR-009';
+    END
+
+    COMMIT TRANSACTION;
+    PRINT N'Datos de prueba sembrados.';
+END
+ELSE
+    PRINT N'Sin datos de prueba. Para sembrarlos, ponga 1 en el INSERT de #Opciones, al inicio.';
+GO
+
+/* ----------------------------------------------------------------------------------------------
+   Con que queda la base.
+   ---------------------------------------------------------------------------------------------- */
+SELECT 'Filiales'           AS Dato, COUNT(*) AS Total FROM dbo.Ubicaciones WHERE Tipo = 1
+UNION ALL SELECT 'Tecnologia',         COUNT(*) FROM dbo.Ubicaciones WHERE Tipo = 2
+UNION ALL SELECT 'Estados activos',    COUNT(*) FROM dbo.EstadosEnvio WHERE Activo = 1
+UNION ALL SELECT 'Transiciones',       COUNT(*) FROM dbo.TransicionesEstadoEnvio WHERE Activo = 1
+UNION ALL SELECT 'Choferes activos',   COUNT(*) FROM dbo.ChoferesInternos WHERE Activo = 1
+UNION ALL SELECT 'Choferes inactivos', COUNT(*) FROM dbo.ChoferesInternos WHERE Activo = 0
+UNION ALL SELECT 'Tecnicos activos',   COUNT(*) FROM dbo.UsuariosReferencia WHERE EsTecnico = 1 AND Activo = 1
+UNION ALL SELECT 'Equipos',            COUNT(*) FROM dbo.Equipos
+UNION ALL SELECT 'Envios',             COUNT(*) FROM dbo.Envios;
+GO
+
+DROP TABLE #Opciones;
 GO
