@@ -80,6 +80,8 @@ const item = reactive({
   ticket: "",
   // Cuando el equipo arrastra un caso abierto el ticket viene dado y no se escribe.
   ticketHeredado: false,
+  // La puso la búsqueda del ticket: el equipo lo decidió la mesa de ayuda y no se suplanta.
+  equipoDeGlpi: false,
   ticketFilial: "",
   casoFilialId: null,
   notes: "",
@@ -152,12 +154,31 @@ function resetItem() {
   Object.keys(item).forEach((k) => (item[k] = ""));
   item.envioEquipoId = null;
   item.ticketHeredado = false;
+  item.equipoDeGlpi = false;
   item.ticketFilial = "";
   item.casoFilialId = null;
 }
 
 // Filial a la que obliga el caso del primer equipo con caso abierto del envío. Solo aplica
 // saliendo de Tecnología: en el otro sentido el destino es Tecnología y no hay nada que elegir.
+/**
+ * Un perfil de filial no elige el origen: el token ya dice cuál es su filial y no puede originar
+ * envíos desde otra. Dejarlo abierto solo permitía equivocarse, porque el backend lo rechaza igual.
+ *
+ * No se bloquea cuando su filial no está mapeada a ninguna ubicación: ahí no hay origen que poner
+ * y quedaría un desplegable vacío e intocable, sin forma de salir.
+ */
+const origenFijado = computed(
+  () => technologyMode.value || (auth.esFilial && Boolean(auth.perfil?.ubicacionId)),
+);
+
+const motivoOrigenFijado = computed(() => {
+  if (!origenFijado.value) return "";
+  return technologyMode.value
+    ? "Los envíos de Tecnología salen siempre de la sede."
+    : "Su filial es el origen y no se cambia: es la que trae su usuario.";
+});
+
 const destinoFijado = computed(() => {
   if (!isTechnology(origin.value)) return "";
   const conCaso = form.equipment.find((x) => x.ticketHeredado && x.casoFilialId);
@@ -197,22 +218,47 @@ function fill(e) {
   item.serial = e.numeroSerie || "";
   item.assetCode = e.codigoActivo || "";
 }
+/**
+ * Reconoce un equipo que ya está en el inventario mientras se escribe.
+ *
+ * No corre cuando el equipo lo decidió el ticket: el serial que dio la mesa de ayuda dice qué
+ * máquina es, y teclear un código de activo no puede cambiarla. Sin esta guarda, escribir un
+ * código que pertenece a otro equipo reemplazaba marca, modelo y serial por los de esa otra —y
+ * como fill() escribe por código, el readonly de los campos bloqueados no lo impedía.
+ *
+ * El serial manda sobre el código de activo. El primero identifica la máquina; el segundo es una
+ * etiqueta administrativa que alguien teclea, y usarla como identidad es lo que permitía el cruce.
+ */
 function lookup() {
-  const s = item.serial?.trim().toLowerCase(),
-    a = item.assetCode?.trim().toLowerCase(),
-    m = registeredEquipment.value.find(
-      (e) =>
-        (s && e.numeroSerie?.toLowerCase() === s) || (a && e.codigoActivo?.toLowerCase() === a),
-    );
-  if (m) fill(m);
+  if (item.equipoDeGlpi) return;
+
+  const serial = item.serial?.trim().toLowerCase();
+  const porSerial = serial
+    ? registeredEquipment.value.find((e) => e.numeroSerie?.toLowerCase() === serial)
+    : null;
+  if (porSerial) return fill(porSerial);
+
+  const codigo = item.assetCode?.trim().toLowerCase();
+  const porCodigo = codigo
+    ? registeredEquipment.value.find((e) => e.codigoActivo?.toLowerCase() === codigo)
+    : null;
+  if (porCodigo) fill(porCodigo);
 }
 function ensure() {
   if (item.existingId) return Promise.resolve(Number(item.existingId));
-  const d = registeredEquipment.value.find(
-    (e) =>
-      e.numeroSerie?.toLowerCase() === item.serial.toLowerCase() ||
-      e.codigoActivo?.toLowerCase() === item.assetCode?.toLowerCase(),
-  );
+  // Mismo orden que en lookup(): el serial identifica, el código de activo solo etiqueta. Con un
+  // find de dos condiciones ganaba el primero del arreglo, así que una coincidencia por código
+  // podía llevarse el envío a otro equipo sin que nadie lo notara.
+  const serial = item.serial?.trim().toLowerCase();
+  const porSerial = serial
+    ? registeredEquipment.value.find((e) => e.numeroSerie?.toLowerCase() === serial)
+    : null;
+  const codigo = item.assetCode?.trim().toLowerCase();
+  const d =
+    porSerial ||
+    (item.equipoDeGlpi || !codigo
+      ? null
+      : registeredEquipment.value.find((e) => e.codigoActivo?.toLowerCase() === codigo));
   if (d) {
     fill(d);
     return Promise.resolve(d.equipoId);
@@ -677,8 +723,12 @@ async function submit() {
     if (!(await ticketsLibres())) return;
 
     const transportLabel = selectedTransportType.value?.nombre || "Sin indicar";
+    // El código va pegado al nombre: hay choferes que se llaman igual y el nombre solo no
+    // distingue a cuál se le está asignando el viaje.
     const driverLabel = isInternalTransport(selectedTransportType.value?.estrategia)
-      ? selectedDriver.value?.nombreCompleto || "Sin indicar"
+      ? [selectedDriver.value?.nombreCompleto, selectedDriver.value?.numeroEmpleado]
+          .filter(Boolean)
+          .join(" · ") || "Sin indicar"
       : `${form.privateName || "Sin indicar"} · ${form.vehiclePlate || "Sin placa"}`;
     const equipmentHtml = form.equipment.length
       ? form.equipment
@@ -796,7 +846,8 @@ onMounted(load);
             :destination-locations="destinationLocations"
             :flow-label="flowLabel"
             :destino-fijado="destinoFijado"
-            :readonly-origin="technologyMode" /></ShipmentSection
+            :readonly-origin="origenFijado"
+            :motivo-origen-fijado="motivoOrigenFijado" /></ShipmentSection
         ><ShipmentSection v-if="!technologyMode" title="Transportación"
           ><ShipmentTransportSection
             :form="form"
@@ -864,7 +915,15 @@ onMounted(load);
           </div>
           <div>
             <dt>Chofer / responsable</dt>
-            <dd>{{ selectedDriver?.nombreCompleto || form.privateName || "No indicado" }}</dd>
+            <dd>
+              {{
+                selectedDriver
+                  ? [selectedDriver.nombreCompleto, selectedDriver.numeroEmpleado]
+                      .filter(Boolean)
+                      .join(" · ")
+                  : form.privateName || "No indicado"
+              }}
+            </dd>
           </div>
           <div>
             <dt>Equipos</dt>

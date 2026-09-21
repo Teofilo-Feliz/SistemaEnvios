@@ -2,139 +2,15 @@
 import { ref } from "vue";
 import { useRoute } from "vue-router";
 import logo from "@/assets/img/logitrack.webp";
-import {
-  BarChart3,
-  Boxes,
-  Building2,
-  ChevronDown,
-  CircleGauge,
-  ClipboardCheck,
-  PackageSearch,
-  Settings,
-  Truck,
-  X,
-} from "lucide-vue-next";
+import { ChevronDown, CircleGauge, X } from "lucide-vue-next";
 import { useUiStore } from "@/stores/uiStore";
 import { useAuthStore } from "@/stores/authStore";
 import { grupoVisible } from "@/config/modulos";
+import { GRUPOS as groups } from "@/config/menu";
 const route = useRoute();
 const ui = useUiStore();
 const auth = useAuthStore();
 const opened = ref(JSON.parse(localStorage.getItem("sidebar_groups") || '["envios"]'));
-const groups = [
-  {
-    key: "envios",
-    label: "Envíos",
-    icon: PackageSearch,
-    items: [
-      { label: "Todos los envíos", to: "/envios" },
-      {
-        label: "Crear envío",
-        to: "/envios/nuevo",
-        permission: "canCreateShipment",
-      },
-    ],
-  },
-  {
-    key: "equipos",
-    label: "Equipos",
-    icon: Boxes,
-    items: [
-      { label: "Todos los equipos", to: "/equipos" },
-      {
-        label: "Registrar equipo",
-        to: "/equipos/nuevo",
-        permission: "canCreateShipment",
-      },
-    ],
-  },
-  {
-    key: "transportacion",
-    label: "Transportación",
-    icon: Truck,
-    items: [
-      { label: "Dashboard", to: "/transportacion" },
-      {
-        label: "Recepción del chofer",
-        to: "/transportacion/recepcion-chofer",
-        permission: "transportes.confirmar",
-      },
-      {
-        label: "Llegadas",
-        to: "/transportacion/llegadas",
-        permission: "transportes.confirmar",
-      },
-      { label: "Operaciones", to: "/transportacion/operaciones" },
-      {
-        label: "Asignar transporte a envío",
-        to: "/transportacion/nuevo",
-        permission: "transportes.gestionar",
-      },
-      {
-        label: "Transportes y choferes",
-        to: "/transportacion/catalogos",
-        permission: "transportes.administrar",
-      },
-    ],
-  },
-  {
-    key: "tecnologia",
-    label: "Tecnología",
-    icon: ClipboardCheck,
-    items: [
-      { label: "Notificaciones", to: "/tecnologia/notificaciones" },
-      {
-        label: "Nuevo envío a filial",
-        to: "/tecnologia/envios/nuevo",
-        permission: "canCreateShipment",
-      },
-      // El orden es el del recorrido real de un equipo que llega. Las dos primeras son las dos
-      // formas de recibir: el privado llega solo desde la filial, el institucional llega por
-      // Transportación. Desde cualquiera de las dos se marca conforme o con incidencia.
-      { label: "Por recibir", to: "/tecnologia/camino", permission: "recepciones.gestionar" },
-      { label: "En revisión", to: "/tecnologia/revision" },
-      { label: "Revisados", to: "/tecnologia/revisados" },
-      { label: "Equipos en Tecnología", to: "/tecnologia/equipos" },
-      {
-        label: "Descarte de equipos",
-        to: "/tecnologia/descartes",
-        permission: "equipos.gestionar",
-      },
-      { label: "Incidencias", to: "/incidencias" },
-    ],
-  },
-  {
-    key: "filial",
-    label: "Filial",
-    icon: Building2,
-    items: [
-      { label: "Mi filial", to: "/filial" },
-      { label: "Crear envío", to: "/envios/nuevo", permission: "canCreateShipment" },
-      { label: "Mis envíos", to: "/envios" },
-      { label: "Recibir envíos", to: "/filial/recepciones", permission: "canReceiveShipment" },
-    ],
-  },
-  {
-    key: "catalogos",
-    label: "Catálogos",
-    icon: Building2,
-    permission: "canManageCatalogs",
-    // Solo filiales. Las demás entradas apuntaban a la pantalla de "módulo en construcción":
-    // ofrecían un catálogo que no existía y no había forma de saberlo hasta entrar.
-    items: [{ label: "Filiales", to: "/catalogos/filiales" }],
-  },
-  {
-    key: "admin",
-    label: "Administración",
-    icon: Settings,
-    permission: "canViewAudit",
-    items: [
-      { label: "Configuración", to: "/administracion/configuracion" },
-      { label: "Auditoría", to: "/administracion/auditoria" },
-      { label: "Integraciones", to: "/administracion/integraciones" },
-    ],
-  },
-];
 function toggle(key) {
   opened.value = opened.value.includes(key)
     ? opened.value.filter((item) => item !== key)

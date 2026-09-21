@@ -11,7 +11,7 @@
 import { computed, reactive, ref, watch } from "vue";
 import ModalCard from "@/components/common/ModalCard.vue";
 import { glpiService } from "@/services/glpiService";
-import { filtrarSoloDigitos } from "@/utils/documento";
+import { filtrarCodigoActivo } from "@/utils/documento";
 import { avisar, escapeHtml } from "@/utils/confirm";
 
 const props = defineProps({
@@ -96,14 +96,14 @@ watch(
  * filtrado coincide con lo que ya había, Vue no vuelve a pintar y la letra se queda en pantalla.
  */
 function alEscribirActivo(evento) {
-  const limpio = filtrarSoloDigitos(evento.target.value);
+  const limpio = filtrarCodigoActivo(evento.target.value);
   borrador.assetCode = limpio;
   evento.target.value = limpio;
   errors.assetCode = "";
 }
 
 function alEscribirTicket(evento) {
-  const limpio = filtrarSoloDigitos(evento.target.value);
+  const limpio = filtrarCodigoActivo(evento.target.value);
   borrador.ticket = limpio;
   evento.target.value = limpio;
   errors.ticket = "";
@@ -329,7 +329,8 @@ async function guardar() {
           :readonly="!editable('assetCode')"
           :class="{ 'input-heredado': !editable('assetCode') }"
           inputmode="numeric"
-          placeholder="Opcional, solo números"
+          maxlength="8"
+          placeholder="Opcional, 8 dígitos"
           @input="alEscribirActivo"
         /><small v-if="errors.assetCode" class="field-error">{{ errors.assetCode }}</small></label
       >

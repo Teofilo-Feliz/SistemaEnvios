@@ -15,8 +15,8 @@ public sealed class ActualizarEquipoRequestValidator : AbstractValidator<Actuali
         // Solo dígitos: el código de activo es numérico y una letra ahí es un error de tecleo.
         // El formulario ya lo filtra al escribir; esto lo sostiene para cualquier otro cliente.
         RuleFor(x => x.CodigoActivo)
-            .Matches("^[0-9]+$").WithMessage("El código de activo solo admite dígitos.")
-            .MaximumLength(50)
+            .Matches("^[0-9]{1,8}$")
+            .WithMessage("El código de activo admite hasta 8 dígitos, sin letras ni símbolos.")
             .When(x => !string.IsNullOrWhiteSpace(x.CodigoActivo));
         RuleFor(x => x.NumeroSerie).MaximumLength(100);
         RuleFor(x => x.Observaciones).MaximumLength(2000);

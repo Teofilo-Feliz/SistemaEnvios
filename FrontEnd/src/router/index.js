@@ -67,7 +67,7 @@ const routes = [
         path: "envios/:id",
         name: "envio-detail",
         component: () => import("@/views/envios/EnvioDetail.vue"),
-        meta: { permission: "envios.consultar" },
+        meta: { permission: "envios.consultar", title: "Detalle del envío" },
       },
       {
         path: "tecnologia/envios/nuevo",
@@ -85,7 +85,7 @@ const routes = [
         path: "envios/:id/editar",
         name: "envio-edit",
         component: () => import("@/views/envios/EnvioCreate.vue"),
-        meta: { permission: "envios.editar" },
+        meta: { permission: "envios.editar", title: "Editar envío" },
       },
       {
         path: "equipos",
@@ -103,7 +103,7 @@ const routes = [
         path: "equipos/:id",
         name: "equipo-detail",
         component: () => import("@/views/equipos/EquipoDetail.vue"),
-        meta: { permission: "envios.consultar" },
+        meta: { permission: "envios.consultar", title: "Detalle del equipo" },
       },
       {
         path: "transportacion",
@@ -152,7 +152,7 @@ const routes = [
         path: "tecnologia/recepciones/:envioId",
         name: "tecnologia-reception",
         component: () => import("@/views/recepciones/RecepcionEnvio.vue"),
-        meta: { permission: "recepciones.gestionar" },
+        meta: { permission: "recepciones.gestionar", title: "Recepción" },
       },
       {
         // Tablero propio de la filial. Consultar envíos basta: el resto del módulo son las
@@ -166,7 +166,7 @@ const routes = [
         path: "filial/recepciones/:envioId",
         name: "filial-reception",
         component: () => import("@/views/recepciones/RecepcionEnvio.vue"),
-        meta: { permission: "recepciones.gestionar" },
+        meta: { permission: "recepciones.gestionar", title: "Recepción" },
       },
       // Las cuatro pantallas del modulo apilaban su contenido en una sola vista y se
       // distinguian por un "?view=" que el componente nunca leia: elegias una y salian todas.

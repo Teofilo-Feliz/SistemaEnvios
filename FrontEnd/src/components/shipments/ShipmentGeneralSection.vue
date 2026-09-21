@@ -6,13 +6,20 @@ defineProps({
   destinationLocations: Array,
   flowLabel: String,
   readonlyOrigin: Boolean,
+  /** Por qué el origen viene fijado. Vacío cuando el usuario sí puede elegirlo. */
+  motivoOrigenFijado: String,
   destinoFijado: String,
 });
 </script>
 <template>
   <div class="form-grid shipment-form-grid">
     <label
-      >Origen *<select v-model="form.originId" class="form-control" :disabled="readonlyOrigin">
+      >Origen *<select
+        v-model="form.originId"
+        class="form-control"
+        :class="{ 'input-heredado': readonlyOrigin }"
+        :disabled="readonlyOrigin"
+      >
         <option value="">Seleccionar origen</option>
         <option
           v-for="location in locations"
@@ -21,7 +28,8 @@ defineProps({
         >
           {{ location.nombre }}
         </option></select
-      ><small v-if="errors.origin" class="field-error">{{ errors.origin }}</small></label
+      ><small v-if="motivoOrigenFijado" class="field-hint">{{ motivoOrigenFijado }}</small
+      ><small v-else-if="errors.origin" class="field-error">{{ errors.origin }}</small></label
     >
     <label
       >Destino *<select

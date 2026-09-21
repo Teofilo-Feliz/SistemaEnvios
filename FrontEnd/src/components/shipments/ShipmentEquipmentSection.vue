@@ -2,8 +2,9 @@
 import { computed, reactive, ref, watch } from "vue";
 import { Plus, Search } from "lucide-vue-next";
 import ShipmentEquipmentTable from "./ShipmentEquipmentTable.vue";
+import { equipoService } from "@/services/equipoService";
 import { glpiService } from "@/services/glpiService";
-import { filtrarSoloDigitos } from "@/utils/documento";
+import { filtrarCodigoActivo } from "@/utils/documento";
 
 const props = defineProps({
   item: Object,
@@ -18,16 +19,24 @@ const props = defineProps({
   origenEsTecnologia: Boolean,
 });
 const emit = defineEmits(["add", "remove", "edit", "new"]);
-const errors = reactive({ typeId: "", brand: "", model: "", serial: "", ticket: "" });
+const errors = reactive({
+  typeId: "",
+  brand: "",
+  model: "",
+  serial: "",
+  assetCode: "",
+  ticket: "",
+});
 
 // El código de activo es numérico. Se filtra al teclear en vez de rechazarlo al guardar: dejar
 // escribir una letra para después devolver un error es hacerle perder el tiempo a quien la escribe.
 function alEscribirActivo(evento) {
-  const limpio = filtrarSoloDigitos(evento.target.value);
+  const limpio = filtrarCodigoActivo(evento.target.value);
   props.item.assetCode = limpio;
   // El input no está en v-model, así que si el valor filtrado coincide con el anterior Vue no
   // vuelve a pintarlo y la letra se quedaría en pantalla. Se fuerza.
   evento.target.value = limpio;
+  errors.assetCode = "";
 }
 
 const buscando = ref(false);
@@ -51,6 +60,8 @@ const deGlpi = reactive({
 
 // El ticket ya decidió qué equipo es, así que elegir otro del inventario lo contradiría.
 const equipoLoDecideGlpi = computed(() => Object.values(deGlpi).some(Boolean));
+
+const CAMPOS_DEL_EQUIPO = ["typeId", "brand", "model", "serial", "assetCode"];
 
 function olvidarLoDeGlpi() {
   Object.keys(deGlpi).forEach((campo) => (deGlpi[campo] = false));
@@ -79,11 +90,28 @@ watch(
     avisoTicket.value = "";
     errors.ticket = "";
     olvidarLoDeGlpi();
+    vaciarEquipo();
   },
 );
 
+/**
+ * Borra los datos del equipo al cambiar de ticket.
+ *
+ * Cerrar el formulario no bastaba: los valores seguían en el objeto, escondidos. Si el ticket
+ * nuevo no traía equipo —o lo traía con algún campo vacío— reaparecían los del anterior, y nada
+ * en pantalla decía que ese serial era de otra máquina.
+ */
+function vaciarEquipo() {
+  for (const campo of CAMPOS_DEL_EQUIPO) props.item[campo] = "";
+  props.item.equipoDeGlpi = false;
+  // La observación no se toca: es texto de la persona, no dato del ticket, y borrarla porque
+  // corrigió un dígito le haría reescribirla.
+  props.item.existingId = "";
+  Object.keys(errors).forEach((campo) => (errors[campo] = ""));
+}
+
 function alEscribirTicket(evento) {
-  const limpio = filtrarSoloDigitos(evento.target.value);
+  const limpio = filtrarCodigoActivo(evento.target.value);
   props.item.ticket = limpio;
   evento.target.value = limpio;
 }
@@ -125,6 +153,8 @@ async function buscarEquipo() {
       props.item[campo] = valor;
       deGlpi[campo] = true;
     }
+    // Se la lee lookup() en el padre para no dejarse suplantar por el código de activo.
+    props.item.equipoDeGlpi = true;
 
     avisoTicket.value = equipo.yaEstaEnOtroEnvio
       ? `${equipo.nombre || "El equipo"} ya viaja en otro envío activo y no se puede agregar aquí.`
@@ -142,6 +172,27 @@ async function buscarEquipo() {
     errors.ticket = error.userMessage || "No se pudo consultar el ticket en la mesa de ayuda.";
   } finally {
     buscando.value = false;
+  }
+}
+
+/**
+ * Comprueba que el código de activo tecleado no sea de otro equipo.
+ *
+ * No aplica cuando lo trajo la mesa de ayuda —entonces ya es de este equipo— ni cuando el equipo
+ * salió del inventario, porque ese código es el suyo.
+ */
+async function codigoActivoLibre() {
+  const codigo = String(props.item.assetCode || "").trim();
+  if (!codigo || deGlpi.assetCode || props.item.existingId) return true;
+
+  try {
+    const { data } = await equipoService.codigoActivoDisponible(codigo);
+    if (data === true) return true;
+    errors.assetCode = `El código de activo ${codigo} ya pertenece a otro equipo.`;
+    return false;
+  } catch (error) {
+    errors.assetCode = error.userMessage || "No se pudo comprobar el código de activo.";
+    return false;
   }
 }
 
@@ -175,6 +226,12 @@ async function validateAndAdd() {
   // aquí no se vuelve a consultar la mesa de ayuda. Si el número cambia, el formulario se cierra y
   // hay que buscar otra vez.
   if (Object.values(errors).some(Boolean)) return;
+
+  // Un código de activo que ya pertenece a otro equipo revienta el índice único al guardar, y
+  // antes de esta comprobación se colaba peor todavía: el formulario cambiaba el equipo por el
+  // dueño de ese código. Se mira contra la base entera, no contra el inventario del origen, porque
+  // el dueño puede estar en otra filial.
+  if (!(await codigoActivoLibre())) return;
 
   // El ticket se comprueba una sola vez. Si vino de "Buscar equipo" ya está validado; si no
   // -saliendo de Tecnología no hay ese paso- se comprueba aquí, para no dejar que un ticket
@@ -303,9 +360,11 @@ async function validateAndAdd() {
           :readonly="deGlpi.assetCode"
           :class="{ 'input-heredado': deGlpi.assetCode }"
           inputmode="numeric"
-          placeholder="Opcional, solo números"
+          maxlength="8"
+          placeholder="Opcional, 8 dígitos"
           @input="alEscribirActivo"
-      /></label>
+        /><small v-if="errors.assetCode" class="field-error">{{ errors.assetCode }}</small></label
+      >
       <label class="equipment-notes"
         >Observación<input v-model.trim="item.notes" class="form-control" placeholder="Observación"
       /></label>

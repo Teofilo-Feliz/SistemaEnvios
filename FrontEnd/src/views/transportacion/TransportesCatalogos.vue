@@ -70,7 +70,7 @@ async function createType() {
 }
 async function createDriver() {
   if (!driverForm.nombreCompleto.trim() || !driverForm.numeroEmpleado.trim())
-    return ui.notify("Completa el nombre y número de empleado.", "warning");
+    return ui.notify("Completa el nombre y el código de empleado.", "warning");
   if (
     !(await confirmAction({
       title: "Crear chofer interno",
@@ -183,7 +183,7 @@ watch([typePage, driverPage], load);
               class="form-control"
               maxlength="150" /></label
           ><label
-            >Número de empleado *<input
+            >Código de empleado *<input
               v-model="driverForm.numeroEmpleado"
               class="form-control"
               maxlength="30" /></label

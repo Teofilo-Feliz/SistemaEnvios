@@ -8,4 +8,9 @@ export const equipoService = {
   history: (id, params) => api.get(`/equipos/${id}/historial`, { params }),
   create: (payload) => api.post("/equipos", payload),
   update: (id, payload) => api.put(`/equipos/${id}`, payload),
+
+  // Si el código de activo está libre en toda la base. No sirve mirar el inventario que el
+  // formulario ya tiene: ese solo trae los equipos del origen, y el código puede ser de otra filial.
+  codigoActivoDisponible: (codigo, params = {}) =>
+    api.get(`/equipos/codigo-activo-disponible/${encodeURIComponent(codigo)}`, { params }),
 };

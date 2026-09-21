@@ -46,5 +46,16 @@ export function errorDocumento(tipo, valor) {
   return /^\d{11}$/.test(limpio) ? "" : "La cédula debe tener exactamente 11 dígitos.";
 }
 
-/** Solo dígitos, para el código de activo. */
+/** Solo dígitos. */
 export const filtrarSoloDigitos = (valor) => String(valor ?? "").replace(/\D/g, "");
+
+/** El código de activo de la ADR: ocho dígitos, ni uno más. */
+export const LARGO_CODIGO_ACTIVO = 8;
+
+/**
+ * Lo que se deja escribir en el código de activo. Se corta al teclear, igual que la cédula: dejar
+ * escribir un noveno dígito para después rechazarlo al guardar es hacerle perder el tiempo a quien
+ * lo escribe.
+ */
+export const filtrarCodigoActivo = (valor) =>
+  filtrarSoloDigitos(valor).slice(0, LARGO_CODIGO_ACTIVO);

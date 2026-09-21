@@ -1,31 +1,38 @@
-﻿
--- Script base de datos ADRTrack. Contiene la estructura de tablas y relaciones, y los datos iniciales de referencia.
+﻿-- Script base de datos ADRTrack. Estructura, datos de referencia y el usuario con que se conecta
+-- el API. Un solo archivo: se ejecuta entero y el entorno queda listo.
 --
 -- ATENCIÓN: este script RECREA la base por completo. Hace DROP DATABASE antes de crearla, así
 -- que ejecutarlo sobre un entorno con datos los borra sin aviso. No lo use para actualizar una
 -- base existente: para eso están los scripts de Database/Migrations.
 --
 -- ---------------------------------------------------------------------------------------------
--- ORDEN DE EJECUCIÓN para levantar un entorno nuevo. Los tres, en este orden:
+-- ANTES DE EJECUTAR, en un servidor donde el login del API todavía no exista: ponga una
+-- contraseña real en @Clave, al final del archivo, en el PASO FINAL. Si el login ya existe no
+-- hace falta tocar nada: se reutiliza y no se le cambia la contraseña.
 --
---   1. Database/SistemaEnviosDB.sql              <- este archivo. Estructura y datos de
---                                                   referencia, incluidos los accesos por
---                                                   posición. Termina comprobándose a sí mismo.
---   2. Migrations/20260908_UsuarioDelApi.sql     <- el login del servidor y el usuario de la
---                                                   base con que se conecta el API. Va después
---                                                   porque la base tiene que existir, y aparte
---                                                   porque el login vive fuera de ella y no lo
---                                                   arrastra el DROP DATABASE de arriba.
---                                                   CAMBIE LA CONTRASEÑA antes de ejecutarlo.
---   3. Migrations/20260902_PermisosBaseDatos.sql <- quita al usuario del API la escritura sobre
---                                                   las tablas de autoridad. Va al final porque
---                                                   necesita que ese usuario ya exista.
+-- Si termina con un error rojo en vez de "Comprobacion final OK", la base quedó incompleta.
+-- Léalo: dice exactamente qué fila falta.
 --
--- Las demás migraciones NO hacen falta en una base nueva: reparan bases ya creadas. Sus datos
--- ya están en los INSERT de este archivo.
+-- Las migraciones de Database/Migrations NO hacen falta en una base nueva: reparan bases ya
+-- creadas. Lo que hacían 20260908_UsuarioDelApi y 20260902_PermisosBaseDatos está incorporado
+-- aquí, al final, y el resto de sus datos está en los INSERT de este archivo.
+-- ---------------------------------------------------------------------------------------------
 --
--- Si el paso 1 termina con un error rojo en vez de "Comprobacion final OK", la base quedó
--- incompleta. Léalo: dice exactamente qué fila falta. No siga a los pasos 2 y 3.
+-- SOBRE LAS CLAVES DE ACCESO
+--
+-- La columna se llama Posicion por historia, pero desde que el alcance se resuelve solo con el
+-- claim "roles" lo que va ahí son NOMBRES DE ROL de AuthManager. Un cargo de recursos humanos ya
+-- no concede nada: no se administra desde AuthManager y por tanto no se puede revocar.
+--
+-- De las nueve filas sembradas, tres están confirmadas como rol en tokens reales
+-- (SuperAdministrador, Soporte Técnico y Encargado Transportación) y dos son posiciones que
+-- quedaron inertes: 'Encargada de Soporte Técnico' y 'Encargado transportacion y mecanica'. Se
+-- dejan porque no molestan —simplemente no cruzan— y borrarlas antes de confirmar el resto
+-- podría dejar a alguien fuera. Las demás están sin confirmar.
+--
+-- Al crear los grupos en AuthManager, copie el nombre EXACTO del rol aquí. La colación es
+-- Modern_Spanish_CI_AS: ignora mayúsculas pero DISTINGUE TILDES, así que 'Soporte Tecnico' y
+-- 'Soporte Técnico' son dos claves distintas, y un espacio al final no cruza nunca.
 -- ---------------------------------------------------------------------------------------------
 USE master;
 GO
@@ -891,4 +898,84 @@ BEGIN
 END
 ELSE
     PRINT N'Comprobacion final OK: cada posicion tiene perfil y permisos, cada perfil del CHECK esta poblado, y el mapeo de filiales esta completo.';
+GO
+
+/* ==============================================================================================
+   PASO FINAL: el usuario con el que se conecta el API
+
+   Antes esto vivía en dos migraciones aparte y había que acordarse de ejecutarlas después. Va
+   aquí para que levantar un entorno sea un solo archivo.
+
+   El login es del SERVIDOR y no lo arrastra el DROP DATABASE de arriba, así que si ya existe se
+   reutiliza: volver a ejecutar este script no le cambia la contraseña a un entorno en marcha.
+   ============================================================================================== */
+
+USE master;
+GO
+
+DECLARE @Usuario SYSNAME       = N'sistema_envios_app';
+DECLARE @Clave   NVARCHAR(128) = N'CAMBIE-ESTA-CLAVE';
+DECLARE @sql     NVARCHAR(MAX);
+
+-- Solo hace falta para crearlo. Si el login ya existe, la clave de aquí no se usa ni se comprueba.
+IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = @Usuario)
+BEGIN
+    IF @Clave = N'CAMBIE-ESTA-CLAVE'
+    BEGIN
+        RAISERROR(N'El login %s no existe y hay que crearlo. Defina una contraseña real en @Clave, en el PASO FINAL de este script, y vuelva a ejecutarlo.', 16, 1, @Usuario);
+        RETURN;
+    END
+
+    SET @sql = N'CREATE LOGIN ' + QUOTENAME(@Usuario) +
+               N' WITH PASSWORD = ' + QUOTENAME(@Clave, '''') +
+               N', CHECK_POLICY = ON, DEFAULT_DATABASE = ' + QUOTENAME(N'ADRTrack') + N';';
+    EXEC sp_executesql @sql;
+    PRINT N'Login creado.';
+END
+ELSE
+    PRINT N'El login ya existía en el servidor: se reutiliza y no se toca su contraseña.';
+GO
+
+USE ADRTrack;
+GO
+
+DECLARE @Usuario SYSNAME = N'sistema_envios_app';
+DECLARE @sql NVARCHAR(MAX);
+
+IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = @Usuario)
+BEGIN
+    SET @sql = N'CREATE USER ' + QUOTENAME(@Usuario) + N' FOR LOGIN ' + QUOTENAME(@Usuario) + N';';
+    EXEC sp_executesql @sql;
+END
+
+-- Lectura y escritura de datos, nada de esquema: el API no crea ni altera tablas.
+SET @sql = N'ALTER ROLE db_datareader ADD MEMBER ' + QUOTENAME(@Usuario) + N';
+             ALTER ROLE db_datawriter ADD MEMBER ' + QUOTENAME(@Usuario) + N';';
+EXEC sp_executesql @sql;
+
+-- Y ahora se le quita la escritura sobre las tablas de autoridad.
+--
+-- Quien pueda escribir en PerfilesPorPosicion o PermisosPorPosicion se otorga a sí mismo alcance
+-- Global. El código no puede impedirlo: la mitigación es que el usuario del API no tenga ese
+-- permiso. Las mantiene Tecnología por fuera.
+SET @sql = N'GRANT SELECT ON dbo.PerfilesPorPosicion TO ' + QUOTENAME(@Usuario) + N';
+             GRANT SELECT ON dbo.PermisosPorPosicion TO ' + QUOTENAME(@Usuario) + N';
+             DENY INSERT, UPDATE, DELETE ON dbo.PerfilesPorPosicion TO ' + QUOTENAME(@Usuario) + N';
+             DENY INSERT, UPDATE, DELETE ON dbo.PermisosPorPosicion TO ' + QUOTENAME(@Usuario) + N';';
+EXEC sp_executesql @sql;
+
+-- El mapeo filial -> ubicación es la otra llave del alcance. El API crea ubicaciones pero nunca
+-- escribe FilialExternaId, así que se deniega solo esa columna: el mantenimiento normal sigue
+-- funcionando y el mapeo queda fuera de su alcance.
+SET @sql = N'DENY UPDATE ON dbo.Ubicaciones(FilialExternaId) TO ' + QUOTENAME(@Usuario) + N';';
+EXEC sp_executesql @sql;
+
+PRINT N'Usuario del API listo, con lectura de las tablas de autoridad y sin escritura sobre ellas.';
+GO
+
+SELECT p.name AS UsuarioDelApi,
+       (SELECT COUNT(*) FROM sys.database_permissions d
+        WHERE d.grantee_principal_id = p.principal_id AND d.state_desc = 'DENY') AS DenegacionesAplicadas
+FROM sys.database_principals p
+WHERE p.name = N'sistema_envios_app';
 GO

@@ -134,6 +134,20 @@ public sealed class EquipoService(
         return Result<int>.Success(equipo.EquipoId);
     }
 
+    public async Task<Result<bool>> CodigoActivoDisponibleAsync(
+        string codigoActivo, int? excluirEquipoId = null, CancellationToken cancellationToken = default)
+    {
+        var codigo = NormalizarOpcional(codigoActivo);
+        // Sin código no hay nada que chocar: la columna admite nulos y el índice único los ignora.
+        if (codigo is null) return Result<bool>.Success(true);
+
+        var ocupado = await db.Equipos.AsNoTracking().AnyAsync(
+            x => x.CodigoActivo == codigo && (!excluirEquipoId.HasValue || x.EquipoId != excluirEquipoId.Value),
+            cancellationToken);
+
+        return Result<bool>.Success(!ocupado);
+    }
+
     public async Task<Result> ActualizarAsync(ActualizarEquipoRequest request, CancellationToken cancellationToken = default)
     {
         var validation = await actualizarValidator.ValidateAsync(request, cancellationToken);

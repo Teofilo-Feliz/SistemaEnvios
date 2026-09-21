@@ -437,14 +437,20 @@ useRefrescoAlVolver(load);
                 isInternalTransport(transport.estrategia) ? "Chofer interno" : "Responsable privado"
               }}
             </dt>
-            <dd>{{ transport.nombreChofer || transport.nombreResponsable || "—" }}</dd>
+            <dd>
+              {{
+                transport.nombreChofer
+                  ? [transport.nombreChofer, transport.numeroEmpleado].filter(Boolean).join(" · ")
+                  : transport.nombreResponsable || "—"
+              }}
+            </dd>
           </div>
           <div>
             <dt>Placa</dt>
             <dd>{{ transport.placaVehiculo || "—" }}</dd>
           </div>
           <div v-if="isInternalTransport(transport.estrategia)">
-            <dt>Número de empleado</dt>
+            <dt>Código de empleado</dt>
             <dd>{{ transport.numeroEmpleado || "—" }}</dd>
           </div>
           <div v-else>

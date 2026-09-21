@@ -26,6 +26,17 @@ public sealed class EquiposController(IEquipoService service) : ControllerBase
     /// Por dónde ha pasado el equipo. Mismo permiso que ver la ficha: quien puede abrir el
     /// equipo puede ver su recorrido, y el alcance ya lo aplica el servicio.
     /// </summary>
+    /// <summary>
+    /// Si el código de activo está libre. Pide solo envios.consultar porque se usa mientras se
+    /// arma un envío, y responde un booleano: no expone de qué equipo es.
+    /// </summary>
+    [HttpGet("codigo-activo-disponible/{codigoActivo}")]
+    [Authorize(Policy = PermissionNames.EnviosConsultar)]
+    public async Task<IActionResult> CodigoActivoDisponible(
+        string codigoActivo, [FromQuery] int? excluirEquipoId, CancellationToken cancellationToken) =>
+        (await service.CodigoActivoDisponibleAsync(codigoActivo, excluirEquipoId, cancellationToken))
+            .ToActionResult(this);
+
     [HttpGet("{equipoId:int}/historial")]
     [Authorize(Policy = PermissionNames.EnviosConsultar)]
     public async Task<IActionResult> Historial(int equipoId, [FromQuery] ParametrosPaginaSimple request, CancellationToken cancellationToken) =>
