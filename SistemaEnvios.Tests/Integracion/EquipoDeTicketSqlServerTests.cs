@@ -44,7 +44,7 @@ public sealed class EquipoDeTicketSqlServerTests
     {
         public Task<Result<TicketGlpi>> ObtenerTicketAsync(int ticketId, CancellationToken ct = default) =>
             Task.FromResult(Result<TicketGlpi>.Success(
-                new TicketGlpi(true, [new ItemDeTicketGlpi("Computer", 657)])));
+                new TicketGlpi(true, [new ItemDeTicketGlpi("Computer", 657)], EstadoTicketGlpi.EnCurso)));
 
         public Task<Result<EquipoGlpi?>> ObtenerEquipoAsync(string itemType, int id, CancellationToken ct = default) =>
             Task.FromResult(Result<EquipoGlpi?>.Success(new EquipoGlpi(

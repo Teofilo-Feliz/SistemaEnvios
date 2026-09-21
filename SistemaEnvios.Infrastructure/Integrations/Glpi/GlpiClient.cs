@@ -43,21 +43,36 @@ public sealed class GlpiClient(
 
         try
         {
+            // El estado solo lo trae el ticket y los activos solo Item_Ticket, así que hacen
+            // falta las dos. Van a la vez porque en serie el usuario esperaría una detrás de otra
+            // cada vez que teclea un número.
+            var ticket = LeerAsync($"Ticket/{ticketId}", reintentarSesion: true, ct);
             // Sin expand_dropdowns a propósito: con él, items_id deja de ser el id y pasa a ser el
             // hostname del equipo, y la segunda llamada se queda sin a dónde ir.
-            var (estado, cuerpo) = await LeerAsync($"Ticket/{ticketId}/Item_Ticket", reintentarSesion: true, ct)
-                .ConfigureAwait(false);
+            var items = LeerAsync($"Ticket/{ticketId}/Item_Ticket", reintentarSesion: true, ct);
+            await Task.WhenAll(ticket, items).ConfigureAwait(false);
+
+            var (codigoTicket, cuerpoTicket) = await ticket.ConfigureAwait(false);
+            var (codigoItems, cuerpoItems) = await items.ConfigureAwait(false);
 
             // Solo se guarda lo que GLPI respondió de verdad. Un fallo no se cachea: sería
             // convertir un tropiezo de red en un minuto de rechazos.
-            return estado switch
-            {
-                HttpStatusCode.OK => Result<TicketGlpi>.Success(
-                    Recordar(clave, new TicketGlpi(true, LeerItems(cuerpo)))),
-                HttpStatusCode.NotFound => Result<TicketGlpi>.Success(
-                    Recordar(clave, TicketGlpi.NoEncontrado)),
-                _ => FalloTicket($"GLPI respondió {(int)estado} al consultar los equipos del ticket {ticketId}.")
-            };
+            if (codigoTicket == HttpStatusCode.NotFound)
+                return Result<TicketGlpi>.Success(Recordar(clave, TicketGlpi.NoEncontrado));
+
+            if (codigoTicket != HttpStatusCode.OK)
+                return FalloTicket($"GLPI respondió {(int)codigoTicket} al consultar el ticket {ticketId}.");
+
+            if (codigoItems is not (HttpStatusCode.OK or HttpStatusCode.NotFound))
+                return FalloTicket($"GLPI respondió {(int)codigoItems} al consultar los equipos del ticket {ticketId}.");
+
+            // Un 404 en Item_Ticket con el ticket vivo no debería ocurrir —GLPI devuelve el
+            // arreglo vacío cuando no hay activos—, pero si ocurriera, "sin equipos" es lo que
+            // describe la respuesta.
+            List<ItemDeTicketGlpi> equipos = codigoItems == HttpStatusCode.OK ? LeerItems(cuerpoItems) : [];
+
+            return Result<TicketGlpi>.Success(
+                Recordar(clave, new TicketGlpi(true, equipos, LeerEstado(cuerpoTicket))));
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -137,7 +152,30 @@ public sealed class GlpiClient(
         _ => 0
     };
 
-/// <inheritdoc/>
+/// <summary>
+    /// El estado del ticket, tal como lo numera GLPI. Null cuando no vino o vino en cero: eso es
+    /// "no se pudo leer", y quien decide lo trata como motivo para no bloquear.
+    /// </summary>
+    private static int? LeerEstado(string cuerpo)
+    {
+        if (string.IsNullOrWhiteSpace(cuerpo)) return null;
+
+        try
+        {
+            using var json = JsonDocument.Parse(cuerpo);
+            if (json.RootElement.ValueKind != JsonValueKind.Object) return null;
+            if (!json.RootElement.TryGetProperty("status", out var valor)) return null;
+
+            var estado = LeerEntero(valor);
+            return estado > 0 ? estado : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <inheritdoc/>
     public async Task<Result<EquipoGlpi?>> ObtenerEquipoAsync(
         string itemType, int id, CancellationToken ct = default)
     {

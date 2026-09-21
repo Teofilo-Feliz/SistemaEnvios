@@ -104,7 +104,7 @@ public sealed class ValidarTicketParaEquipoTests
     }
 
     private static TicketGlpi Ticket(params (string Tipo, int Id)[] equipos) =>
-        new(true, [.. equipos.Select(x => new ItemDeTicketGlpi(x.Tipo, x.Id))]);
+        new(true, [.. equipos.Select(x => new ItemDeTicketGlpi(x.Tipo, x.Id))], EstadoTicketGlpi.EnCurso);
 
     private static EquipoGlpi Equipo(string? serial) =>
         new("Computer", "HP", "Compaq", serial, null, "LAB-INFORMATICA", null, false);

@@ -98,6 +98,17 @@ public sealed class ValidadorTicketGlpi(
         if (!enGlpi.Existe)
             return Result.Failure($"El ticket {id} no existe en la mesa de ayuda.", ErrorType.Validation);
 
+        // Antes que el conteo de equipos: un ticket cerrado no se arregla separando activos, y
+        // decirle a la persona que reparta los equipos cuando el problema es el estado la manda
+        // a hacer un trabajo que no resuelve nada.
+        if (enGlpi.ElEstadoLoImpide)
+        {
+            logger.LogInformation(
+                "Se rechazó el ticket {Ticket}: en GLPI está en estado {Estado}.", id, enGlpi.Estado);
+
+            return Result.Failure(EstadoTicketGlpi.Mensaje(id, enGlpi.Estado), ErrorType.Validation);
+        }
+
         if (!enGlpi.EsUsable)
         {
             // Se dice cuántos son y dónde se arregla: el cambio va en GLPI, no en el formulario.

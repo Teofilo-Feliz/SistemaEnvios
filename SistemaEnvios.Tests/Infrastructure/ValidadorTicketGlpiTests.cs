@@ -133,8 +133,62 @@ public sealed class ValidadorTicketGlpiTests
         Assert.Equal(ErrorType.Validation, resultado.ErrorType);
     }
 
+    /// <summary>
+    /// La regla de la ADR: solo se estrena un envío con un ticket que un técnico ya tomó. Un
+    /// caso cerrado o resuelto está terminado, y uno que nadie ha tomado todavía no justifica
+    /// mover un equipo.
+    /// </summary>
+    [Theory]
+    [InlineData(1, "Nuevo")]
+    [InlineData(3, "En curso (planificado)")]
+    [InlineData(4, "En espera")]
+    [InlineData(5, "Resuelto")]
+    [InlineData(6, "Cerrado")]
+    public async Task RechazaUnTicketQueNoEstaEnCurso(int estado, string nombre)
+    {
+        var validador = Validador(ConEquipos(estado, ("Computer", 657)));
+
+        var resultado = await validador.ValidarAsync("30261");
+
+        Assert.True(resultado.IsFailure);
+        Assert.Equal(ErrorType.Validation, resultado.ErrorType);
+        Assert.Contains(nombre, resultado.Error);
+    }
+
+    /// <summary>
+    /// Un ticket cerrado Y con varios equipos se rechaza por el estado. Si ganara el conteo, el
+    /// mensaje mandaría a la persona a repartir activos en GLPI, trabajo que no arreglaría nada
+    /// porque el caso ya está cerrado.
+    /// </summary>
+    [Fact]
+    public async Task ElEstadoPesaMasQueElConteoDeEquipos()
+    {
+        var validador = Validador(ConEquipos(6, ("Computer", 1), ("Computer", 2)));
+
+        var resultado = await validador.ValidarAsync("30261");
+
+        Assert.Contains("Cerrado", resultado.Error);
+        Assert.DoesNotContain("2 equipos asociados", resultado.Error);
+    }
+
+    /// <summary>
+    /// Estado nulo es "no se pudo leer", no "está mal", y deja pasar. Es el mismo criterio que
+    /// con GLPI caído: si una versión de la mesa de ayuda dejara de mandar el campo, la regla se
+    /// apagaría sola en vez de bloquear a las 34 filiales sin que nadie entienda por qué.
+    /// </summary>
+    [Fact]
+    public async Task SinEstadoLegibleDejaPasar()
+    {
+        var validador = Validador(new TicketGlpi(true, [new ItemDeTicketGlpi("Computer", 657)]));
+
+        Assert.True((await validador.ValidarAsync("25000")).IsSuccess);
+    }
+
     private static TicketGlpi ConEquipos(params (string Tipo, int Id)[] equipos) =>
-        new(true, [.. equipos.Select(x => new ItemDeTicketGlpi(x.Tipo, x.Id))]);
+        ConEquipos(EstadoTicketGlpi.EnCurso, equipos);
+
+    private static TicketGlpi ConEquipos(int estado, params (string Tipo, int Id)[] equipos) =>
+        new(true, [.. equipos.Select(x => new ItemDeTicketGlpi(x.Tipo, x.Id))], estado);
 
     private static ValidadorTicketGlpi Validador(TicketGlpi respuesta) =>
         new(new GlpiFalso(Result<TicketGlpi>.Success(respuesta)), NullLogger<ValidadorTicketGlpi>.Instance);

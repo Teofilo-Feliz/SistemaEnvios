@@ -10,12 +10,11 @@ namespace SistemaEnvios.Application.Interfaces.Services.Integraciones;
 public interface IGlpiClient
 {
     /// <summary>
-    /// Los activos asociados a un ticket, y de paso si el ticket existe.
+    /// Si el ticket existe, en qué estado está y qué activos tiene asociados.
     /// </summary>
     /// <remarks>
-    /// Una sola llamada responde las dos cosas: GLPI devuelve 404 cuando el ticket no existe y la
-    /// lista —que puede venir vacía— cuando sí. Por eso sustituye a
-    /// la consulta de existencia que había antes, en vez de sumarse a ella.
+    /// Son dos consultas a GLPI hechas a la vez, porque la información está repartida: el estado
+    /// vive en el ticket y los activos en Item_Ticket. La existencia la decide la primera.
     ///
     /// Mismo criterio que el resto del cliente: 404 es una respuesta y sale como éxito con
     /// <see cref="TicketGlpi.Existe"/> en false; una caída sale como

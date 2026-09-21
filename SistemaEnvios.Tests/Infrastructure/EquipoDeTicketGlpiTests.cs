@@ -176,8 +176,31 @@ public sealed class EquipoDeTicketGlpiTests
         Assert.True(resultado.Value!.Equipo!.YaEstaEnOtroEnvio);
     }
 
+    /// <summary>
+    /// El estado se comprueba también al buscar, y con el mismo texto que al guardar: así la
+    /// persona se entera antes de llenar el formulario y no después.
+    /// </summary>
+    [Theory]
+    [InlineData(1, "Nuevo")]
+    [InlineData(5, "Resuelto")]
+    [InlineData(6, "Cerrado")]
+    public async Task NoAutocompletaConUnTicketQueNoEstaEnCurso(int estado, string nombre)
+    {
+        await using var db = await BaseAsync();
+        var servicio = Servicio(db, Ticket(estado, ("Computer", 657)), Hp());
+
+        var resultado = await servicio.ObtenerAsync("30261");
+
+        Assert.True(resultado.IsFailure);
+        Assert.Equal(ErrorType.Validation, resultado.ErrorType);
+        Assert.Contains(nombre, resultado.Error);
+    }
+
     private static TicketGlpi Ticket(params (string Tipo, int Id)[] equipos) =>
-        new(true, [.. equipos.Select(x => new ItemDeTicketGlpi(x.Tipo, x.Id))]);
+        Ticket(EstadoTicketGlpi.EnCurso, equipos);
+
+    private static TicketGlpi Ticket(int estado, params (string Tipo, int Id)[] equipos) =>
+        new(true, [.. equipos.Select(x => new ItemDeTicketGlpi(x.Tipo, x.Id))], estado);
 
     private static EquipoGlpi Hp() => new(
         "Computer", "Hewlett-Packard", "HP Compaq 8000 Elite SFF PC", "MXL04916TL",

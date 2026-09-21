@@ -1,10 +1,11 @@
 using SistemaEnvios.Application.Common;
+using SistemaEnvios.Application.DTOs.Integraciones;
 
 namespace SistemaEnvios.Application.Interfaces.Services.Integraciones;
 
 /// <summary>
-/// Comprueba contra la mesa de ayuda que el ticket que escribió el usuario es usable: que existe
-/// y que no arrastra más de un equipo.
+/// Comprueba contra la mesa de ayuda que el ticket que escribió el usuario es usable: que existe,
+/// que está en curso y que no arrastra más de un equipo.
 /// </summary>
 /// <remarks>
 /// Solo se le pasan tickets escritos por el usuario. Los que hereda un caso abierto salen de
@@ -15,7 +16,8 @@ public interface IValidadorTicketGlpi
 {
     /// <summary>
     /// Falla con <see cref="ErrorType.Validation"/> cuando GLPI respondió y el ticket no existe,
-    /// o cuando trae más de un equipo asociado. Si GLPI no contesta, deja pasar y registra el
+    /// cuando no está en curso —ver <see cref="EstadoTicketGlpi"/>— o cuando trae más de un
+    /// equipo asociado. Si GLPI no contesta, deja pasar y registra el
     /// aviso: una caída de la mesa de ayuda no puede detener la creación de envíos en todas las
     /// filiales, y ese es también el único hueco de la regla de un equipo por ticket.
     /// </summary>

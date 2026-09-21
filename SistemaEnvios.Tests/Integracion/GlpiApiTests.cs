@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using SistemaEnvios.Application.DTOs.Integraciones;
 using SistemaEnvios.Application.Interfaces.Services.Integraciones;
 using Microsoft.Extensions.Logging.Abstractions;
 using SistemaEnvios.Domain.Entities;
@@ -67,6 +68,24 @@ public sealed class GlpiApiTests
     }
 
 /// <summary>
+    /// El contrato del estado: GLPI manda el campo status en el ticket y se deja leer como
+    /// número. Importa comprobarlo contra la instancia real porque un estado ilegible no rompe
+    /// nada visible —se trata como "no se pudo leer" y deja pasar—, así que la regla se apagaría
+    /// en silencio si el campo cambiara de forma.
+    /// </summary>
+    [SkippableFact]
+    public async Task ElTicketDeReferenciaTraeSuEstado()
+    {
+        var glpi = ClienteOSalte();
+
+        var resultado = await glpi.ObtenerTicketAsync(TicketConUnEquipo);
+
+        Assert.True(resultado.IsSuccess, resultado.Error);
+        Assert.NotNull(resultado.Value!.Estado);
+        Assert.InRange(resultado.Value.Estado!.Value, 1, 6);
+    }
+
+    /// <summary>
     /// El autocompletado de punta a punta contra la instancia real: las dos llamadas encadenadas y
     /// el mapeo a los campos del formulario. Es la prueba que detecta si GLPI cambia el nombre de
     /// un campo o deja de expandir los dropdowns.
@@ -80,6 +99,16 @@ public sealed class GlpiApiTests
                 .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
         db.TiposEquipo.Add(new TipoEquipo { TipoEquipoId = 2, Nombre = "Computadora de escritorio", Activo = true });
         await db.SaveChangesAsync();
+
+        // El estado del ticket de referencia lo maneja soporte, no nosotros. Si se cierra, el
+        // autocompletado lo rechaza por política y esta prueba no tendría nada que decir sobre el
+        // mapeo de campos, que es lo que comprueba. La consulta sale de la caché de la línea
+        // anterior, así que no cuesta una llamada más.
+        var estado = await glpi.ObtenerTicketAsync(TicketConUnEquipo);
+        Skip.If(
+            estado.Value?.ElEstadoLoImpide == true,
+            $"El ticket {TicketConUnEquipo} está en estado " +
+            $"«{EstadoTicketGlpi.Nombre(estado.Value?.Estado)}» y el autocompletado solo acepta en curso.");
 
         var servicio = new EquipoDeTicketGlpi(glpi, db, NullLogger<EquipoDeTicketGlpi>.Instance);
         var resultado = await servicio.ObtenerAsync(TicketConUnEquipo.ToString());

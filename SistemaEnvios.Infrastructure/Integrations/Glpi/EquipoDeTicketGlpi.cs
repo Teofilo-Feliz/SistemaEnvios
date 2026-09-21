@@ -49,6 +49,12 @@ public sealed class EquipoDeTicketGlpi(
                 $"El ticket {id} no existe en la mesa de ayuda.", ErrorType.Validation);
         }
 
+        if (enGlpi.ElEstadoLoImpide)
+        {
+            return Result<EquipoDeTicketResponse>.Failure(
+                EstadoTicketGlpi.Mensaje(id, enGlpi.Estado), ErrorType.Validation);
+        }
+
         // Mismo mensaje que al guardar: si aquí dijera otra cosa, el usuario creería que son dos
         // problemas distintos.
         if (!enGlpi.EsUsable)
